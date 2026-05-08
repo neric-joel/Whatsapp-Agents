@@ -1,0 +1,10 @@
+node_modules/
+.env
+.env.local
+.next/
+dist/
+.turbo/
+*.log
+supabase/.temp/
+agentroom_graph_*.html
+*.tsbuildinfo

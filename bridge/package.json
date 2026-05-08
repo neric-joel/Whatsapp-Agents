@@ -1,0 +1,18 @@
+{
+  "name": "bridge",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev":       "tsx watch src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "lint":      "tsc --noEmit"
+  },
+  "dependencies": {
+    "@agentroom/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsx":        "^4.7.0",
+    "typescript": "^5.4.0"
+  }
+}
