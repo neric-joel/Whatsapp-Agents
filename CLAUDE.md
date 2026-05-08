@@ -1,6 +1,6 @@
 # AgentRoom — Project Memory
 # Last updated: 2026-05-08
-# Current phase: 2 (NEXT)
+# Current phase: 3 (NEXT)
 
 ---
 
@@ -199,9 +199,9 @@ CRITICAL NAMING RULE:
 | Phase | Name                        | Status   | Git commit                         | Graphify output                |
 |-------|-----------------------------|----------|------------------------------------|--------------------------------|
 | 0     | Repo scaffold               | DONE ✅  | feat: phase 0 — repo scaffold      | agentroom_graph_phase_0.html   |
-| 1     | Supabase schema + seed      | DONE ✅  | feat: phase 1 — supabase schema + seed | agentroom_graph_phase_1.html |
-| 2     | Shared types                | NEXT ▶   | —                                  | —                              |
-| 3     | API route handlers          | PENDING  | —                                  | —                              |
+| 1     | Supabase schema + seed      | DONE ✅  | feat: phase 1 — supabase schema + seed | agentroom_graph_phase_1.html ✅ |
+| 2     | Shared types                | DONE ✅  | feat: phase 2 — shared types       | agentroom_graph_phase_2.html   |
+| 3     | API route handlers          | NEXT ▶   | —                                  | —                              |
 | 4     | Basic UI                    | PENDING  | —                                  | —                              |
 | 5     | Mock bridge daemon          | PENDING  | —                                  | —                              |
 | 6     | Realtime polish             | PENDING  | —                                  | —                              |
