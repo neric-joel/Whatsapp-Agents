@@ -1,6 +1,6 @@
 # AgentRoom — Project Memory
 # Last updated: 2026-05-08
-# Current phase: 3 (NEXT)
+# Current phase: 4 (NEXT)
 
 ---
 
@@ -200,9 +200,9 @@ CRITICAL NAMING RULE:
 |-------|-----------------------------|----------|------------------------------------|--------------------------------|
 | 0     | Repo scaffold               | DONE ✅  | feat: phase 0 — repo scaffold      | agentroom_graph_phase_0.html   |
 | 1     | Supabase schema + seed      | DONE ✅  | feat: phase 1 — supabase schema + seed | agentroom_graph_phase_1.html ✅ |
-| 2     | Shared types                | DONE ✅  | feat: phase 2 — shared types       | agentroom_graph_phase_2.html   |
-| 3     | API route handlers          | NEXT ▶   | —                                  | —                              |
-| 4     | Basic UI                    | PENDING  | —                                  | —                              |
+| 2     | Shared types                | DONE ✅  | feat: phase 2 — shared types       | agentroom_graph_phase_2.html ✅ |
+| 3     | API route handlers          | DONE ✅  | feat: phase 3 — api route handlers | agentroom_graph_phase_3.html   |
+| 4     | Basic UI                    | NEXT ▶   | —                                  | —                              |
 | 5     | Mock bridge daemon          | PENDING  | —                                  | —                              |
 | 6     | Realtime polish             | PENDING  | —                                  | —                              |
 | 7     | Mentions + loop guard       | PENDING  | —                                  | —                              |
@@ -328,8 +328,7 @@ Ruflo:               INSTALLED ✅ (plugin install — MCP RAG memory pending se
 Graphify:            READY ✅ (runs via graphify-windows skill)
 Codex:               READY ✅ (receives /do prompts)
 CLAUDE.md:           ACTIVE ✅ (this file, committed to git)
-
-Phase 0 prompt:      READY — see orchestration session context
+Obsidian Memory:     CONFIGURED ✅ (see Section 14 — vault notes seeded for phases 0-2)
 
 ---
 
@@ -340,3 +339,82 @@ Phase 0 prompt:      READY — see orchestration session context
 | 2026-05-08 | Ruflo installed as plugin; MCP RAG memory tools not  | PENDING  |
 |            | visible in claude mcp list this session. Retry after |          |
 |            | session restart with `claude mcp add ruflo` Option B.|          |
+| 2026-05-08 | Obsidian API key exposed in chat — must regenerate   | PENDING  |
+|            | Obsidian → Settings → Local REST API → Regenerate    |          |
+|            | key, then update .mcp.json in repo root.             |          |
+
+---
+
+## 14. Obsidian Memory Layer
+
+Obsidian serves as Claude Code's persistent cross-session memory, reducing
+token usage by storing compact phase notes instead of re-reading source files.
+
+### Three-Layer Memory Stack
+
+  Layer 1 — CLAUDE.md (this file, git-committed, always loaded)
+    └─ Phase tracker, env vars, architecture, acceptance criteria
+
+  Layer 2 — Obsidian Vault (local, queryable via REST API)
+    └─ Per-phase completion notes, graph summaries, decision log
+    └─ Vault path: AgentRoom/ folder in your Obsidian vault
+    └─ Setup guide: D:\What's app Agents\Intial plan\What's app agents\AgentRoom_Obsidian_Memory_Setup.md
+
+  Layer 3 — Graphify HTML (local, visual)
+    └─ D:\What's app Agents\Intial plan\What's app agents\agentroom_graph_phase_N.html
+
+### MCP Config (.mcp.json in repo root)
+
+  {
+    "mcpServers": {
+      "obsidian": {
+        "command": "npx",
+        "args": ["-y", "mcp-obsidian"],
+        "env": {
+          "OBSIDIAN_API_KEY": "<your-regenerated-key>",
+          "OBSIDIAN_HOST": "http://127.0.0.1:27123"
+        }
+      }
+    }
+  }
+
+  IMPORTANT: Regenerate Obsidian API key before filling this in.
+  Old key was exposed in chat on 2026-05-08.
+
+### Session Start Protocol (updated)
+
+  1. Read CLAUDE.md (this file)
+  2. curl -s -H "Authorization: Bearer $OBSIDIAN_KEY" \
+       http://localhost:27123/vault/AgentRoom/_PROJECT.md
+  3. Read latest phase note from Obsidian phases/ folder
+  4. Confirm current phase, resume without re-reading source
+
+### Post-Phase Protocol (updated — runs after every PASS)
+
+  1. ✅ Verify acceptance criteria against Codex output
+  2. 🔷 Run graphify-windows skill on changed files
+  3. 📝 Write phase completion note to Obsidian:
+       curl -X PUT -H "Authorization: Bearer $OBSIDIAN_KEY" \
+         -H "Content-Type: text/markdown" --data-binary @- \
+         http://localhost:27123/vault/AgentRoom/phases/phase-N-name.md
+  4. 📝 PUT updated _PROJECT.md to Obsidian (update phase tracker row)
+  5. 📄 Edit this CLAUDE.md — update phase tracker table
+  6. 💾 git commit CLAUDE.md: "chore: update CLAUDE.md — phase N complete"
+  7. ➡️  Issue Phase N+1 /do prompt
+
+### Obsidian Vault Structure
+
+  AgentRoom/
+    _PROJECT.md                  ← master index (seeded ✅)
+    phases/
+      phase-0-scaffold.md        ← seeded ✅
+      phase-1-schema.md          ← seeded ✅
+      phase-2-shared-types.md    ← seeded ✅ (update to DONE after phase 2 passes)
+      phase-3-api-handlers.md    ← write after phase 3 passes
+      ...
+    architecture/
+      data-flow.md               ← seeded ✅
+      schema-overview.md         ← seeded ✅
+      env-vars.md                ← seeded ✅
+    decisions/
+      stack-locked.md
