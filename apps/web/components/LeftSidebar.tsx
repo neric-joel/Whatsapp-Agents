@@ -16,6 +16,18 @@ export default function LeftSidebar() {
         ROOMS
       </div>
       <nav className="flex-1 overflow-y-auto">
+        {rooms.length === 0 && (
+          <div className="flex flex-col items-center justify-center flex-1 p-6 text-center">
+            <p className="text-[#52525b] text-sm mb-3">No rooms yet</p>
+            <button
+              type="button"
+              onClick={() => {}}
+              className="text-[#8b5cf6] hover:text-violet-400 text-sm font-medium transition-colors"
+            >
+              Create your first room
+            </button>
+          </div>
+        )}
         {rooms.map((room) => {
           const isActive = pathname === `/rooms/${room.id}`
           return (

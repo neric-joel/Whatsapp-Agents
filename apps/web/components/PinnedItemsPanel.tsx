@@ -23,15 +23,28 @@ function formatDate(ts: string) {
 
 export default function PinnedItemsPanel({ roomId }: Props) {
   const [pins, setPins] = useState<PinnedItemRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let mounted = true
+    setLoading(true)
+    setError(null)
     fetch(`/api/rooms/${roomId}/pins`)
-      .then((res) => res.json())
+      .then(async (res) => {
+        const json = await res.json() as { ok: boolean; data?: PinnedItemRow[]; error?: { message?: string } }
+        if (!res.ok || !json.ok) throw new Error(json.error?.message ?? 'Failed to load pins')
+        return json
+      })
       .then((json: { ok: boolean; data?: PinnedItemRow[] }) => {
         if (mounted && json.ok) setPins(json.data ?? [])
       })
-      .catch(() => {})
+      .catch((err) => {
+        if (mounted) setError(err instanceof Error ? err.message : 'Failed to load pins')
+      })
+      .finally(() => {
+        if (mounted) setLoading(false)
+      })
     return () => { mounted = false }
   }, [roomId])
 
@@ -74,9 +87,13 @@ export default function PinnedItemsPanel({ roomId }: Props) {
     setPins((prev) => prev.filter((pin) => pin.id !== pinId))
   }
 
-  if (pins.length === 0) {
-    return <p className="px-4 py-3 text-sm text-[#52525b]">No pinned items</p>
-  }
+  if (error) return <div className="p-4 text-red-400 text-sm">Failed to load pins</div>
+  if (loading) return <div className="p-4 text-[#52525b] text-sm">Loading pins...</div>
+  if (pins.length === 0) return (
+    <div className="p-4 text-[#52525b] text-xs text-center">
+      Nothing pinned yet. Pin a message to save it here.
+    </div>
+  )
 
   return (
     <div className="space-y-2 px-3 py-3">
