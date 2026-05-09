@@ -1,12 +1,11 @@
 import { createServiceClient } from '../lib/supabase.js'
+import { isDeniedCommand } from '../lib/denylist.js'
+import { log } from '../lib/logger.js'
+import { redact } from '../lib/redact.js'
 import { getAdapter } from '../adapters/registry.js'
 import { buildContextPacket } from '../context/build-context-packet.js'
 
 const WORKER_ID = process.env.BRIDGE_WORKER_ID ?? 'bridge-local-1'
-
-function log(runId: string, status: string) {
-  console.log(`[BRIDGE] [${new Date().toISOString()}] worker=${WORKER_ID} run=${runId} status=${status}`)
-}
 
 interface AgentInfo {
   id: string
@@ -30,6 +29,7 @@ interface AgentRunRow {
 
 export async function processRun(runId: string): Promise<void> {
   const supabase = createServiceClient()
+  const startedAt = Date.now()
 
   // a. Fetch run with agent data
   const { data: runRaw } = await supabase
@@ -52,14 +52,13 @@ export async function processRun(runId: string): Promise<void> {
       .single()
 
     if (!claimed) {
-      log(runId, 'skipped (already claimed)')
+      log('debug', 'run.skipped', { run_id: runId, reason: 'already_claimed' })
       return
     }
-    log(runId, 'claimed')
+    log('info', 'run.start', { run_id: runId, agent_id: runRow.agent_id, room_id: runRow.room_id })
 
     // c. Update to running
     await supabase.from('agent_runs').update({ status: 'running' }).eq('id', runId)
-    log(runId, 'running')
 
     // d. Fetch trigger message
     const fallbackMsg = { id: runId, content: '(no trigger)', sender_type: 'user', created_at: new Date().toISOString() }
@@ -108,8 +107,21 @@ export async function processRun(runId: string): Promise<void> {
           requires_approval: requiresApproval,
         }).select().single()
 
+        if (tc) {
+          const commandArg = (event.arguments['command'] as string | undefined) ?? ''
+          if (isDeniedCommand(commandArg)) {
+            await supabase.from('tool_calls').update({
+              status: 'denied',
+              error: 'Command blocked by denylist',
+            }).eq('id', tc.id)
+            log('warn', 'tool.denied', { run_id: runId, tool_name: event.tool_name, reason: 'denylist' })
+            throw new Error('Command blocked by denylist')
+          }
+        }
+
         if (tc && requiresApproval) {
           let finalStatus = 'failed'
+          log('info', 'tool.approval.waiting', { run_id: runId, tool_name: event.tool_name })
           for (let i = 0; i < 15; i++) {
             await new Promise<void>((r) => setTimeout(r, 2000))
             const { data: updated } = await supabase.from('tool_calls').select('status').eq('id', tc.id).single()
@@ -117,16 +129,24 @@ export async function processRun(runId: string): Promise<void> {
             if (updated?.status === 'denied') { finalStatus = 'denied'; break }
           }
           if (finalStatus === 'approved') {
+            log('info', 'tool.approval.received', { run_id: runId, tool_name: event.tool_name, approved: true })
             await supabase.from('tool_calls').update({ status: 'running' }).eq('id', tc.id)
-            await supabase.from('tool_calls').update({ status: 'succeeded', output: { ok: true, stdout: 'approved' } }).eq('id', tc.id)
+            const result = { ok: true, stdout: 'approved' }
+            await supabase.from('tool_calls').update({ status: 'succeeded', output: redact(JSON.stringify(result)) }).eq('id', tc.id)
           } else {
+            log(finalStatus === 'denied' ? 'info' : 'warn', finalStatus === 'denied' ? 'tool.approval.received' : 'tool.approval.timeout', {
+              run_id: runId,
+              tool_name: event.tool_name,
+              ...(finalStatus === 'denied' ? { approved: false } : {}),
+            })
             await supabase.from('tool_calls').update({
               status: finalStatus === 'denied' ? 'denied' : 'failed',
               error: finalStatus === 'denied' ? null : 'approval timeout',
             }).eq('id', tc.id)
           }
         } else if (tc) {
-          await supabase.from('tool_calls').update({ status: 'succeeded', output: { ok: true, stdout: 'executed' } }).eq('id', tc.id)
+          const result = { ok: true, stdout: 'executed' }
+          await supabase.from('tool_calls').update({ status: 'succeeded', output: redact(JSON.stringify(result)) }).eq('id', tc.id)
         }
       }
     }
@@ -138,7 +158,7 @@ export async function processRun(runId: string): Promise<void> {
       room_id: runRow.room_id,
       sender_type: 'agent',
       sender_agent_id: runRow.agent_id,
-      content: finalContent,
+      content: redact(finalContent),
       content_type: 'text',
       round_index: runRow.round_index,
     })
@@ -148,15 +168,15 @@ export async function processRun(runId: string): Promise<void> {
       .from('agent_runs')
       .update({ status: 'completed', completed_at: new Date().toISOString() })
       .eq('id', runId)
-    log(runId, 'completed')
+    log('info', 'run.complete', { run_id: runId, duration_ms: Date.now() - startedAt })
 
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
+    const message = redact(err instanceof Error ? err.message : String(err))
     await supabase
       .from('agent_runs')
       .update({ status: 'failed', error_message: message })
       .eq('id', runId)
-    log(runId, 'failed')
+    log('error', 'run.failed', { run_id: runId, error: message })
     throw err
   }
 }

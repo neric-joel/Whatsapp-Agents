@@ -4,8 +4,9 @@ import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 export interface DbAgentRun {
   id: string
-  status: 'queued' | 'running'
+  status: 'queued' | 'running' | 'failed'
   agent_id: string
+  error_message: string | null
   agents: { name: string; provider: string } | null
 }
 
@@ -17,9 +18,9 @@ export function useAgentRuns(roomId: string, refreshSignal?: number) {
     const supabase = createSupabaseBrowserClient()
     supabase
       .from('agent_runs')
-      .select('id, status, agent_id, agents(name, provider)')
+      .select('id, status, agent_id, error_message, agents(name, provider)')
       .eq('room_id', roomId)
-      .in('status', ['queued', 'running'])
+      .in('status', ['queued', 'running', 'failed'])
       .then(({ data }) => {
         setRuns((data as unknown as DbAgentRun[]) ?? [])
         setLoading(false)

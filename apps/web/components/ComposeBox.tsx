@@ -21,7 +21,9 @@ const EVERYONE: SlimAgent = { id: '__everyone__', slug: 'everyone', name: 'Every
 export default function ComposeBox({ roomId, onOptimistic, onRefetch }: Props) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
+  const [sendError, setSendError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [fileError, setFileError] = useState<string | null>(null)
   const [attachedFile, setAttachedFile] = useState<{ id: string; name: string } | null>(null)
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
   const [mentionStart, setMentionStart] = useState(-1)
@@ -101,6 +103,7 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch }: Props) {
     if (!file) return
 
     setUploading(true)
+    setFileError(null)
     try {
       const res = await fetch(`/api/rooms/${roomId}/files/signed-upload`, {
         method: 'POST',
@@ -111,17 +114,29 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch }: Props) {
           size_bytes: file.size,
         }),
       })
-      const json = await res.json() as { ok: boolean; data?: { signed_url: string; file_id: string } }
-      if (!res.ok || !json.ok || !json.data) throw new Error('Failed to prepare upload')
+      const json = await res.json().catch(() => ({})) as {
+        ok?: boolean
+        data?: { signed_url: string; file_id: string }
+        error?: { message?: string }
+      }
+      if (!res.ok || !json.ok || !json.data) {
+        setFileError(json.error?.message ?? 'Upload failed')
+        return
+      }
 
       const uploadRes = await fetch(json.data.signed_url, {
         method: 'PUT',
         headers: { 'Content-Type': file.type || 'application/octet-stream' },
         body: file,
       })
-      if (!uploadRes.ok) throw new Error('Failed to upload file')
+      if (!uploadRes.ok) {
+        setFileError('Upload failed')
+        return
+      }
 
       setAttachedFile({ id: json.data.file_id, name: file.name })
+    } catch {
+      setFileError('Upload failed')
     } finally {
       setUploading(false)
     }
@@ -131,28 +146,34 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch }: Props) {
     const content = text.trim() || attachedFile?.name
     if (!content || sending || uploading) return
     setSending(true)
-    setText('')
-    setMentionQuery(null)
-    setMentionStart(-1)
     const metadata = attachedFile ? { file_ids: [attachedFile.id] } : {}
-    onOptimistic({
-      id: crypto.randomUUID(),
-      content,
-      sender_type: 'user',
-      created_at: new Date().toISOString(),
-      metadata,
-    })
     try {
-      await fetch(`/api/rooms/${roomId}/messages`, {
+      const res = await fetch(`/api/rooms/${roomId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content, metadata }),
       })
-    } finally {
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({})) as { error?: { message?: string } }
+        setSendError(json.error?.message ?? 'Failed to send message')
+        return
+      }
+      setSendError(null)
+      setText('')
+      setMentionQuery(null)
+      setMentionStart(-1)
+      onOptimistic({
+        id: crypto.randomUUID(),
+        content,
+        sender_type: 'user',
+        created_at: new Date().toISOString(),
+        metadata,
+      })
       setAttachedFile(null)
       if (fileInputRef.current) fileInputRef.current.value = ''
-      setSending(false)
       onRefetch()
+    } finally {
+      setSending(false)
     }
   }
 
@@ -204,6 +225,9 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch }: Props) {
           rows={1}
           className="bg-[#18181b] text-[#f4f4f5] text-[14px] placeholder:text-[#3f3f46] rounded-xl px-4 py-2.5 flex-1 resize-none outline-none min-h-[40px] max-h-32 overflow-y-auto"
         />
+        {sendError && (
+          <p className="absolute left-1 top-full mt-1 text-red-400 text-xs px-1">{sendError}</p>
+        )}
         <input
           ref={fileInputRef}
           type="file"
@@ -233,6 +257,19 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch }: Props) {
               aria-label="Clear attached file"
             >
               ×
+            </button>
+          </span>
+        )}
+        {fileError && !attachedFile && (
+          <span className="flex max-w-[12rem] items-center gap-2 rounded-full border border-red-800/30 bg-red-950/20 px-3 py-1.5 text-xs text-red-400">
+            <span className="truncate">{fileError}</span>
+            <button
+              type="button"
+              onClick={() => setFileError(null)}
+              className="text-red-400/70 hover:text-red-300"
+              aria-label="Dismiss upload error"
+            >
+              x
             </button>
           </span>
         )}

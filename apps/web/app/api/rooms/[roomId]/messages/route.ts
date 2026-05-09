@@ -1,5 +1,7 @@
 import { NextRequest } from 'next/server'
-import { ok, err } from '@/lib/api'
+import { apiError, apiSuccess } from '@/lib/api-error'
+import { sendMessageSchema } from '@/lib/api-validation'
+import { requireRoomMember } from '@/lib/permissions'
 import { createSupabaseServerClient, createSupabaseServiceClient } from '@/lib/supabase/server'
 import { parseMentions } from '@/lib/mention-parser'
 
@@ -16,28 +18,30 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   // 1. Authenticate
   const supabaseUser = createSupabaseServerClient()
   const { data: { user }, error: authErr } = await supabaseUser.auth.getUser()
-  if (authErr || !user) return err('Unauthorized', 401)
+  if (authErr || !user) return apiError('UNAUTHORIZED', 'Unauthorized', 401)
 
   // 2. Verify room membership
   const supabase = createSupabaseServiceClient()
-  const { data: member } = await supabase
-    .from('room_members')
-    .select('id')
-    .eq('room_id', roomId)
-    .eq('user_id', user.id)
-    .eq('member_type', 'user')
-    .single()
-
-  if (!member) return err('Forbidden', 403)
+  try {
+    await requireRoomMember(supabase, roomId, user.id)
+  } catch (e) {
+    return e as Response
+  }
 
   // 3. Parse body
   const body = await req.json().catch(() => null)
-  if (!body || typeof body.content !== 'string' || !body.content.trim()) {
-    return err('content is required')
+  const parseResult = sendMessageSchema.safeParse(body)
+  if (!parseResult.success) {
+    return apiError('VALIDATION_ERROR', 'Invalid request body', 400, parseResult.error.flatten())
+  }
+  const data = parseResult.data
+  const content = data.content.trim()
+  if (!content) {
+    return apiError('VALIDATION_ERROR', 'Invalid request body', 400, { fieldErrors: { content: ['content is required'] } })
   }
 
-  const roundIndex: number = typeof body.round_index === 'number' ? body.round_index : 0
-  const hopIndex: number = typeof body.hop_index === 'number' ? body.hop_index : 0
+  const roundIndex = data.round_index ?? 0
+  const hopIndex = data.hop_index ?? 0
 
   // 4. Fetch room for reply_mode and loop guard limits
   const { data: room } = await supabase
@@ -46,7 +50,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     .eq('id', roomId)
     .single()
 
-  if (!room) return err('Room not found', 404)
+  if (!room) return apiError('NOT_FOUND', 'Room not found', 404)
 
   // 5. Insert message
   const { data: message, error: msgErr } = await supabase
@@ -55,18 +59,18 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       room_id: roomId,
       sender_type: 'user',
       sender_user_id: user.id,
-      content: body.content.trim(),
-      content_type: body.content_type ?? 'text',
-      reply_to_id: body.reply_to_id ?? null,
-      mentions: body.mentions ?? [],
-      target_agent_ids: body.target_agent_ids ?? [],
+      content,
+      content_type: data.content_type ?? 'text',
+      reply_to_id: data.reply_to_id ?? null,
+      mentions: data.mentions ?? [],
+      target_agent_ids: data.target_agent_ids ?? [],
       round_index: roundIndex,
-      metadata: body.metadata ?? {},
+      metadata: data.metadata ?? {},
     })
     .select()
     .single()
 
-  if (msgErr || !message) return err(msgErr?.message ?? 'Failed to insert message', 500)
+  if (msgErr || !message) return apiError('INTERNAL_ERROR', msgErr?.message ?? 'Failed to insert message', 500)
 
   // 6. Update room.last_message_at
   await supabase
@@ -91,12 +95,12 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   if (roundIndex >= maxRounds) {
     await insertSystemMessage(`Loop guard: agent discussion stopped after ${maxRounds} rounds.`)
-    return ok({ message, agent_runs: [] }, 201)
+    return apiSuccess({ message, agent_runs: [] }, 201)
   }
 
   if (hopIndex >= maxHops) {
     await insertSystemMessage(`Loop guard: agent chain stopped after ${maxHops} hops.`)
-    return ok({ message, agent_runs: [] }, 201)
+    return apiSuccess({ message, agent_runs: [] }, 201)
   }
 
   // 8. Find active, unmuted agents with reply_enabled=true
@@ -113,7 +117,6 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   )
 
   // 9. Mention-based routing
-  const content = body.content.trim()
   const mentions = parseMentions(content, allActive.map((m) => m.agents))
   const replyMode = (room as { reply_mode: string }).reply_mode
 
@@ -122,7 +125,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   if (replyMode === 'mentioned_only') {
     if (mentions.length === 0) {
       await insertSystemMessage('No agents were mentioned. Use @agent_slug or @everyone.')
-      return ok({ message, agent_runs: [] }, 201)
+      return apiSuccess({ message, agent_runs: [] }, 201)
     }
     const hasEveryone = mentions.some((m) => m.type === 'everyone')
     if (!hasEveryone) {
@@ -151,5 +154,5 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     if (insertedRuns) agentRuns.push(...insertedRuns)
   }
 
-  return ok({ message, agent_runs: agentRuns }, 201)
+  return apiSuccess({ message, agent_runs: agentRuns }, 201)
 }

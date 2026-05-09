@@ -15,19 +15,24 @@ export function parseMentions(
 
   for (const raw of tokens) {
     const token = raw.slice(1).toLowerCase()
-    if (seen.has(token)) continue
-    seen.add(token)
+    const normalizedToken = normalizeMentionToken(token)
+    if (seen.has(normalizedToken)) continue
+    seen.add(normalizedToken)
 
-    if (token === 'everyone') {
+    if (normalizedToken === 'everyone') {
       mentions.push({ type: 'everyone', raw })
       continue
     }
 
-    const agent = agents.find((a) => a.slug.toLowerCase() === token)
+    const agent = agents.find((a) => normalizeMentionToken(a.slug) === normalizedToken)
     if (agent) {
       mentions.push({ type: 'agent', slug: agent.slug, agent_id: agent.id, raw })
     }
   }
 
   return mentions
+}
+
+function normalizeMentionToken(token: string): string {
+  return token.toLowerCase().replace(/[_-]/g, '')
 }

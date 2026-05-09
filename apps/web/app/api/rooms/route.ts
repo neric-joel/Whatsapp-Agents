@@ -1,17 +1,24 @@
 import { NextRequest } from 'next/server'
-import { ok, err } from '@/lib/api'
+import { apiError, apiSuccess } from '@/lib/api-error'
+import { createRoomSchema } from '@/lib/api-validation'
 import { createSupabaseServerClient, createSupabaseServiceClient } from '@/lib/supabase/server'
 
 export async function POST(req: NextRequest) {
   // 1. Authenticate
   const supabaseUser = createSupabaseServerClient()
   const { data: { user }, error: authErr } = await supabaseUser.auth.getUser()
-  if (authErr || !user) return err('Unauthorized', 401)
+  if (authErr || !user) return apiError('UNAUTHORIZED', 'Unauthorized', 401)
 
   // 2. Parse body
   const body = await req.json().catch(() => null)
-  if (!body || typeof body.name !== 'string' || !body.name.trim()) {
-    return err('name is required')
+  const parseResult = createRoomSchema.safeParse(body)
+  if (!parseResult.success) {
+    return apiError('VALIDATION_ERROR', 'Invalid request body', 400, parseResult.error.flatten())
+  }
+  const data = parseResult.data
+  const name = data.name.trim()
+  if (!name) {
+    return apiError('VALIDATION_ERROR', 'Invalid request body', 400, { fieldErrors: { name: ['name is required'] } })
   }
 
   const supabase = createSupabaseServiceClient()
@@ -20,16 +27,16 @@ export async function POST(req: NextRequest) {
   const { data: room, error: roomErr } = await supabase
     .from('rooms')
     .insert({
-      name: body.name.trim(),
-      room_type: body.room_type ?? 'group',
-      reply_mode: body.reply_mode ?? 'everyone',
-      visibility: body.visibility ?? 'private',
+      name,
+      room_type: data.room_type ?? 'group',
+      reply_mode: data.reply_mode === 'all' ? 'everyone' : data.reply_mode ?? 'everyone',
+      visibility: data.visibility ?? 'private',
       created_by_user_id: user.id,
     })
     .select()
     .single()
 
-  if (roomErr || !room) return err(roomErr?.message ?? 'Failed to create room', 500)
+  if (roomErr || !room) return apiError('INTERNAL_ERROR', roomErr?.message ?? 'Failed to create room', 500)
 
   // 4. Insert creator as owner member
   const { error: memberErr } = await supabase
@@ -41,7 +48,7 @@ export async function POST(req: NextRequest) {
       role: 'owner',
     })
 
-  if (memberErr) return err(memberErr.message, 500)
+  if (memberErr) return apiError('INTERNAL_ERROR', memberErr.message, 500)
 
-  return ok(room, 201)
+  return apiSuccess(room, 201)
 }

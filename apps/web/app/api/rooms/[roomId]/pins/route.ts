@@ -1,29 +1,28 @@
 import { NextRequest } from 'next/server'
-import { ok, err } from '@/lib/api'
+import { apiError, apiSuccess } from '@/lib/api-error'
+import { createPinSchema } from '@/lib/api-validation'
+import { requireRoomMember } from '@/lib/permissions'
 import { createSupabaseServerClient, createSupabaseServiceClient } from '@/lib/supabase/server'
 
 interface RouteParams { params: { roomId: string } }
 
-async function requireRoomMember(roomId: string) {
+async function requireAuthenticatedRoomMember(roomId: string) {
   const supabaseUser = createSupabaseServerClient()
   const { data: { user }, error: authErr } = await supabaseUser.auth.getUser()
-  if (authErr || !user) return { error: err('Unauthorized', 401) }
+  if (authErr || !user) return { error: apiError('UNAUTHORIZED', 'Unauthorized', 401) }
 
   const supabase = createSupabaseServiceClient()
-  const { data: member } = await supabase
-    .from('room_members')
-    .select('id')
-    .eq('room_id', roomId)
-    .eq('user_id', user.id)
-    .eq('member_type', 'user')
-    .single()
-  if (!member) return { error: err('Forbidden', 403) }
+  try {
+    await requireRoomMember(supabase, roomId, user.id)
+  } catch (e) {
+    return { error: e as Response }
+  }
 
   return { supabase, user }
 }
 
 export async function GET(_req: Request, { params }: RouteParams) {
-  const auth = await requireRoomMember(params.roomId)
+  const auth = await requireAuthenticatedRoomMember(params.roomId)
   if ('error' in auth) return auth.error
 
   const { data, error } = await auth.supabase
@@ -32,32 +31,36 @@ export async function GET(_req: Request, { params }: RouteParams) {
     .eq('room_id', params.roomId)
     .eq('is_active', true)
     .order('sort_order', { ascending: true })
-  if (error) return err(error.message, 500)
+  if (error) return apiError('INTERNAL_ERROR', error.message, 500)
 
-  return ok(data ?? [])
+  return apiSuccess(data ?? [])
 }
 
 export async function POST(req: NextRequest, { params }: RouteParams) {
-  const auth = await requireRoomMember(params.roomId)
+  const auth = await requireAuthenticatedRoomMember(params.roomId)
   if ('error' in auth) return auth.error
 
   const body = await req.json().catch(() => null)
-  if (!body || typeof body.pin_type !== 'string') return err('pin_type is required')
+  const parseResult = createPinSchema.safeParse(body)
+  if (!parseResult.success) {
+    return apiError('VALIDATION_ERROR', 'Invalid request body', 400, parseResult.error.flatten())
+  }
+  const pinData = parseResult.data
 
   const { data, error } = await auth.supabase
     .from('pinned_items')
     .insert({
       room_id: params.roomId,
-      message_id: typeof body.source_message_id === 'string' ? body.source_message_id : null,
-      pin_type: body.pin_type,
-      title: typeof body.title === 'string' ? body.title : null,
-      content: typeof body.content === 'string' ? body.content : null,
-      visibility: typeof body.visibility === 'string' ? body.visibility : 'primary',
+      message_id: pinData.source_message_id ?? null,
+      pin_type: pinData.pin_type,
+      title: pinData.title ?? null,
+      content: pinData.content ?? null,
+      visibility: pinData.visibility ?? 'primary',
       pinned_by: auth.user.id,
     })
     .select()
     .single()
-  if (error || !data) return err(error?.message ?? 'Failed to create pin', 500)
+  if (error || !data) return apiError('INTERNAL_ERROR', error?.message ?? 'Failed to create pin', 500)
 
-  return ok(data, 201)
+  return apiSuccess(data, 201)
 }
