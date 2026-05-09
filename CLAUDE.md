@@ -1,6 +1,6 @@
 # AgentRoom — Project Memory
 # Last updated: 2026-05-08
-# Current phase: 5 (ACTIVE)
+# Current phase: 6 (NEXT)
 
 ---
 
@@ -203,8 +203,8 @@ CRITICAL NAMING RULE:
 | 2     | Shared types                | DONE ✅  | feat: phase 2 — shared types       | agentroom_graph_phase_2.html ✅ |
 | 3     | API route handlers          | DONE ✅  | feat: phase 3 — api route handlers | agentroom_graph_phase_3.html   |
 | 4     | Basic UI                    | DONE ✅  | feat: phase 4 — basic ui           | agentroom_graph_phase_4.html ✅ |
-| 5     | Mock bridge daemon          | NEXT ▶   | —                                  | —                              |
-| 6     | Realtime polish             | PENDING  | —                                  | —                              |
+| 5     | Mock bridge daemon          | DONE ✅  | feat: phase 5 — mock bridge daemon | —                              |
+| 6     | Realtime polish             | NEXT ▶   | —                                  | —                              |
 | 7     | Mentions + loop guard       | PENDING  | —                                  | —                              |
 | 8     | Real adapters (+ ruflo)     | PENDING  | —                                  | —                              |
 | 9     | Files, pins, tool approvals | PENDING  | —                                  | —                              |
