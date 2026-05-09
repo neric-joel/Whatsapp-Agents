@@ -3,7 +3,7 @@ import { z } from 'zod'
 export const createRoomSchema = z.object({
   name: z.string().min(1).max(100),
   room_type: z.string().optional(),
-  reply_mode: z.enum(['all', 'mentioned_only', 'round_robin']).optional(),
+  reply_mode: z.enum(['all', 'mentioned_only']).optional(),
   visibility: z.enum(['private', 'public']).optional(),
 })
 
