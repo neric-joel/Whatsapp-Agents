@@ -20,7 +20,7 @@ interface Props {
 
 export default function MessageTimeline({ roomId, refreshSignal, optimisticMessages = [] }: Props) {
   const { messages, loading } = useMessages(roomId, refreshSignal)
-  const { runs } = useAgentRuns(roomId)
+  const { runs } = useAgentRuns(roomId, refreshSignal)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {

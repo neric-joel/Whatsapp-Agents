@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 export interface DbAgentRun {
@@ -9,11 +9,11 @@ export interface DbAgentRun {
   agents: { name: string; provider: string } | null
 }
 
-export function useAgentRuns(roomId: string) {
+export function useAgentRuns(roomId: string, refreshSignal?: number) {
   const [runs, setRuns] = useState<DbAgentRun[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  const fetchRuns = useCallback(() => {
     const supabase = createSupabaseBrowserClient()
     supabase
       .from('agent_runs')
@@ -25,6 +25,25 @@ export function useAgentRuns(roomId: string) {
         setLoading(false)
       })
   }, [roomId])
+
+  // Refetch on mount and when refreshSignal changes (user sent a message)
+  useEffect(() => {
+    fetchRuns()
+  }, [fetchRuns, refreshSignal])
+
+  // Realtime: refetch on any agent_runs change for this room
+  useEffect(() => {
+    const supabase = createSupabaseBrowserClient()
+    const channel = supabase
+      .channel(`agent-runs-rt-${roomId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'agent_runs', filter: `room_id=eq.${roomId}` },
+        () => { fetchRuns() }
+      )
+      .subscribe()
+    return () => { void supabase.removeChannel(channel) }
+  }, [roomId, fetchRuns])
 
   return { runs, loading }
 }
