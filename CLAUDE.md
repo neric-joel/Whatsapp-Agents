@@ -1,6 +1,6 @@
 # AgentRoom — Project Memory
 # Last updated: 2026-05-09
-# Current phase: 7 (NEXT)
+# Current phase: 8 (NEXT)
 
 ---
 
@@ -205,8 +205,8 @@ CRITICAL NAMING RULE:
 | 4     | Basic UI                    | DONE ✅  | feat: phase 4 — basic ui           | agentroom_graph_phase_4.html ✅ |
 | 5     | Mock bridge daemon          | DONE ✅  | feat: phase 5 — mock bridge daemon | agentroom_graph_phase_5.html ✅ |
 | 6     | Realtime polish             | DONE ✅  | feat: phase 6 — realtime           | —                              |
-| 7     | Mentions + loop guard       | NEXT ▶   | —                                  | —                              |
-| 8     | Real adapters (+ ruflo)     | PENDING  | —                                  | —                              |
+| 7     | Mentions + loop guard       | DONE ✅  | feat: phase 7 — mentions and loop guard | —                         |
+| 8     | Real adapters (+ ruflo)     | NEXT ▶   | —                                  | —                              |
 | 9     | Files, pins, tool approvals | PENDING  | —                                  | —                              |
 | 10    | Hardening                   | PENDING  | —                                  | —                              |
 
