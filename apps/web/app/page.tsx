@@ -1,3 +1,23 @@
+'use client'
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { useRooms } from '@/hooks/useRooms'
+
 export default function Page() {
-  return <h1>AgentRoom</h1>;
+  const { rooms, loading } = useRooms()
+  const router = useRouter()
+
+  useEffect(() => {
+    if (!loading && rooms.length > 0) {
+      router.replace(`/rooms/${rooms[0].id}`)
+    }
+  }, [rooms, loading, router])
+
+  if (loading) return null
+
+  return (
+    <div className="flex-1 flex items-center justify-center">
+      <p className="text-[#52525b] text-sm">No rooms yet</p>
+    </div>
+  )
 }
