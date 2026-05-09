@@ -95,7 +95,7 @@ export async function processRun(runId: string): Promise<void> {
       } else if (event.type === 'error') {
         throw new Error(event.message)
       } else if (event.type === 'tool_call_requested') {
-        const requiresApproval = Boolean(agentInfo.tool_permissions && Object.keys(agentInfo.tool_permissions).length > 0)
+        const requiresApproval = event.requires_approval
 
         const { data: tc } = await supabase.from('tool_calls').insert({
           room_id: runRow.room_id,
