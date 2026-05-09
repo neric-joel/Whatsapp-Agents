@@ -28,6 +28,7 @@ export interface Agent {
   model: string | null;
   system_prompt: string | null;
   reply_policy: ReplyPolicy;
+  tool_permissions: Record<string, unknown>;
   is_active: boolean;
   created_by_user_id: string | null;
   created_at: string;
@@ -62,6 +63,7 @@ export interface Message {
   target_agent_ids: string[];
   round_index: number;
   is_partial: boolean;
+  metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }
@@ -87,10 +89,14 @@ export interface ToolCall {
   id: string;
   run_id: string;
   room_id: string;
+  agent_id: string | null;
   tool_name: string;
+  tool_category: string | null;
   input_args: Record<string, unknown>;
   output: Record<string, unknown> | null;
   status: ToolCallStatus;
+  requires_approval: boolean;
+  error: string | null;
   approved_by: string | null;
   approved_at: string | null;
   created_at: string;
@@ -107,6 +113,8 @@ export interface File {
   storage_path: string;
   storage_bucket: string;
   message_id: string | null;
+  metadata: Record<string, unknown>;
+  extracted_text: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -114,9 +122,15 @@ export interface File {
 export interface PinnedItem {
   id: string;
   room_id: string;
-  message_id: string;
+  message_id: string | null;
   pinned_by: string | null;
   note: string | null;
+  pin_type: string;
+  title: string | null;
+  content: string | null;
+  visibility: string;
+  is_active: boolean;
+  sort_order: number;
   created_at: string;
   updated_at: string;
 }
@@ -132,7 +146,7 @@ export type AgentProvider  = 'claude_code' | 'codex_cli' | 'ruflo' | 'mock';
 export type AdapterType    = 'subprocess' | 'mock';
 export type ReplyPolicy    = 'always' | 'reply_when_invoked' | 'never';
 export type RunStatus      = 'queued' | 'claimed' | 'running' | 'completed' | 'failed' | 'cancelled';
-export type ToolCallStatus = 'pending' | 'waiting_approval' | 'approved' | 'denied' | 'executed' | 'error';
+export type ToolCallStatus = 'pending' | 'waiting_approval' | 'approved' | 'running' | 'queued' | 'succeeded' | 'denied' | 'executed' | 'failed' | 'error';
 
 // ─── CONTEXT PACKET V1 ───
 
@@ -142,7 +156,9 @@ export interface ContextPacketV1 {
   room: Pick<Room, 'id' | 'name' | 'reply_mode' | 'max_agent_rounds'>;
   agent: Pick<Agent, 'id' | 'name' | 'slug' | 'system_prompt' | 'provider'>;
   trigger_message: Pick<Message, 'id' | 'content' | 'sender_type' | 'created_at'>;
-  recent_messages: Array<Pick<Message, 'id' | 'content' | 'sender_type' | 'sender_agent_id' | 'created_at'>>;
+  recent_messages: Array<Pick<Message, 'id' | 'content' | 'sender_type' | 'sender_agent_id' | 'created_at' | 'metadata'>>;
+  pinned_items?: PinnedItem[];
+  files?: Array<{ id: string; filename: string; mime_type: string; size_bytes: number; extracted_text_preview: string | null }>;
   round_index: number;
 }
 
@@ -161,6 +177,7 @@ export type AgentEvent =
   | { type: 'partial_content'; run_id: string; delta: string }
   | { type: 'final_response';  run_id: string; response: AgentResponseV1 }
   | { type: 'error';           run_id: string; message: string }
+  | { type: 'tool_call_requested'; run_id: string; tool_name: string; tool_category?: string; arguments: Record<string, unknown>; requires_approval: boolean }
   | { type: 'visible_message'; run_id: string; content: string };
 
 // ─── AGENT ADAPTER INTERFACE ───

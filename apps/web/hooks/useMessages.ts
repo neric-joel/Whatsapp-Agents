@@ -8,6 +8,7 @@ export interface DbMessage {
   sender_type: string
   created_at: string
   sender_agent_id: string | null
+  metadata: Record<string, unknown>
   agents: { name: string; provider: string } | null
 }
 
@@ -20,7 +21,7 @@ export function useMessages(roomId: string, refreshSignal?: number) {
     const supabase = createSupabaseBrowserClient()
     supabase
       .from('messages')
-      .select('id, content, sender_type, created_at, sender_agent_id, agents(name, provider)')
+      .select('id, content, sender_type, created_at, sender_agent_id, metadata, agents(name, provider)')
       .eq('room_id', roomId)
       .order('created_at', { ascending: true })
       .then(({ data, error: err }) => {
@@ -48,7 +49,7 @@ export function useMessages(roomId: string, refreshSignal?: number) {
           // Fetch with agents join so we have the agent name
           const { data } = await supabase
             .from('messages')
-            .select('id, content, sender_type, created_at, sender_agent_id, agents(name, provider)')
+            .select('id, content, sender_type, created_at, sender_agent_id, metadata, agents(name, provider)')
             .eq('id', newId)
             .single()
           if (data) {

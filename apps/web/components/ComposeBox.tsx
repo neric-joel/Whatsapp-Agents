@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef, useMemo, KeyboardEvent } from 'react'
+import { useState, useEffect, useRef, useMemo, KeyboardEvent, ChangeEvent } from 'react'
 import { useRooms } from '@/hooks/useRooms'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import type { OptimisticMessage } from './MessageTimeline'
@@ -21,10 +21,13 @@ const EVERYONE: SlimAgent = { id: '__everyone__', slug: 'everyone', name: 'Every
 export default function ComposeBox({ roomId, onOptimistic, onRefetch }: Props) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [attachedFile, setAttachedFile] = useState<{ id: string; name: string } | null>(null)
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
   const [mentionStart, setMentionStart] = useState(-1)
   const [roomAgents, setRoomAgents] = useState<SlimAgent[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const dropdownRef = useRef<HTMLUListElement>(null)
   const { rooms } = useRooms()
   const room = rooms.find((r) => r.id === roomId)
@@ -93,26 +96,61 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch }: Props) {
     textareaRef.current?.focus()
   }
 
+  async function handleFileSelect(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploading(true)
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/files/signed-upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: file.name,
+          mime_type: file.type || 'application/octet-stream',
+          size_bytes: file.size,
+        }),
+      })
+      const json = await res.json() as { ok: boolean; data?: { signed_url: string; file_id: string } }
+      if (!res.ok || !json.ok || !json.data) throw new Error('Failed to prepare upload')
+
+      const uploadRes = await fetch(json.data.signed_url, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type || 'application/octet-stream' },
+        body: file,
+      })
+      if (!uploadRes.ok) throw new Error('Failed to upload file')
+
+      setAttachedFile({ id: json.data.file_id, name: file.name })
+    } finally {
+      setUploading(false)
+    }
+  }
+
   async function submit() {
-    const content = text.trim()
-    if (!content || sending) return
+    const content = text.trim() || attachedFile?.name
+    if (!content || sending || uploading) return
     setSending(true)
     setText('')
     setMentionQuery(null)
     setMentionStart(-1)
+    const metadata = attachedFile ? { file_ids: [attachedFile.id] } : {}
     onOptimistic({
       id: crypto.randomUUID(),
       content,
       sender_type: 'user',
       created_at: new Date().toISOString(),
+      metadata,
     })
     try {
       await fetch(`/api/rooms/${roomId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ content, metadata }),
       })
     } finally {
+      setAttachedFile(null)
+      if (fileInputRef.current) fileInputRef.current.value = ''
       setSending(false)
       onRefetch()
     }
@@ -166,9 +204,41 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch }: Props) {
           rows={1}
           className="bg-[#18181b] text-[#f4f4f5] text-[14px] placeholder:text-[#3f3f46] rounded-xl px-4 py-2.5 flex-1 resize-none outline-none min-h-[40px] max-h-32 overflow-y-auto"
         />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="*/*"
+          className="hidden"
+          onChange={handleFileSelect}
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading || sending}
+          className="rounded-lg px-2 py-2 text-[#52525b] transition-colors hover:bg-[#18181b] hover:text-[#f4f4f5] disabled:opacity-40"
+          aria-label="Attach file"
+        >
+          📎
+        </button>
+        {attachedFile && (
+          <span className="flex max-w-[12rem] items-center gap-2 rounded-full border border-[#27272a] bg-[#18181b] px-3 py-1.5 text-xs text-[#f4f4f5]">
+            <span className="truncate">{attachedFile.name}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setAttachedFile(null)
+                if (fileInputRef.current) fileInputRef.current.value = ''
+              }}
+              className="text-[#52525b] hover:text-[#f4f4f5]"
+              aria-label="Clear attached file"
+            >
+              ×
+            </button>
+          </span>
+        )}
         <button
           onClick={() => void submit()}
-          disabled={!text.trim() || sending}
+          disabled={(!text.trim() && !attachedFile) || sending || uploading}
           className="bg-[#8b5cf6] hover:bg-violet-400 text-white rounded-lg px-3 py-2 text-sm font-medium disabled:opacity-40 transition-colors flex-shrink-0"
         >
           Send

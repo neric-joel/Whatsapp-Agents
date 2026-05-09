@@ -61,6 +61,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       mentions: body.mentions ?? [],
       target_agent_ids: body.target_agent_ids ?? [],
       round_index: roundIndex,
+      metadata: body.metadata ?? {},
     })
     .select()
     .single()
