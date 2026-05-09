@@ -1,5 +1,5 @@
 import { createServiceClient } from '../lib/supabase.js'
-import { MockAgentAdapter } from '../adapters/mock-agent-adapter.js'
+import { getAdapter } from '../adapters/registry.js'
 import type { ContextPacketV1, AgentProvider, ReplyMode, SenderType } from '@agentroom/shared'
 
 const WORKER_ID = process.env.BRIDGE_WORKER_ID ?? 'bridge-local-1'
@@ -14,6 +14,7 @@ interface AgentInfo {
   slug: string
   system_prompt: string | null
   provider: string
+  adapter_type: string
 }
 
 interface AgentRunRow {
@@ -32,7 +33,7 @@ export async function processRun(runId: string): Promise<void> {
   // a. Fetch run with agent data
   const { data: runRaw } = await supabase
     .from('agent_runs')
-    .select('id, room_id, agent_id, trigger_msg_id, status, round_index, agents!agent_id(id, name, slug, system_prompt, provider)')
+    .select('id, room_id, agent_id, trigger_msg_id, status, round_index, agents!agent_id(id, name, slug, system_prompt, provider, adapter_type)')
     .eq('id', runId)
     .single()
 
@@ -126,8 +127,8 @@ export async function processRun(runId: string): Promise<void> {
       round_index: runRow.round_index,
     }
 
-    // g. Run mock adapter, collect final response
-    const adapter = new MockAgentAdapter()
+    // g. Run adapter, collect final response
+    const adapter = getAdapter(agentInfo.adapter_type ?? 'mock')
     const controller = new AbortController()
     let finalContent = ''
 
