@@ -1,6 +1,6 @@
 # AgentRoom — Project Memory
 # Last updated: 2026-05-09
-# Current phase: 10 (NEXT)
+# Current phase: 10 (DONE — MVP COMPLETE)
 
 ---
 
@@ -208,7 +208,7 @@ CRITICAL NAMING RULE:
 | 7     | Mentions + loop guard       | DONE ✅  | feat: phase 7 — mentions and loop guard | —                         |
 | 8     | Real adapters (+ ruflo)     | DONE ✅  | feat: phase 8 — real subprocess adapters | —                        |
 | 9     | Files, pins, tool approvals | DONE ✅  | feat: phase 9 — files, pins, tool approvals | —                    |
-| 10    | Hardening                   | NEXT ▶   | —                                  | —                              |
+| 10    | Hardening                   | DONE ✅  | feat: phase 10 — hardening         | —                              |
 
 ---
 
