@@ -1,6 +1,6 @@
 # AgentRoom — Project Memory
 # Last updated: 2026-05-09
-# Current phase: 9 (NEXT)
+# Current phase: 10 (NEXT)
 
 ---
 
@@ -207,8 +207,8 @@ CRITICAL NAMING RULE:
 | 6     | Realtime polish             | DONE ✅  | feat: phase 6 — realtime           | —                              |
 | 7     | Mentions + loop guard       | DONE ✅  | feat: phase 7 — mentions and loop guard | —                         |
 | 8     | Real adapters (+ ruflo)     | DONE ✅  | feat: phase 8 — real subprocess adapters | —                        |
-| 9     | Files, pins, tool approvals | NEXT ▶   | —                                  | —                              |
-| 10    | Hardening                   | PENDING  | —                                  | —                              |
+| 9     | Files, pins, tool approvals | DONE ✅  | feat: phase 9 — files, pins, tool approvals | —                    |
+| 10    | Hardening                   | NEXT ▶   | —                                  | —                              |
 
 ---
 
