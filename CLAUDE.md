@@ -1,6 +1,6 @@
 # AgentRoom — Project Memory
 # Last updated: 2026-05-08
-# Current phase: 4 (NEXT)
+# Current phase: 5 (NEXT)
 
 ---
 
@@ -202,8 +202,8 @@ CRITICAL NAMING RULE:
 | 1     | Supabase schema + seed      | DONE ✅  | feat: phase 1 — supabase schema + seed | agentroom_graph_phase_1.html ✅ |
 | 2     | Shared types                | DONE ✅  | feat: phase 2 — shared types       | agentroom_graph_phase_2.html ✅ |
 | 3     | API route handlers          | DONE ✅  | feat: phase 3 — api route handlers | agentroom_graph_phase_3.html   |
-| 4     | Basic UI                    | NEXT ▶   | —                                  | —                              |
-| 5     | Mock bridge daemon          | PENDING  | —                                  | —                              |
+| 4     | Basic UI                    | DONE ✅  | feat: phase 4 — basic ui           | —                              |
+| 5     | Mock bridge daemon          | NEXT ▶   | —                                  | —                              |
 | 6     | Realtime polish             | PENDING  | —                                  | —                              |
 | 7     | Mentions + loop guard       | PENDING  | —                                  | —                              |
 | 8     | Real adapters (+ ruflo)     | PENDING  | —                                  | —                              |
