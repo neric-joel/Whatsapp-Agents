@@ -18,7 +18,7 @@
   --status-green: #2EB67D;
   --status-red: #E01E5A;
   --status-gray: #97979C;
-  --border: #E8E8E8;
+  --border: #E0E0E0;
 }
 
 @keyframes toast-in {
