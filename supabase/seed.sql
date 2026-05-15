@@ -19,7 +19,7 @@ VALUES
     'Codex Builder',
     'codex_builder',
     'codex_cli',
-    'subprocess',
+    'codex-cli',
     'reply_when_invoked',
     true
   ),
