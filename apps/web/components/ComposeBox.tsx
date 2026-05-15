@@ -8,6 +8,13 @@ interface Props {
   roomId: string
   onOptimistic: (msg: OptimisticMessage) => void
   onRefetch: () => void
+  replyingTo?: {
+    id: string
+    content: string
+    sender_type: string
+    agents?: { name: string; provider: string } | null
+  } | null
+  onCancelReply?: () => void
 }
 
 interface SlimAgent {
@@ -18,7 +25,7 @@ interface SlimAgent {
 
 const EVERYONE: SlimAgent = { id: '__everyone__', slug: 'everyone', name: 'Everyone' }
 
-export default function ComposeBox({ roomId, onOptimistic, onRefetch }: Props) {
+export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo, onCancelReply }: Props) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
@@ -51,7 +58,6 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch }: Props) {
       })
   }, [roomId])
 
-  // Dismiss on click outside
   useEffect(() => {
     if (mentionQuery === null) return
     function onMouseDown(e: MouseEvent) {
@@ -151,7 +157,7 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch }: Props) {
       const res = await fetch(`/api/rooms/${roomId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content, metadata }),
+        body: JSON.stringify({ content, metadata, reply_to_id: replyingTo?.id }),
       })
       if (!res.ok) {
         const json = await res.json().catch(() => ({})) as { error?: { message?: string } }
@@ -168,9 +174,11 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch }: Props) {
         sender_type: 'user',
         created_at: new Date().toISOString(),
         metadata,
+        reply_to_id: replyingTo?.id ?? null,
       })
       setAttachedFile(null)
       if (fileInputRef.current) fileInputRef.current.value = ''
+      onCancelReply?.()
       onRefetch()
     } finally {
       setSending(false)
@@ -195,23 +203,49 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch }: Props) {
   }
 
   const showDropdown = mentionQuery !== null && mentionOptions.length > 0
+  const replySender = replyingTo?.sender_type === 'agent'
+    ? replyingTo.agents?.name ?? 'Agent'
+    : replyingTo?.sender_type === 'user'
+      ? 'You'
+      : 'System'
+  const replyPreview = replyingTo
+    ? replyingTo.content.length > 80
+      ? `${replyingTo.content.slice(0, 80)}...`
+      : replyingTo.content
+    : ''
 
   return (
-    <div className="border-t border-[#27272a] bg-[#09090b] px-4 py-3 flex-shrink-0">
+    <div className="flex-shrink-0 border-t border-gray-200 bg-white px-4 py-3">
+      {replyingTo && (
+        <div className="mb-3 flex items-start gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
+          <div className="min-w-0 flex-1 border-l-2 border-purple-700 pl-3">
+            <div className="text-xs font-semibold text-purple-700">{replySender}</div>
+            <div className="truncate text-xs text-gray-500">{replyPreview}</div>
+          </div>
+          <button
+            type="button"
+            onClick={onCancelReply}
+            className="rounded-md px-2 py-1 text-sm text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+            aria-label="Cancel reply"
+          >
+            x
+          </button>
+        </div>
+      )}
       <div className="relative flex items-end gap-3">
         {showDropdown && (
           <ul
             ref={dropdownRef}
-            className="absolute bottom-full mb-1 left-0 right-[52px] bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden z-50 max-h-48 overflow-y-auto"
+            className="absolute bottom-full left-0 right-[52px] z-50 mb-2 max-h-48 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg"
           >
             {mentionOptions.map((opt) => (
               <li
                 key={opt.id}
                 onMouseDown={(e) => { e.preventDefault(); selectMention(opt.slug) }}
-                className="px-4 py-2 hover:bg-[#27272a] cursor-pointer flex items-center gap-2"
+                className="flex cursor-pointer items-center gap-2 px-4 py-2 hover:bg-gray-50"
               >
-                <span className="text-[#8b5cf6] text-sm font-medium">@{opt.slug}</span>
-                <span className="text-[#52525b] text-xs">{opt.name}</span>
+                <span className="text-sm font-medium text-purple-700">@{opt.slug}</span>
+                <span className="text-xs text-gray-500">{opt.name}</span>
               </li>
             ))}
           </ul>
@@ -221,12 +255,12 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch }: Props) {
           value={text}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
-          placeholder={`Message #${room?.name ?? '…'}...`}
+          placeholder={`Message #${room?.name ?? '...'}...`}
           rows={1}
-          className="bg-[#18181b] text-[#f4f4f5] text-[14px] placeholder:text-[#3f3f46] rounded-xl px-4 py-2.5 flex-1 resize-none outline-none min-h-[40px] max-h-32 overflow-y-auto"
+          className="max-h-32 min-h-[46px] flex-1 resize-none overflow-y-auto rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition-shadow placeholder:text-gray-400 focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
         />
         {sendError && (
-          <p className="absolute left-1 top-full mt-1 text-red-400 text-xs px-1">{sendError}</p>
+          <p className="absolute left-1 top-full mt-1 px-1 text-xs text-red-600">{sendError}</p>
         )}
         <input
           ref={fileInputRef}
@@ -239,13 +273,13 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch }: Props) {
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading || sending}
-          className="rounded-lg px-2 py-2 text-[#52525b] transition-colors hover:bg-[#18181b] hover:text-[#f4f4f5] disabled:opacity-40"
+          className="rounded-lg px-2 py-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:opacity-40"
           aria-label="Attach file"
         >
-          📎
+          +
         </button>
         {attachedFile && (
-          <span className="flex max-w-[12rem] items-center gap-2 rounded-full border border-[#27272a] bg-[#18181b] px-3 py-1.5 text-xs text-[#f4f4f5]">
+          <span className="flex max-w-[12rem] items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs text-gray-700">
             <span className="truncate">{attachedFile.name}</span>
             <button
               type="button"
@@ -253,20 +287,20 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch }: Props) {
                 setAttachedFile(null)
                 if (fileInputRef.current) fileInputRef.current.value = ''
               }}
-              className="text-[#52525b] hover:text-[#f4f4f5]"
+              className="text-gray-400 hover:text-gray-700"
               aria-label="Clear attached file"
             >
-              ×
+              x
             </button>
           </span>
         )}
         {fileError && !attachedFile && (
-          <span className="flex max-w-[12rem] items-center gap-2 rounded-full border border-red-800/30 bg-red-950/20 px-3 py-1.5 text-xs text-red-400">
+          <span className="flex max-w-[12rem] items-center gap-2 rounded-full border border-red-100 bg-red-50 px-3 py-1.5 text-xs text-red-600">
             <span className="truncate">{fileError}</span>
             <button
               type="button"
               onClick={() => setFileError(null)}
-              className="text-red-400/70 hover:text-red-300"
+              className="text-red-400 hover:text-red-600"
               aria-label="Dismiss upload error"
             >
               x
@@ -276,7 +310,7 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch }: Props) {
         <button
           onClick={() => void submit()}
           disabled={(!text.trim() && !attachedFile) || sending || uploading}
-          className="bg-[#8b5cf6] hover:bg-violet-400 text-white rounded-lg px-3 py-2 text-sm font-medium disabled:opacity-40 transition-colors flex-shrink-0"
+          className="flex-shrink-0 rounded-lg bg-purple-700 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-purple-800 disabled:opacity-40"
         >
           Send
         </button>

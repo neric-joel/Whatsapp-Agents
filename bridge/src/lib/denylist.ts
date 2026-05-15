@@ -1,4 +1,4 @@
-const DENIED_PATTERNS = [
+const DENIED_SUBSTRINGS = [
   'rm -rf',
   'rm -r /',
   'sudo rm',
@@ -12,15 +12,26 @@ const DENIED_PATTERNS = [
   ':(){:|:&};:',
   '> /dev/sda',
   'chmod 777 /',
-  'chown -R',
-  'iptables -F',
+  'chown -r',
+  'iptables -f',
   'ufw disable',
-  'drop table',
   'drop database',
-  'truncate',
+]
+
+const DENIED_REGEXES = [
+  /\brm\s*(-[rRfF]+\s*)+/i,
+  /\bformat\b/i,
+  /\bdrop\b/i,
+  /\bDROP\s+TABLE\b/i,
+  /\bTRUNCATE\s+TABLE\b/i,
+  /\bDELETE\s+FROM\b(?![\s\S]*\bWHERE\b)/i,
 ]
 
 export function isDeniedCommand(command: string): boolean {
-  const lower = command.toLowerCase()
-  return DENIED_PATTERNS.some((p) => lower.includes(p.toLowerCase()))
+  const normalized = command.normalize('NFKC')
+  const lower = normalized.toLowerCase()
+  return (
+    DENIED_SUBSTRINGS.some((p) => lower.includes(p)) ||
+    DENIED_REGEXES.some((pattern) => pattern.test(normalized))
+  )
 }

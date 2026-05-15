@@ -1,3 +1,49 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --sidebar-bg: #4A154B;
+  --sidebar-hover: rgba(255,255,255,0.1);
+  --sidebar-active: rgba(255,255,255,0.2);
+  --sidebar-text: rgba(255,255,255,0.9);
+  --sidebar-muted: rgba(255,255,255,0.6);
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F8F8F8;
+  --bg-tertiary: #F1F1F1;
+  --text-primary: #1D1C1D;
+  --text-secondary: #616061;
+  --text-link: #1264A3;
+  --agent-purple: #7C3AED;
+  --status-green: #2EB67D;
+  --status-red: #E01E5A;
+  --status-gray: #97979C;
+  --border: #E8E8E8;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes toast-life {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  5%,
+  88% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}

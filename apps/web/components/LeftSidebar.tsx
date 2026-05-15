@@ -160,8 +160,8 @@ export default function LeftSidebar() {
           href={`/rooms/${room.id}`}
           className={`min-w-0 flex-1 truncate rounded-md px-3 py-2 text-sm transition-colors ${
             isActive
-              ? 'bg-[#27272a] border-l-2 border-[#8b5cf6] text-[#f4f4f5]'
-              : 'text-[#71717a] hover:bg-zinc-800/50 hover:text-zinc-300'
+              ? 'bg-white/20 font-semibold text-white'
+              : 'text-white/90 hover:bg-white/10 hover:text-white'
           }`}
         >
           # {room.name}
@@ -173,7 +173,7 @@ export default function LeftSidebar() {
             disabled={isBusy}
             title={room.is_archived ? 'Unarchive room' : 'Archive room'}
             aria-label={room.is_archived ? 'Unarchive room' : 'Archive room'}
-            className="rounded p-1 text-[#71717a] transition-colors hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-40"
+            className="rounded p-1 text-white/50 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-40"
           >
             <ArchiveIcon />
           </button>
@@ -183,7 +183,7 @@ export default function LeftSidebar() {
             disabled={isBusy}
             title="Delete room"
             aria-label="Delete room"
-            className="rounded p-1 text-[#71717a] transition-colors hover:bg-red-950/70 hover:text-red-300 disabled:opacity-40"
+            className="rounded p-1 text-white/50 transition-colors hover:bg-white/10 hover:text-red-200 disabled:opacity-40"
           >
             <TrashIcon />
           </button>
@@ -193,23 +193,23 @@ export default function LeftSidebar() {
   }
 
   return (
-    <aside className="w-[260px] flex-shrink-0 h-full bg-[#18181b] flex flex-col">
+    <aside className="w-[260px] flex-shrink-0 h-full bg-[#4A154B] flex flex-col">
       <div className="p-4 pb-2">
-        <span className="text-[#f4f4f5] font-semibold text-base">AgentRoom</span>
+        <span className="text-base font-bold text-white">AgentRoom</span>
       </div>
-      <div className="px-4 py-2 text-[11px] font-medium tracking-widest text-[#52525b] uppercase">
+      <div className="px-4 py-2 text-[11px] font-medium uppercase tracking-widest text-white/60">
         ROOMS
       </div>
       <nav className="flex-1 overflow-y-auto">
         {activeRooms.length === 0 && (
           <div className="flex flex-col items-center justify-center flex-1 p-6 text-center">
-            <p className="text-[#52525b] text-sm mb-3">
+            <p className="mb-3 text-sm text-white/60">
               {rooms.length === 0 ? 'No rooms yet' : 'No active rooms'}
             </p>
             <button
               type="button"
               onClick={openCreateModal}
-              className="text-[#8b5cf6] hover:text-violet-400 text-sm font-medium transition-colors"
+              className="text-sm font-medium text-white/90 transition-colors hover:text-white"
             >
               Create your first room
             </button>
@@ -219,16 +219,16 @@ export default function LeftSidebar() {
           {activeRooms.map(renderRoom)}
         </div>
         {roomActionError && (
-          <p className="mx-4 mt-3 rounded border border-red-900/60 bg-red-950/40 px-3 py-2 text-xs text-red-200">
+          <p className="mx-4 mt-3 rounded border border-white/10 bg-white/10 px-3 py-2 text-xs text-red-100">
             {roomActionError}
           </p>
         )}
         {archivedRooms.length > 0 && (
-          <div className="mt-4 border-t border-zinc-800 pt-2">
+          <div className="mt-4 border-t border-white/10 pt-2">
             <button
               type="button"
               onClick={() => setShowArchived((value) => !value)}
-              className="flex w-full items-center gap-1 px-4 py-2 text-left text-[11px] font-medium uppercase tracking-widest text-[#52525b] transition-colors hover:text-zinc-400"
+              className="flex w-full items-center gap-1 px-4 py-2 text-left text-[11px] font-medium uppercase tracking-widest text-white/60 transition-colors hover:text-white"
               aria-expanded={showArchived}
             >
               <ChevronIcon open={showArchived} />
@@ -245,7 +245,7 @@ export default function LeftSidebar() {
       <button
         type="button"
         onClick={openCreateModal}
-        className="px-4 py-3 text-sm text-[#52525b] hover:text-zinc-400 text-left transition-colors"
+        className="px-4 py-3 text-left text-sm text-white/70 transition-colors hover:bg-white/10 hover:text-white"
       >
         + New Room
       </button>

@@ -22,6 +22,15 @@ export const sendMessageSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
 })
 
+export const addRoomAgentSchema = z.object({
+  agentId: z.string().uuid(),
+})
+
+export const updateRoomAgentMemberSchema = z.object({
+  muted: z.boolean().optional(),
+  reply_enabled: z.boolean().optional(),
+}).refine((d) => Object.keys(d).length > 0, 'At least one field required')
+
 export const signedUploadSchema = z.object({
   filename: z.string().min(1).refine(
     (s) => !s.includes('/') && !s.includes('\\'),

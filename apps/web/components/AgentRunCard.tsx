@@ -1,13 +1,21 @@
 'use client'
 
+type RunStatus = 'queued' | 'running' | 'completed' | 'failed'
+
 function initials(name: string) {
-  return name.slice(0, 2).toUpperCase()
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
 }
 
 export interface AgentRunCardProps {
   run: {
     id: string
-    status: 'queued' | 'running' | 'failed'
+    status: RunStatus
     error_message?: string | null
     error?: string | null
     agents: { name: string; provider: string } | null
@@ -15,47 +23,72 @@ export interface AgentRunCardProps {
   onRetry?: () => void
 }
 
+const statusLabel: Record<RunStatus, string> = {
+  queued: 'Queued',
+  running: 'Running',
+  completed: 'Completed',
+  failed: 'Failed',
+}
+
+const statusClass: Record<RunStatus, string> = {
+  queued: 'bg-gray-200 text-gray-600',
+  running: 'bg-purple-100 text-purple-700',
+  completed: 'bg-green-100 text-green-700',
+  failed: 'bg-red-100 text-red-700',
+}
+
 export default function AgentRunCard({ run, onRetry }: AgentRunCardProps) {
   const { status, agents } = run
-  const statusText = status === 'queued' ? 'Waiting to respond...' : 'Thinking...'
+  const error = run.error ?? run.error_message
 
-  if (status === 'failed') {
-    return (
-      <div className="mx-4 my-1 rounded-xl border border-red-800/30 bg-red-950/20 px-3 py-2">
-        <div className="flex items-center justify-between">
-          <span className="text-red-400 text-xs font-medium">Failed - {agents?.name ?? 'Agent'}</span>
-          {onRetry && (
-            <button onClick={onRetry} className="text-[#52525b] hover:text-[#f4f4f5] text-xs transition-colors">
+  return (
+    <div className="mx-5 my-2 rounded-xl border border-gray-100 bg-[#F8F8F8] px-4 py-3">
+      <div className="flex items-start gap-3">
+        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-purple-700">
+          <span className="text-[11px] font-semibold text-white">
+            {agents ? initials(agents.name) : 'AG'}
+          </span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-3">
+            <span className="truncate text-sm font-medium text-purple-700">
+              {agents?.name ?? 'Agent'}
+            </span>
+            <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${statusClass[status]}`}>
+              {statusLabel[status]}
+            </span>
+          </div>
+          <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+            {status === 'running' ? (
+              <>
+                <span>Thinking</span>
+                <span className="flex gap-1">
+                  {[0, 1, 2].map((i) => (
+                    <span
+                      key={i}
+                      className="h-1 w-1 rounded-full bg-purple-500 animate-pulse"
+                      style={{ animationDelay: `${i * 0.15}s` }}
+                    />
+                  ))}
+                </span>
+              </>
+            ) : (
+              <span>{status === 'queued' ? 'Waiting to respond' : statusLabel[status]}</span>
+            )}
+          </div>
+          {status === 'failed' && error && (
+            <p className="mt-2 line-clamp-2 text-xs text-red-600">{error}</p>
+          )}
+          {status === 'failed' && onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="mt-2 text-xs font-medium text-gray-500 transition-colors hover:text-gray-900"
+            >
               Retry
             </button>
           )}
         </div>
-        {(run.error ?? run.error_message) && (
-          <p className="text-[#52525b] text-xs mt-1 line-clamp-2">{run.error ?? run.error_message}</p>
-        )}
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex flex-row items-center gap-3 px-4 py-3 mx-4 my-1 rounded-xl bg-[#18181b] border border-dashed border-[#27272a]">
-      <div className="w-7 h-7 rounded-full bg-[#27272a] flex items-center justify-center flex-shrink-0">
-        <span className="text-[10px] text-[#52525b]">
-          {agents ? initials(agents.name) : 'AG'}
-        </span>
-      </div>
-      <div className="flex flex-col flex-1">
-        <span className="text-[#f4f4f5] text-[13px]">{agents?.name ?? 'Agent'}</span>
-        <span className="text-[#52525b] text-[11px]">{statusText}</span>
-      </div>
-      <div className="flex gap-1 items-center">
-        {[0, 1, 2].map((i) => (
-          <span
-            key={i}
-            className="w-1 h-1 rounded-full bg-[#52525b] animate-pulse"
-            style={{ animationDelay: `${i * 0.15}s` }}
-          />
-        ))}
       </div>
     </div>
   )

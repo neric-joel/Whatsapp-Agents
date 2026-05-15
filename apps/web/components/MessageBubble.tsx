@@ -1,13 +1,25 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
+import { useToast } from '@/contexts/ToastContext'
+import { DELETED_MESSAGE_CONTENT } from '@/lib/message-management'
 
 function formatTime(ts: string) {
   return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
 function initials(name: string) {
-  return name.slice(0, 2).toUpperCase()
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
+}
+
+function avatarInitial(name: string | null | undefined) {
+  return (name?.trim().charAt(0) || 'U').toUpperCase()
 }
 
 export interface MessageBubbleProps {
@@ -15,43 +27,139 @@ export interface MessageBubbleProps {
     id: string
     content: string
     sender_type: string
+    sender_user_id?: string | null
     created_at: string
+    metadata?: Record<string, unknown>
     agents?: { name: string; provider: string } | null
   }
   children?: ReactNode
-  onPin?: (messageId: string, content: string) => void
+  roomId: string
+  currentUserName?: string | null
+  onPin?: (messageId: string, content: string) => void | Promise<void>
+  onReply?: (message: MessageBubbleProps['message']) => void
+  onDeleted?: () => void
 }
 
-export default function MessageBubble({ message, children, onPin }: MessageBubbleProps) {
-  const { content, sender_type, created_at, agents } = message
+export default function MessageBubble({
+  message,
+  children,
+  roomId,
+  currentUserName,
+  onPin,
+  onReply,
+  onDeleted,
+}: MessageBubbleProps) {
+  const { content, sender_type, created_at, agents, metadata } = message
+  const [copied, setCopied] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const { showToast } = useToast()
+  const isDeleted = content === DELETED_MESSAGE_CONTENT || Boolean(metadata?.deleted_at)
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(content)
+      setCopied(true)
+      showToast('Message copied', 'success')
+      window.setTimeout(() => setCopied(false), 2000)
+    } catch {
+      showToast('Failed to copy message', 'error')
+    }
+  }
+
+  async function handlePin() {
+    if (!onPin) return
+    try {
+      await onPin(message.id, content)
+      showToast('Message pinned', 'success')
+    } catch {
+      showToast('Failed to pin message', 'error')
+    }
+  }
+
+  async function handleDelete() {
+    if (deleting) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/messages/${message.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({})) as { error?: { message?: string } }
+        showToast(json.error?.message ?? 'Failed to delete message', 'error')
+        return
+      }
+      showToast('Message deleted', 'success')
+      onDeleted?.()
+    } catch {
+      showToast('Failed to delete message', 'error')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const actionButtons = (
+    <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+      <button
+        type="button"
+        onClick={() => void handleCopy()}
+        className="rounded-md px-2 py-1 text-[11px] font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
+      >
+        {copied ? 'Copied!' : 'Copy'}
+      </button>
+      {onReply && (
+        <button
+          type="button"
+          onClick={() => onReply(message)}
+          className="rounded-md px-2 py-1 text-[11px] font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
+        >
+          Reply
+        </button>
+      )}
+      {onPin && (
+        <button
+          type="button"
+          onClick={() => void handlePin()}
+          className="rounded-md px-2 py-1 text-[11px] font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
+        >
+          Pin
+        </button>
+      )}
+      {sender_type === 'user' && !isDeleted && (
+        <button
+          type="button"
+          onClick={() => void handleDelete()}
+          disabled={deleting}
+          className="rounded-md px-2 py-1 text-[11px] font-medium text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+        >
+          {deleting ? 'Deleting...' : 'Delete'}
+        </button>
+      )}
+    </div>
+  )
 
   if (sender_type === 'agent') {
     return (
-      <div className="flex flex-row items-start gap-2 px-4 py-1">
-        <div className="w-7 h-7 rounded-full bg-[#27272a] flex items-center justify-center flex-shrink-0">
-          <span className="text-[10px] text-[#52525b]">
+      <div className="group flex flex-row items-start gap-3 px-5 py-2">
+        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-purple-700">
+          <span className="text-[11px] font-semibold text-white">
             {agents ? initials(agents.name) : 'AG'}
           </span>
         </div>
-        <div className="flex flex-col max-w-[70%]">
-          <span className="text-[11px] text-[#52525b] mb-0.5">
-            {agents?.name ?? 'Agent'}
-          </span>
-          <div className="bg-[#27272a] text-[#f4f4f5] text-[14px] px-3 py-2 rounded-2xl rounded-tl-none">
-            {content}
+        <div className="flex max-w-[72%] flex-col">
+          <div className="mb-1 flex items-center gap-2">
+            <span className="text-xs font-semibold text-purple-700">
+              {agents?.name ?? 'Agent'}
+            </span>
+            <span className="text-xs text-gray-400">{formatTime(created_at)}</span>
+          </div>
+          <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3 text-sm leading-6 text-gray-900 shadow-sm">
+            {isDeleted ? (
+              <span className="italic text-gray-400">{DELETED_MESSAGE_CONTENT}</span>
+            ) : (
+              content
+            )}
           </div>
           {children}
-          <div className="mt-0.5 ml-1 flex items-center gap-2">
-            <span className="text-[11px] text-[#52525b]">{formatTime(created_at)}</span>
-            {onPin && (
-              <button
-                type="button"
-                onClick={() => onPin(message.id, content)}
-                className="text-[11px] text-[#52525b] transition-colors hover:text-[#f4f4f5]"
-              >
-                Pin
-              </button>
-            )}
+          <div className="mt-1.5 flex items-center gap-2">
+            {actionButtons}
           </div>
         </div>
       </div>
@@ -60,32 +168,31 @@ export default function MessageBubble({ message, children, onPin }: MessageBubbl
 
   if (sender_type === 'user') {
     return (
-      <div className="flex flex-row justify-end px-4 py-1">
-        <div className="flex flex-col items-end max-w-[70%]">
-          <div className="bg-[#8b5cf6] text-white text-[14px] px-3 py-2 rounded-2xl rounded-tr-none">
-            {content}
+      <div className="group flex flex-row items-start justify-end gap-3 px-5 py-2">
+        <div className="flex max-w-[72%] flex-col items-end">
+          <div className={`rounded-2xl px-4 py-3 text-sm leading-6 ${isDeleted ? 'bg-gray-50 text-gray-400' : 'bg-purple-700 text-white'}`}>
+            {isDeleted ? (
+              <span className="italic">{DELETED_MESSAGE_CONTENT}</span>
+            ) : (
+              content
+            )}
           </div>
           {children}
-          <div className="mt-0.5 flex items-center justify-end gap-2 text-right">
-            {onPin && (
-              <button
-                type="button"
-                onClick={() => onPin(message.id, content)}
-                className="text-[11px] text-[#52525b] transition-colors hover:text-[#f4f4f5]"
-              >
-                Pin
-              </button>
-            )}
-            <span className="text-[11px] text-[#52525b]">{formatTime(created_at)}</span>
+          <div className="mt-1.5 flex items-center justify-end gap-2 text-right">
+            {actionButtons}
+            <span className="text-xs text-gray-400">{formatTime(created_at)}</span>
           </div>
+        </div>
+        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-blue-500 text-xs font-semibold text-white">
+          {avatarInitial(currentUserName)}
         </div>
       </div>
     )
   }
 
   return (
-    <div className="flex justify-center px-4 py-2">
-      <span className="text-[11px] text-[#52525b]">{content}</span>
+    <div className="flex justify-center px-5 py-3">
+      <span className="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-500">{content}</span>
     </div>
   )
 }

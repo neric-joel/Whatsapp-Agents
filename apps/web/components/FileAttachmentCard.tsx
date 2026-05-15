@@ -1,4 +1,5 @@
 'use client'
+
 import { useState } from 'react'
 
 interface FileAttachment {
@@ -19,10 +20,10 @@ function formatBytes(n: number) {
 }
 
 function mimeIcon(mime: string) {
-  if (mime.startsWith('image/')) return '🖼️'
-  if (mime === 'application/pdf') return '📄'
-  if (mime.startsWith('text/') || mime.includes('json') || mime.includes('javascript') || mime.includes('typescript')) return '🧾'
-  return '📎'
+  if (mime.startsWith('image/')) return 'IMG'
+  if (mime === 'application/pdf') return 'PDF'
+  if (mime.startsWith('text/') || mime.includes('json') || mime.includes('javascript') || mime.includes('typescript')) return 'TXT'
+  return 'FILE'
 }
 
 async function fetchSignedUrl(fileId: string) {
@@ -48,18 +49,20 @@ export default function FileAttachmentCard({ file }: Props) {
   }
 
   return (
-    <div className="mt-2 max-w-xs rounded-xl border border-[#27272a] bg-[#18181b] p-3 text-[#f4f4f5]">
+    <div className="mt-2 max-w-xs rounded-xl border border-gray-200 bg-white p-3 text-gray-900 shadow-sm">
       <div className="flex items-start gap-3">
-        <span className="text-lg leading-5">{mimeIcon(file.mime_type)}</span>
+        <span className="rounded bg-gray-100 px-1.5 py-1 text-[10px] font-semibold leading-4 text-gray-500">
+          {mimeIcon(file.mime_type)}
+        </span>
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{file.filename}</div>
-          <div className="text-xs text-[#52525b]">{formatBytes(file.size_bytes)}</div>
+          <div className="text-xs text-gray-500">{formatBytes(file.size_bytes)}</div>
         </div>
         <button
           type="button"
           onClick={() => void openFile()}
           disabled={loading}
-          className="rounded-lg border border-[#27272a] px-2 py-1 text-xs text-[#f4f4f5] transition-colors hover:bg-[#27272a] disabled:opacity-50"
+          className="rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 disabled:opacity-50"
         >
           {file.mime_type.startsWith('image/') ? 'Preview' : 'Download'}
         </button>
