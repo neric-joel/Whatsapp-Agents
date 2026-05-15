@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { sendMessageSchema } from '@/lib/api-validation'
 import { requireRoomMember } from '@/lib/permissions'
-import { createSupabaseServerClient, createSupabaseServiceClient } from '@/lib/supabase/server'
+import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
 import { parseMentions } from '@/lib/mention-parser'
 
 interface RouteParams { params: { roomId: string } }
@@ -16,8 +16,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   const { roomId } = params
 
   // 1. Authenticate
-  const supabaseUser = createSupabaseServerClient()
-  const { data: { user }, error: authErr } = await supabaseUser.auth.getUser()
+  const { data: { user }, error: authErr } = await getAuthenticatedUser(req)
   if (authErr || !user) return apiError('UNAUTHORIZED', 'Unauthorized', 401)
 
   // 2. Verify room membership

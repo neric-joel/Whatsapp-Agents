@@ -1,12 +1,11 @@
 import { NextRequest } from 'next/server'
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { createRoomSchema } from '@/lib/api-validation'
-import { createSupabaseServerClient, createSupabaseServiceClient } from '@/lib/supabase/server'
+import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
 
 export async function POST(req: NextRequest) {
   // 1. Authenticate
-  const supabaseUser = createSupabaseServerClient()
-  const { data: { user }, error: authErr } = await supabaseUser.auth.getUser()
+  const { data: { user }, error: authErr } = await getAuthenticatedUser(req)
   if (authErr || !user) return apiError('UNAUTHORIZED', 'Unauthorized', 401)
 
   // 2. Parse body

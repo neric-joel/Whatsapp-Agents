@@ -1,6 +1,7 @@
 import { createServerClient, type SetAllCookies } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
+import { getBearerToken } from '@/lib/api-auth'
 
 export function createSupabaseServerClient() {
   const cookieStore = cookies()
@@ -28,4 +29,11 @@ export function createSupabaseServiceClient() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { autoRefreshToken: false, persistSession: false } }
   )
+}
+
+export function getAuthenticatedUser(req: { headers: Headers }) {
+  const supabaseUser = createSupabaseServerClient()
+  const bearerToken = getBearerToken(req)
+
+  return supabaseUser.auth.getUser(bearerToken ?? undefined)
 }
