@@ -12,6 +12,7 @@ export interface Room {
   max_agent_hops: number;
   allow_agent_to_agent: boolean;
   visibility: string;
+  is_archived: boolean;
   last_message_at: string | null;
   created_by_user_id: string | null;
   created_at: string;

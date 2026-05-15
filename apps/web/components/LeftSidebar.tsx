@@ -1,53 +1,292 @@
 'use client'
+import { FormEvent, MouseEvent, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useRooms } from '@/hooks/useRooms'
+import type { Room } from '@agentroom/shared'
+
+type ApiResponse<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: { message?: string } | string }
+
+function ArchiveIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.7">
+      <path d="M4 6.5h12M5.5 6.5v8h9v-8M7 4h6l1 2.5H6L7 4Z" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8 10h4" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function TrashIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.7">
+      <path d="M4.5 6h11M8 6V4.5h4V6m-6 0 .5 9.5h7L14 6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8.5 9v4M11.5 9v4" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" className={`h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M8 5l5 5-5 5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function getApiErrorMessage(response: ApiResponse<unknown>) {
+  if (response.ok) return null
+  return typeof response.error === 'string' ? response.error : response.error.message ?? 'Request failed'
+}
 
 export default function LeftSidebar() {
-  const { rooms } = useRooms()
+  const { rooms, refreshRooms } = useRooms()
   const pathname = usePathname()
+  const router = useRouter()
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [roomName, setRoomName] = useState('')
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [isCreating, setIsCreating] = useState(false)
+  const [roomActionError, setRoomActionError] = useState<string | null>(null)
+  const [busyRoomId, setBusyRoomId] = useState<string | null>(null)
+  const [showArchived, setShowArchived] = useState(false)
+
+  const { activeRooms, archivedRooms } = useMemo(() => ({
+    activeRooms: rooms.filter((room) => !room.is_archived),
+    archivedRooms: rooms.filter((room) => room.is_archived),
+  }), [rooms])
+
+  function openCreateModal() {
+    setRoomName('')
+    setCreateError(null)
+    setIsCreateOpen(true)
+  }
+
+  function closeCreateModal() {
+    if (isCreating) return
+    setIsCreateOpen(false)
+    setRoomName('')
+    setCreateError(null)
+  }
+
+  async function handleCreateRoom(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const name = roomName.trim()
+    if (!name) {
+      setCreateError('Room name is required')
+      return
+    }
+
+    setIsCreating(true)
+    setCreateError(null)
+    try {
+      const res = await fetch('/api/rooms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      })
+      const payload = await res.json().catch(() => null) as ApiResponse<Room> | null
+      if (!res.ok || !payload?.ok) {
+        setCreateError(payload ? getApiErrorMessage(payload) ?? 'Failed to create room' : 'Failed to create room')
+        return
+      }
+
+      setIsCreateOpen(false)
+      setRoomName('')
+      await refreshRooms()
+      router.push(`/rooms/${payload.data.id}`)
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : 'Failed to create room')
+    } finally {
+      setIsCreating(false)
+    }
+  }
+
+  async function toggleArchive(room: Room, event: MouseEvent<HTMLButtonElement>) {
+    event.preventDefault()
+    event.stopPropagation()
+    setBusyRoomId(room.id)
+    setRoomActionError(null)
+    try {
+      const res = await fetch(`/api/rooms/${room.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_archived: !room.is_archived }),
+      })
+      const payload = await res.json().catch(() => null) as ApiResponse<Room> | null
+      if (!res.ok || !payload?.ok) {
+        setRoomActionError(payload ? getApiErrorMessage(payload) ?? 'Failed to update room' : 'Failed to update room')
+        return
+      }
+      await refreshRooms()
+    } catch (err) {
+      setRoomActionError(err instanceof Error ? err.message : 'Failed to update room')
+    } finally {
+      setBusyRoomId(null)
+    }
+  }
+
+  async function deleteRoom(room: Room, event: MouseEvent<HTMLButtonElement>) {
+    event.preventDefault()
+    event.stopPropagation()
+    if (!confirm(`Delete "${room.name}"? This cannot be undone.`)) return
+
+    setBusyRoomId(room.id)
+    setRoomActionError(null)
+    try {
+      const res = await fetch(`/api/rooms/${room.id}`, { method: 'DELETE' })
+      const payload = await res.json().catch(() => null) as ApiResponse<{ deleted: boolean }> | null
+      if (!res.ok || !payload?.ok) {
+        setRoomActionError(payload ? getApiErrorMessage(payload) ?? 'Failed to delete room' : 'Failed to delete room')
+        return
+      }
+      await refreshRooms()
+      if (pathname === `/rooms/${room.id}`) router.push('/')
+    } catch (err) {
+      setRoomActionError(err instanceof Error ? err.message : 'Failed to delete room')
+    } finally {
+      setBusyRoomId(null)
+    }
+  }
+
+  function renderRoom(room: Room) {
+    const isActive = pathname === `/rooms/${room.id}`
+    const isBusy = busyRoomId === room.id
+
+    return (
+      <div key={room.id} className="group mx-2 flex items-center gap-1">
+        <Link
+          href={`/rooms/${room.id}`}
+          className={`min-w-0 flex-1 truncate rounded-md px-3 py-2 text-sm transition-colors ${
+            isActive
+              ? 'bg-[#27272a] border-l-2 border-[#8b5cf6] text-[#f4f4f5]'
+              : 'text-[#71717a] hover:bg-zinc-800/50 hover:text-zinc-300'
+          }`}
+        >
+          # {room.name}
+        </Link>
+        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+          <button
+            type="button"
+            onClick={(event) => toggleArchive(room, event)}
+            disabled={isBusy}
+            title={room.is_archived ? 'Unarchive room' : 'Archive room'}
+            aria-label={room.is_archived ? 'Unarchive room' : 'Archive room'}
+            className="rounded p-1 text-[#71717a] transition-colors hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-40"
+          >
+            <ArchiveIcon />
+          </button>
+          <button
+            type="button"
+            onClick={(event) => deleteRoom(room, event)}
+            disabled={isBusy}
+            title="Delete room"
+            aria-label="Delete room"
+            className="rounded p-1 text-[#71717a] transition-colors hover:bg-red-950/70 hover:text-red-300 disabled:opacity-40"
+          >
+            <TrashIcon />
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <aside className="w-[260px] flex-shrink-0 h-full bg-[#18181b] flex flex-col">
       <div className="p-4 pb-2">
-        <span className="text-[#f4f4f5] font-semibold text-base">AgentRoom 🤖</span>
+        <span className="text-[#f4f4f5] font-semibold text-base">AgentRoom</span>
       </div>
       <div className="px-4 py-2 text-[11px] font-medium tracking-widest text-[#52525b] uppercase">
         ROOMS
       </div>
       <nav className="flex-1 overflow-y-auto">
-        {rooms.length === 0 && (
+        {activeRooms.length === 0 && (
           <div className="flex flex-col items-center justify-center flex-1 p-6 text-center">
-            <p className="text-[#52525b] text-sm mb-3">No rooms yet</p>
+            <p className="text-[#52525b] text-sm mb-3">
+              {rooms.length === 0 ? 'No rooms yet' : 'No active rooms'}
+            </p>
             <button
               type="button"
-              onClick={() => {}}
+              onClick={openCreateModal}
               className="text-[#8b5cf6] hover:text-violet-400 text-sm font-medium transition-colors"
             >
               Create your first room
             </button>
           </div>
         )}
-        {rooms.map((room) => {
-          const isActive = pathname === `/rooms/${room.id}`
-          return (
-            <Link
-              key={room.id}
-              href={`/rooms/${room.id}`}
-              className={`flex items-center px-3 py-2 rounded-md mx-2 text-sm transition-colors ${
-                isActive
-                  ? 'bg-[#27272a] border-l-2 border-[#8b5cf6] text-[#f4f4f5]'
-                  : 'text-[#3f3f46] hover:bg-zinc-800/50'
-              }`}
+        <div className="space-y-1">
+          {activeRooms.map(renderRoom)}
+        </div>
+        {roomActionError && (
+          <p className="mx-4 mt-3 rounded border border-red-900/60 bg-red-950/40 px-3 py-2 text-xs text-red-200">
+            {roomActionError}
+          </p>
+        )}
+        {archivedRooms.length > 0 && (
+          <div className="mt-4 border-t border-zinc-800 pt-2">
+            <button
+              type="button"
+              onClick={() => setShowArchived((value) => !value)}
+              className="flex w-full items-center gap-1 px-4 py-2 text-left text-[11px] font-medium uppercase tracking-widest text-[#52525b] transition-colors hover:text-zinc-400"
+              aria-expanded={showArchived}
             >
-              # {room.name}
-            </Link>
-          )
-        })}
+              <ChevronIcon open={showArchived} />
+              Archived
+            </button>
+            {showArchived && (
+              <div className="space-y-1">
+                {archivedRooms.map(renderRoom)}
+              </div>
+            )}
+          </div>
+        )}
       </nav>
-      <button className="px-4 py-3 text-sm text-[#52525b] hover:text-zinc-400 text-left transition-colors">
+      <button
+        type="button"
+        onClick={openCreateModal}
+        className="px-4 py-3 text-sm text-[#52525b] hover:text-zinc-400 text-left transition-colors"
+      >
         + New Room
       </button>
+
+      {isCreateOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <form onSubmit={handleCreateRoom} className="w-full max-w-sm rounded-lg bg-white p-5 shadow-2xl">
+            <h2 className="text-lg font-semibold text-zinc-950">New room</h2>
+            <label className="mt-4 block text-sm font-medium text-zinc-700" htmlFor="room-name">
+              Room name
+            </label>
+            <input
+              id="room-name"
+              value={roomName}
+              onChange={(event) => setRoomName(event.target.value)}
+              autoFocus
+              className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-950 shadow-sm outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-200"
+              placeholder="Planning"
+              disabled={isCreating}
+            />
+            {createError && <p className="mt-3 text-sm text-red-600">{createError}</p>}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeCreateModal}
+                disabled={isCreating}
+                className="rounded-md px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isCreating}
+                className="rounded-md bg-[#8b5cf6] px-3 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-violet-600 disabled:opacity-50"
+              >
+                {isCreating ? 'Creating...' : 'Create'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </aside>
   )
 }

@@ -7,6 +7,10 @@ export const createRoomSchema = z.object({
   visibility: z.enum(['private', 'public']).optional(),
 })
 
+export const updateRoomArchiveSchema = z.object({
+  is_archived: z.boolean(),
+})
+
 export const sendMessageSchema = z.object({
   content: z.string().min(1),
   content_type: z.string().optional(),
