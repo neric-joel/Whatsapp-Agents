@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
+  PROBLEMS,
+  buildEvaluationPrompt,
+  filterAgentsForStress,
   formatProblemReport,
   summarizeProblemResults,
   type AgentRunResult,
@@ -41,6 +44,41 @@ const results: AgentRunResult[] = [
 ]
 
 describe('stress test report helpers', () => {
+  it('filters stress agents by comma-separated slug list', () => {
+    const agents = [
+      { id: 'a1', name: 'Claude Thinker', slug: 'claude_thinker' },
+      { id: 'a2', name: 'Reviewer', slug: 'reviewer' },
+    ]
+
+    assert.deepEqual(filterAgentsForStress(agents, 'reviewer'), [agents[1]])
+  })
+
+  it('contains the full five-domain, four-tier evaluation bank', () => {
+    assert.equal(PROBLEMS.length, 20)
+    assert.deepEqual([...new Set(PROBLEMS.map((problem) => problem.cat))].sort(), [
+      'CODING',
+      'LIFE',
+      'MATH',
+      'PHILOSOPHY',
+      'PHYSICS',
+    ])
+    assert.deepEqual([...new Set(PROBLEMS.map((problem) => problem.level))].sort(), [
+      'EASY',
+      'EXTRA_HARD',
+      'HARD',
+      'MEDIUM',
+    ])
+  })
+
+  it('builds an evaluation prompt with the strict three-phase protocol', () => {
+    const prompt = buildEvaluationPrompt(problem)
+
+    assert.match(prompt, /Phase 1: Individual Assessment/)
+    assert.match(prompt, /Phase 2: Team Discussion/)
+    assert.match(prompt, /Phase 3: Consensus & Conclusion/)
+    assert.match(prompt, /What is 15% of 240\?/)
+  })
+
   it('summarizes completed, failed, timed out, hallucination, and round totals', () => {
     const summary = summarizeProblemResults([
       ...results,

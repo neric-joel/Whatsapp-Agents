@@ -1,5 +1,4 @@
 import './globals.css'
-import LeftSidebar from '@/components/LeftSidebar'
 import AuthGuard from '@/components/AuthGuard'
 import { ToastProvider } from '@/contexts/ToastContext'
 
@@ -18,10 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="flex h-screen flex-row overflow-hidden bg-white font-sans">
         <ToastProvider>
-          <AuthGuard>
-            <LeftSidebar />
-            <div className="flex-1 flex flex-col overflow-hidden">{children}</div>
-          </AuthGuard>
+          <AuthGuard>{children}</AuthGuard>
         </ToastProvider>
       </body>
     </html>

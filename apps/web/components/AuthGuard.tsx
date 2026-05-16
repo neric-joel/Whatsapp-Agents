@@ -3,20 +3,29 @@
 import { useEffect, type ReactNode } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
+import { getAuthShellState } from '@/lib/auth-shell'
+import LeftSidebar from './LeftSidebar'
 
 export default function AuthGuard({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
+  const shell = getAuthShellState({ pathname, loading, hasUser: Boolean(user) })
 
   useEffect(() => {
-    if (!loading && !user && pathname !== '/auth') {
-      router.replace('/auth')
-    }
-  }, [user, loading, pathname, router])
+    if (shell.redirectTo) router.replace(shell.redirectTo)
+  }, [router, shell.redirectTo])
 
-  if (loading) return null
-  if (!user) return null
+  if (shell.render === 'none') return null
 
-  return <>{children}</>
+  if (shell.render === 'public') {
+    return <div className="flex min-h-screen w-full flex-1">{children}</div>
+  }
+
+  return (
+    <>
+      <LeftSidebar />
+      <div className="flex flex-1 flex-col overflow-hidden">{children}</div>
+    </>
+  )
 }

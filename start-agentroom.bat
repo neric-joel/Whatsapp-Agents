@@ -37,6 +37,8 @@ if errorlevel 1 (
 )
 echo.
 echo [4/5] Starting web server...
+echo [!] Clearing stale Next.js dev cache...
+powershell -NoProfile -Command "if (Test-Path -LiteralPath 'apps\web\.next') { Remove-Item -LiteralPath 'apps\web\.next' -Recurse -Force }"
 start "AgentRoom Web" cmd /k "cd /d %~dp0 && pnpm --filter web dev"
 timeout /t 6 /nobreak >/dev/null
 echo.

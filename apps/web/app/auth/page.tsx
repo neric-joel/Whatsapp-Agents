@@ -36,7 +36,7 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#09090b] px-4">
+    <div className="flex min-h-screen w-full items-center justify-center bg-[#09090b] px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <h1 className="text-2xl font-bold text-[#f4f4f5]">AgentRoom</h1>

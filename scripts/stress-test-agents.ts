@@ -7,7 +7,7 @@ const DEFAULT_TIMEOUT_MS = 120_000
 const POLL_INTERVAL_MS = 2_000
 
 export type Problem = {
-  cat: 'MATH' | 'SCIENCE' | 'PHILOSOPHY'
+  cat: 'CODING' | 'PHYSICS' | 'MATH' | 'PHILOSOPHY' | 'LIFE'
   level: 'EASY' | 'MEDIUM' | 'HARD' | 'EXTRA_HARD'
   q: string
 }
@@ -53,19 +53,46 @@ export type AgentRunResult = {
 }
 
 export const PROBLEMS: Problem[] = [
-  { cat: 'MATH', level: 'EASY', q: 'What is 15% of 240?' },
-  { cat: 'MATH', level: 'MEDIUM', q: 'Solve: integral of x^2 * e^x dx' },
-  { cat: 'MATH', level: 'HARD', q: 'Prove that the square root of 2 is irrational.' },
-  { cat: 'MATH', level: 'EXTRA_HARD', q: 'Prove or disprove: every even integer greater than 2 can be expressed as the sum of two primes.' },
-  { cat: 'SCIENCE', level: 'EASY', q: 'Why is the sky blue?' },
-  { cat: 'SCIENCE', level: 'MEDIUM', q: 'Explain how CRISPR-Cas9 gene editing works at the molecular level.' },
-  { cat: 'SCIENCE', level: 'HARD', q: 'Derive the Schwarzschild radius from general relativity.' },
-  { cat: 'SCIENCE', level: 'EXTRA_HARD', q: 'Propose a testable hypothesis for why the cosmological constant is 120 orders of magnitude smaller than quantum field theory predicts.' },
-  { cat: 'PHILOSOPHY', level: 'EASY', q: 'What is the trolley problem and what are the main ethical positions?' },
-  { cat: 'PHILOSOPHY', level: 'MEDIUM', q: "Steelman and steelman-attack Descartes' 'I think therefore I am'." },
-  { cat: 'PHILOSOPHY', level: 'HARD', q: 'Is mathematics invented or discovered? Argue both sides then pick one.' },
-  { cat: 'PHILOSOPHY', level: 'EXTRA_HARD', q: 'Can a purely materialist worldview account for the existence of consciousness? Develop a novel argument.' },
+  { cat: 'CODING', level: 'EASY', q: 'Write a Python function to check if a given string is a palindrome.' },
+  { cat: 'CODING', level: 'MEDIUM', q: 'Implement a thread-safe LRU (Least Recently Used) Cache in C++ or Rust.' },
+  { cat: 'CODING', level: 'HARD', q: 'Design the architecture and write the core consensus logic for a distributed, fault-tolerant key-value store using the Raft algorithm. Handle network partitions.' },
+  { cat: 'CODING', level: 'EXTRA_HARD', q: 'Write a custom compiler frontend in C that takes a novel, Turing-complete functional programming language and compiles it down to optimized LLVM IR. Include custom garbage collection logic.' },
+  { cat: 'PHYSICS', level: 'EASY', q: 'A car accelerates from 0 to 60 mph in 5 seconds. What is its average acceleration in meters per second squared?' },
+  { cat: 'PHYSICS', level: 'MEDIUM', q: 'Calculate the trajectory of a projectile launched at 45 degrees, accounting for quadratic air resistance (drag) and varying air density with altitude.' },
+  { cat: 'PHYSICS', level: 'HARD', q: 'Derive the Hawking radiation temperature for a Kerr (rotating) black hole, explaining the role of the ergosphere.' },
+  { cat: 'PHYSICS', level: 'EXTRA_HARD', q: 'Reconcile the Black Hole Information Paradox by synthesizing the Holographic Principle and the Firewall Paradox. Provide a mathematical justification for how unitarity is preserved.' },
+  { cat: 'MATH', level: 'EASY', q: 'Solve for x: 3x + 7 = 22.' },
+  { cat: 'MATH', level: 'MEDIUM', q: 'Provide a rigorous mathematical proof that the square root of 2 is irrational.' },
+  { cat: 'MATH', level: 'HARD', q: "Find the general solution to the non-linear differential equation: y'' - y' + y^3 = 0." },
+  { cat: 'MATH', level: 'EXTRA_HARD', q: 'Propose a novel heuristic or topological framework that could create a new pathway toward proving or disproving the Riemann Hypothesis. Evaluate the immediate failure points of your proposed framework.' },
+  { cat: 'PHILOSOPHY', level: 'EASY', q: 'Explain the core difference between "right" and "wrong" in Utilitarianism.' },
+  { cat: 'PHILOSOPHY', level: 'MEDIUM', q: "Apply Kant's Categorical Imperative to the modern dilemma of utilizing AI-generated art for commercial profit." },
+  { cat: 'PHILOSOPHY', level: 'HARD', q: 'Deconstruct Martin Heidegger\'s concept of Dasein. Can an Artificial General Intelligence (AGI) possess Dasein? Why or why not?' },
+  { cat: 'PHILOSOPHY', level: 'EXTRA_HARD', q: 'Resolve the "Hard Problem of Consciousness" by synthesizing Panpsychism with Quantum Information Theory. Do not rely on mystical concepts; ground the argument in formal epistemology and ontology.' },
+  { cat: 'LIFE', level: 'EASY', q: 'What is the most efficient way to organize a weekly grocery shopping trip for a family of four?' },
+  { cat: 'LIFE', level: 'MEDIUM', q: 'How should a mid-level manager handle a situation where their two best-performing employees absolutely despise working with each other?' },
+  { cat: 'LIFE', level: 'HARD', q: 'Design a comprehensive, multi-year psychological and financial recovery plan for a family that has just lost their home and business to a natural disaster, assuming no government aid.' },
+  { cat: 'LIFE', level: 'EXTRA_HARD', q: 'Design the societal, political, and psychological framework for a "Generation Ship" traveling for 500 years to a new star system. The framework must guarantee the prevention of civil war, genetic stagnation, and loss of ultimate purpose over 20 generations of humans who will live and die entirely in transit.' },
 ]
+
+export function buildEvaluationPrompt(problem: Problem): string {
+  return [
+    `Evaluation test: ${problem.cat} / ${problem.level}`,
+    '',
+    `Problem: ${problem.q}`,
+    '',
+    'Follow this strict 3-phase protocol:',
+    '',
+    'Phase 1: Individual Assessment (Divergent Thinking)',
+    'Provide your own independent analysis and proposed solution. Do not summarize other agents.',
+    '',
+    'Phase 2: Team Discussion (Critique & Synthesis)',
+    'After individual answers are visible, debate flaws, edge cases, and the correct level of abstraction.',
+    '',
+    'Phase 3: Consensus & Conclusion (Convergent Thinking)',
+    'Contribute to a single final response that is clear, accurate, and represents the best synthesized answer.',
+  ].join('\n')
+}
 
 export function summarizeProblemResults(results: AgentRunResult[]) {
   return {
@@ -176,7 +203,21 @@ async function getActiveAgents(supabase: SupabaseClient): Promise<Agent[]> {
   const agents = (data ?? []) as Agent[]
   if (agents.length === 0) throw new Error('No active agents found')
 
-  return agents
+  return filterAgentsForStress(agents, process.env.STRESS_AGENT_SLUGS)
+}
+
+export function filterAgentsForStress(agents: Agent[], rawSlugs: string | undefined): Agent[] {
+  if (!rawSlugs) return agents
+
+  const allowedSlugs = new Set(rawSlugs.split(',').map((slug) => slug.trim()).filter(Boolean))
+  if (allowedSlugs.size === 0) return agents
+
+  const filteredAgents = agents.filter((agent) => allowedSlugs.has(agent.slug))
+  if (filteredAgents.length === 0) {
+    throw new Error(`No active agents matched STRESS_AGENT_SLUGS=${rawSlugs}`)
+  }
+
+  return filteredAgents
 }
 
 async function ensureAgentRoomMembers(supabase: SupabaseClient, roomId: string, agents: Agent[]): Promise<void> {
@@ -222,7 +263,7 @@ async function insertUserMessage(
       room_id: roomId,
       sender_type: 'user',
       sender_user_id: testUserId,
-      content: problem.q,
+      content: buildEvaluationPrompt(problem),
       content_type: 'text',
       round_index: 0,
       metadata: {
