@@ -3,7 +3,9 @@ import type { AgentAdapter, ContextPacketV1, AgentEvent } from '@agentroom/share
 export class MockAgentAdapter implements AgentAdapter {
   async *run(packet: ContextPacketV1, signal: AbortSignal): AsyncGenerator<AgentEvent> {
     const { slug } = packet.agent
-    const brief = packet.trigger_message.content.slice(0, 80)
+    const userMessage = packet.recent_messages.find((m) => m.sender_type === 'user')
+      ?? packet.trigger_message
+    const brief = userMessage.content.slice(0, 80)
 
     let content: string
     if (slug.includes('claude') || slug.includes('thinker')) {
