@@ -100,7 +100,7 @@ export default function MessageTimeline({ roomId, refreshSignal, optimisticMessa
 
   if (loading) {
     return (
-      <div className="flex-1 overflow-y-auto bg-[#f5f7fb]">
+      <div className="flex-1 overflow-y-auto bg-[var(--surface)]">
         <LoadingSkeleton />
       </div>
     )
@@ -135,13 +135,13 @@ export default function MessageTimeline({ roomId, refreshSignal, optimisticMessa
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#f5f7fb]">
+    <div className="flex-1 overflow-y-auto bg-[var(--surface)]">
       <div className="min-h-full py-4">
         {allMessages.length === 0 && runs.length === 0 && !loading && (
           <div className="flex min-h-full items-center justify-center p-8 text-center">
             <div>
-              <p className="text-sm text-gray-500">No messages yet</p>
-              <p className="mt-1 text-xs text-gray-400">Say something to get the agents started.</p>
+              <p className="text-sm text-[var(--muted)]">No messages yet</p>
+              <p className="mt-1 text-xs text-[var(--muted)]">Say something to get the agents started.</p>
             </div>
           </div>
         )}

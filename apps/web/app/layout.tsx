@@ -15,7 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body className="flex h-screen flex-row overflow-hidden bg-[#f5f7fb] font-sans">
+      <body className="flex h-screen flex-row overflow-hidden bg-[var(--app-bg)] font-sans text-[var(--text)]">
         <ToastProvider>
           <AuthGuard>{children}</AuthGuard>
         </ToastProvider>

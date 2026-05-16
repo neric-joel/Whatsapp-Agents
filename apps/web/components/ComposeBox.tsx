@@ -215,12 +215,12 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
     : ''
 
   return (
-    <div className="flex-shrink-0 border-t border-slate-200 bg-[#eef6ff] px-4 py-3">
+    <div className="flex-shrink-0 border-t border-[var(--border)] bg-[var(--panel)] px-4 py-3">
       {replyingTo && (
-        <div className="mb-3 flex items-start gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
-          <div className="min-w-0 flex-1 border-l-2 border-purple-700 pl-3">
-            <div className="text-xs font-semibold text-purple-700">{replySender}</div>
-            <div className="truncate text-xs text-gray-500">{replyPreview}</div>
+        <div className="mb-3 flex items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
+          <div className="min-w-0 flex-1 border-l-2 border-[var(--accent)] pl-3">
+            <div className="text-xs font-semibold text-[var(--accent-strong)]">{replySender}</div>
+            <div className="truncate text-xs text-[var(--muted)]">{replyPreview}</div>
           </div>
           <button
             type="button"
@@ -257,7 +257,7 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
           onKeyDown={handleKeyDown}
           placeholder={`Message #${room?.name ?? '...'}...`}
           rows={1}
-          className="max-h-32 min-h-[46px] flex-1 resize-none overflow-y-auto rounded-xl border border-sky-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-shadow placeholder:text-slate-400 focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+          className="max-h-32 min-h-[46px] flex-1 resize-none overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm text-[var(--text)] outline-none transition-shadow placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--focus-ring)]"
         />
         {sendError && (
           <p className="absolute left-1 top-full mt-1 px-1 text-xs text-red-600">{sendError}</p>
@@ -310,7 +310,7 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
         <button
           onClick={() => void submit()}
           disabled={(!text.trim() && !attachedFile) || sending || uploading}
-          className="flex-shrink-0 rounded-lg bg-[#2563eb] px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-[#1d4ed8] disabled:opacity-40"
+          className="flex-shrink-0 rounded-lg bg-[var(--accent)] px-4 py-3 text-sm font-medium text-[var(--accent-text)] transition-colors hover:bg-[var(--accent-strong)] disabled:opacity-40"
         >
           Send
         </button>

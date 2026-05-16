@@ -195,7 +195,7 @@ export default function MessageBubble({
     return (
       <div className="group flex animate-message-in flex-row items-start justify-end gap-3 px-5 py-2">
         <div className="flex max-w-[72%] flex-col items-end">
-          <div className={`rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${isDeleted ? 'bg-slate-50 text-slate-400' : 'bg-[#2563eb] text-white'}`}>
+          <div className={`rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${isDeleted ? 'bg-[var(--surface)] text-[var(--muted)]' : 'bg-[var(--user-bubble)] text-[var(--user-text)]'}`}>
             {isDeleted ? (
               <span className="italic">{DELETED_MESSAGE_CONTENT}</span>
             ) : (

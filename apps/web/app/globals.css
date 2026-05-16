@@ -13,23 +13,138 @@ pre {
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
-:root {
-  --sidebar-bg: #4A154B;
-  --sidebar-hover: rgba(255,255,255,0.1);
-  --sidebar-active: rgba(255,255,255,0.2);
-  --sidebar-text: rgba(255,255,255,0.9);
-  --sidebar-muted: rgba(255,255,255,0.6);
-  --bg-primary: #FFFFFF;
-  --bg-secondary: #F8F8F8;
-  --bg-tertiary: #F1F1F1;
-  --text-primary: #1D1C1D;
-  --text-secondary: #616061;
-  --text-link: #1264A3;
-  --agent-purple: #7C3AED;
-  --status-green: #2EB67D;
-  --status-red: #E01E5A;
-  --status-gray: #97979C;
-  --border: #E0E0E0;
+:root,
+:root[data-agentroom-theme="light-modern"] {
+  --app-bg: #f4f4f5;
+  --surface: #fafafa;
+  --panel: #ffffff;
+  --sidebar: #eeeeee;
+  --sidebar-hover: #e4e4e7;
+  --sidebar-active: #d4d4d8;
+  --text: #18181b;
+  --muted: #71717a;
+  --border: #d4d4d8;
+  --accent: #52525b;
+  --accent-strong: #3f3f46;
+  --accent-text: #ffffff;
+  --focus-ring: rgba(82, 82, 91, 0.18);
+  --user-bubble: #52525b;
+  --user-text: #ffffff;
+  --right-panel: #f4f4f5;
+}
+
+:root[data-agentroom-theme="github-light"] {
+  --app-bg: #f6f8fa;
+  --surface: #f6f8fa;
+  --panel: #ffffff;
+  --sidebar: #ffffff;
+  --sidebar-hover: #f3f4f6;
+  --sidebar-active: #eaeef2;
+  --text: #24292f;
+  --muted: #57606a;
+  --border: #d0d7de;
+  --accent: #57606a;
+  --accent-strong: #24292f;
+  --accent-text: #ffffff;
+  --focus-ring: rgba(87, 96, 106, 0.18);
+  --user-bubble: #57606a;
+  --user-text: #ffffff;
+  --right-panel: #f6f8fa;
+}
+
+:root[data-agentroom-theme="solarized-light"] {
+  --app-bg: #fdf6e3;
+  --surface: #fdf6e3;
+  --panel: #fffaf0;
+  --sidebar: #eee8d5;
+  --sidebar-hover: #e6dfc8;
+  --sidebar-active: #d8d0b7;
+  --text: #073642;
+  --muted: #657b83;
+  --border: #d8d0b7;
+  --accent: #586e75;
+  --accent-strong: #073642;
+  --accent-text: #fdf6e3;
+  --focus-ring: rgba(88, 110, 117, 0.2);
+  --user-bubble: #586e75;
+  --user-text: #fdf6e3;
+  --right-panel: #eee8d5;
+}
+
+:root[data-agentroom-theme="dark-modern"] {
+  --app-bg: #1e1e1e;
+  --surface: #1e1e1e;
+  --panel: #252526;
+  --sidebar: #2d2d30;
+  --sidebar-hover: #3e3e42;
+  --sidebar-active: #505053;
+  --text: #cccccc;
+  --muted: #9d9d9d;
+  --border: #3e3e42;
+  --accent: #c5c5c5;
+  --accent-strong: #ffffff;
+  --accent-text: #1e1e1e;
+  --focus-ring: rgba(197, 197, 197, 0.22);
+  --user-bubble: #3e3e42;
+  --user-text: #ffffff;
+  --right-panel: #252526;
+}
+
+:root[data-agentroom-theme="github-dark"] {
+  --app-bg: #0d1117;
+  --surface: #0d1117;
+  --panel: #161b22;
+  --sidebar: #161b22;
+  --sidebar-hover: #21262d;
+  --sidebar-active: #30363d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --border: #30363d;
+  --accent: #8b949e;
+  --accent-strong: #c9d1d9;
+  --accent-text: #0d1117;
+  --focus-ring: rgba(139, 148, 158, 0.28);
+  --user-bubble: #30363d;
+  --user-text: #e6edf3;
+  --right-panel: #161b22;
+}
+
+:root[data-agentroom-theme="one-dark-pro"] {
+  --app-bg: #282c34;
+  --surface: #282c34;
+  --panel: #21252b;
+  --sidebar: #21252b;
+  --sidebar-hover: #2c313a;
+  --sidebar-active: #353b45;
+  --text: #abb2bf;
+  --muted: #7f848e;
+  --border: #3b4048;
+  --accent: #abb2bf;
+  --accent-strong: #d7dae0;
+  --accent-text: #21252b;
+  --focus-ring: rgba(171, 178, 191, 0.24);
+  --user-bubble: #3b4048;
+  --user-text: #f0f3f8;
+  --right-panel: #21252b;
+}
+
+:root[data-agentroom-theme="dracula"] {
+  --app-bg: #282a36;
+  --surface: #282a36;
+  --panel: #21222c;
+  --sidebar: #21222c;
+  --sidebar-hover: #343746;
+  --sidebar-active: #44475a;
+  --text: #f8f8f2;
+  --muted: #b9bbc9;
+  --border: #44475a;
+  --accent: #bd93f9;
+  --accent-strong: #ff79c6;
+  --accent-text: #282a36;
+  --focus-ring: rgba(189, 147, 249, 0.28);
+  --user-bubble: #44475a;
+  --user-text: #f8f8f2;
+  --right-panel: #21222c;
 }
 
 @keyframes toast-in {

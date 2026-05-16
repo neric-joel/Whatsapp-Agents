@@ -46,7 +46,7 @@ export default function AgentRunCard({ run, onRetry }: AgentRunCardProps) {
   const isThinking = status === 'queued' || status === 'running'
 
   return (
-    <div className={`mx-5 my-2 max-w-3xl rounded-lg border border-slate-200 bg-[#f8fafc] px-4 py-3 transition-shadow ${status === 'running' ? providerStyle.glow : ''}`}>
+    <div className={`mx-5 my-2 max-w-3xl rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-3 transition-shadow ${status === 'running' ? providerStyle.glow : ''}`}>
       <div className="flex items-start gap-3">
         <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border ${providerStyle.avatar} ${providerStyle.border}`}>
           <span className="text-[11px] font-semibold text-white">

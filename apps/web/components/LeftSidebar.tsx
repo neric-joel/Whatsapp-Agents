@@ -213,8 +213,8 @@ export default function LeftSidebar() {
           href={`/rooms/${room.id}`}
           className={`min-w-0 flex-1 truncate rounded-md px-3 py-2 text-sm transition-[background-color,color,transform] duration-150 hover:scale-[1.01] ${
             isActive
-              ? 'bg-white/20 font-semibold text-white'
-              : 'text-teal-50/90 hover:bg-white/10 hover:text-white'
+              ? 'bg-[var(--sidebar-active)] font-semibold text-[var(--text)]'
+              : 'text-[var(--text)] hover:bg-[var(--sidebar-hover)]'
           }`}
         >
           # {room.name}
@@ -231,7 +231,7 @@ export default function LeftSidebar() {
             title="Room actions"
             aria-label="Room actions"
             aria-expanded={isMenuOpen}
-            className="rounded p-1 text-white/50 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-40"
+            className="rounded p-1 text-[var(--muted)] transition-colors hover:bg-[var(--sidebar-hover)] hover:text-[var(--text)] disabled:opacity-40"
           >
             <MoreIcon />
           </button>
@@ -272,23 +272,23 @@ export default function LeftSidebar() {
   }
 
   return (
-    <aside className="w-[260px] flex-shrink-0 h-full bg-gradient-to-b from-[#0f766e] via-[#2563eb] to-[#4338ca] flex flex-col">
+    <aside className="w-[260px] flex-shrink-0 h-full bg-[var(--sidebar)] flex flex-col border-r border-[var(--border)]">
       <div className="p-4 pb-2">
-        <span className="text-base font-bold text-white">AgentRoom</span>
+        <span className="text-base font-bold text-[var(--text)]">AgentRoom</span>
       </div>
-      <div className="px-4 py-2 text-[11px] font-medium uppercase tracking-widest text-white/60">
+      <div className="px-4 py-2 text-[11px] font-medium uppercase tracking-widest text-[var(--muted)]">
         ROOMS
       </div>
       <nav className="flex-1 overflow-y-auto">
         {activeRooms.length === 0 && (
           <div className="flex flex-col items-center justify-center flex-1 p-6 text-center">
-            <p className="mb-3 text-sm text-white/60">
+            <p className="mb-3 text-sm text-[var(--muted)]">
               {rooms.length === 0 ? 'No rooms yet' : 'No active rooms'}
             </p>
             <button
               type="button"
               onClick={openCreateModal}
-              className="text-sm font-medium text-white/90 transition-colors hover:text-white"
+              className="text-sm font-medium text-[var(--text)] transition-colors hover:text-[var(--accent-strong)]"
             >
               Create your first room
             </button>
@@ -298,7 +298,7 @@ export default function LeftSidebar() {
           {activeRooms.map(renderRoom)}
         </div>
         {roomActionError && (
-          <p className="mx-4 mt-3 rounded border border-white/20 bg-white/15 px-3 py-2 text-xs text-rose-50">
+          <p className="mx-4 mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
             {roomActionError}
           </p>
         )}
@@ -307,7 +307,7 @@ export default function LeftSidebar() {
             <button
               type="button"
               onClick={() => setShowArchived((value) => !value)}
-              className="flex w-full items-center gap-1 px-4 py-2 text-left text-[11px] font-medium uppercase tracking-widest text-white/60 transition-colors hover:text-white"
+              className="flex w-full items-center gap-1 px-4 py-2 text-left text-[11px] font-medium uppercase tracking-widest text-[var(--muted)] transition-colors hover:text-[var(--text)]"
               aria-expanded={showArchived}
             >
               <ChevronIcon open={showArchived} />
@@ -321,21 +321,21 @@ export default function LeftSidebar() {
           </div>
         )}
       </nav>
-      <div className="border-t border-white/10">
+      <div className="border-t border-[var(--border)]">
         <button
           type="button"
           onClick={openCreateModal}
-          className="w-full px-4 py-3 text-left text-sm text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+          className="w-full px-4 py-3 text-left text-sm text-[var(--muted)] transition-colors hover:bg-[var(--sidebar-hover)] hover:text-[var(--text)]"
         >
           + New Room
         </button>
         {user && (
-          <div className="flex items-center gap-2 px-4 py-2 border-t border-white/10">
-            <span className="flex-1 truncate text-xs text-white/50" title={user.email}>{user.email}</span>
+          <div className="flex items-center gap-2 px-4 py-2 border-t border-[var(--border)]">
+            <span className="flex-1 truncate text-xs text-[var(--muted)]" title={user.email}>{user.email}</span>
             <button
               type="button"
               onClick={() => void signOut()}
-              className="shrink-0 rounded px-2 py-1 text-xs text-white/50 transition-colors hover:bg-white/10 hover:text-white"
+              className="shrink-0 rounded px-2 py-1 text-xs text-[var(--muted)] transition-colors hover:bg-[var(--sidebar-hover)] hover:text-[var(--text)]"
             >
               Sign out
             </button>

@@ -42,8 +42,8 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
           onCancelReply={() => setReplyingTo(null)}
         />
       </div>
-      <aside className="hidden w-72 flex-shrink-0 border-l border-sky-100 bg-[#eef6ff] lg:block">
-        <div className="border-b border-sky-100 bg-[#f8fbff] px-4 py-3 text-sm font-medium text-slate-900">
+      <aside className="hidden w-72 flex-shrink-0 border-l border-[var(--border)] bg-[var(--right-panel)] lg:block">
+        <div className="border-b border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm font-medium text-[var(--text)]">
           Pinned
         </div>
         <PinnedItemsPanel roomId={roomId} />

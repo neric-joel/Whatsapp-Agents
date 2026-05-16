@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { getProviderStyle } from '@/lib/provider-styles'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+import ThemeSwitcher from './ThemeSwitcher'
 
 interface Props {
   roomId: string
@@ -197,12 +198,12 @@ export default function RoomHeader({ roomId }: Props) {
   const activeAgentMembers = members.filter((member) => !member.muted && member.agent.is_active)
 
   return (
-    <header className="relative flex min-h-[72px] flex-shrink-0 items-center border-b border-sky-100 bg-[#f8fbff] px-4 py-3">
+    <header className="relative flex min-h-[72px] flex-shrink-0 items-center border-b border-[var(--border)] bg-[var(--panel)] px-4 py-3">
       <div className="flex min-w-0 flex-1 flex-col gap-1 pr-4">
         <div className="flex min-w-0 items-center gap-3">
-          <h1 className="truncate text-lg font-semibold text-gray-900"># {roomName ?? '...'}</h1>
-          <span className="h-5 w-px bg-gray-200" aria-hidden="true" />
-          <span className="text-sm text-gray-500">{agentCount} agents</span>
+          <h1 className="truncate text-lg font-semibold text-[var(--text)]"># {roomName ?? '...'}</h1>
+          <span className="h-5 w-px bg-[var(--border)]" aria-hidden="true" />
+          <span className="text-sm text-[var(--muted)]">{agentCount} agents</span>
         </div>
         <div className="flex min-h-4 items-center gap-1.5" aria-label="Active agents">
           {activeAgentMembers.slice(0, 10).map((member) => {
@@ -216,15 +217,16 @@ export default function RoomHeader({ roomId }: Props) {
             )
           })}
           {activeAgentMembers.length > 10 && (
-            <span className="text-xs font-medium text-gray-400">+{activeAgentMembers.length - 10}</span>
+            <span className="text-xs font-medium text-[var(--muted)]">+{activeAgentMembers.length - 10}</span>
           )}
         </div>
       </div>
 
+      <ThemeSwitcher />
       <button
         type="button"
         onClick={() => setPanelOpen((open) => !open)}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
+        className="ml-3 inline-flex h-9 w-9 items-center justify-center rounded-md text-[var(--muted)] transition-colors hover:bg-[var(--sidebar-hover)] hover:text-[var(--text)]"
         aria-label="Manage agents"
         aria-expanded={panelOpen}
       >

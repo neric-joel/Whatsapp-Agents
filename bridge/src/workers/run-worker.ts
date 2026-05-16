@@ -7,6 +7,7 @@ import { buildContextPacket } from '../context/build-context-packet.js'
 import { conclusionDetected } from '../lib/conclusion.js'
 import { detectHallucination } from '../lib/hallucination.js'
 import { sanitizeAgentOutput } from '../lib/agent-output.js'
+import { maybeScheduleDiscussionContinuation } from '../lib/discussion-orchestrator.js'
 
 const WORKER_ID = process.env.BRIDGE_WORKER_ID ?? 'bridge-local-1'
 
@@ -64,12 +65,12 @@ export async function processRun(runId: string): Promise<void> {
     await supabase.from('agent_runs').update({ status: 'running' }).eq('id', runId)
 
     // d. Fetch trigger message
-    const fallbackMsg = { id: runId, content: '(no trigger)', sender_type: 'user', created_at: new Date().toISOString() }
+    const fallbackMsg = { id: runId, content: '(no trigger)', sender_type: 'user', created_at: new Date().toISOString(), metadata: {} as Record<string, unknown> }
     let triggerMsg = fallbackMsg
     if (runRow.trigger_msg_id) {
       const { data: tm } = await supabase
         .from('messages')
-        .select('id, content, sender_type, created_at')
+        .select('id, content, sender_type, created_at, metadata')
         .eq('id', runRow.trigger_msg_id)
         .single()
       if (tm) triggerMsg = tm as typeof triggerMsg
@@ -196,6 +197,12 @@ export async function processRun(runId: string): Promise<void> {
       .from('agent_runs')
       .update({ status: 'completed', completed_at: new Date().toISOString() })
       .eq('id', runId)
+    await maybeScheduleDiscussionContinuation({
+      supabase,
+      roomId: runRow.room_id,
+      currentRoundIndex: runRow.round_index,
+      triggerMessage: triggerMsg,
+    })
     log('info', 'run.complete', { run_id: runId, duration_ms: Date.now() - startedAt })
 
   } catch (err) {

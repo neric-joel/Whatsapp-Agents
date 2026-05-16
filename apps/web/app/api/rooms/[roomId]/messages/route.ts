@@ -5,6 +5,7 @@ import { requireRoomMember, requireRoomOwner } from '@/lib/permissions'
 import { clearRoomChat } from '@/lib/room-chat-management'
 import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
 import { parseMentions } from '@/lib/mention-parser'
+import { buildDiscussionPhasePrompt, parseDiscussionCommand } from '@agentroom/shared'
 
 interface RouteParams { params: { roomId: string } }
 
@@ -35,9 +36,16 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     return apiError('VALIDATION_ERROR', 'Invalid request body', 400, parseResult.error.flatten())
   }
   const data = parseResult.data
-  const content = data.content.trim()
+  const rawContent = data.content.trim()
+  const discussionCommand = parseDiscussionCommand(rawContent)
+  const content = discussionCommand
+    ? buildDiscussionPhasePrompt('individual', discussionCommand.prompt)
+    : rawContent
   if (!content) {
     return apiError('VALIDATION_ERROR', 'Invalid request body', 400, { fieldErrors: { content: ['content is required'] } })
+  }
+  if (discussionCommand && !discussionCommand.prompt) {
+    return apiError('VALIDATION_ERROR', 'Use /discuss followed by the problem you want agents to solve together.', 400)
   }
 
   const roundIndex = data.round_index ?? 0
@@ -53,6 +61,20 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   if (!room) return apiError('NOT_FOUND', 'Room not found', 404)
 
   // 5. Insert message
+  const initialMetadata = {
+    ...(data.metadata ?? {}),
+    ...(discussionCommand
+      ? {
+          discussion: {
+            enabled: true,
+            command: discussionCommand.command,
+            phase: 'individual',
+            original_prompt: discussionCommand.prompt,
+          },
+        }
+      : {}),
+  }
+
   const { data: message, error: msgErr } = await supabase
     .from('messages')
     .insert({
@@ -65,12 +87,24 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       mentions: data.mentions ?? [],
       target_agent_ids: data.target_agent_ids ?? [],
       round_index: roundIndex,
-      metadata: data.metadata ?? {},
+      metadata: initialMetadata,
     })
     .select()
     .single()
 
   if (msgErr || !message) return apiError('INTERNAL_ERROR', msgErr?.message ?? 'Failed to insert message', 500)
+
+  if (discussionCommand) {
+    const nextMetadata = {
+      ...initialMetadata,
+      discussion: {
+        ...(initialMetadata.discussion as Record<string, unknown>),
+        original_message_id: message.id,
+      },
+    }
+    await supabase.from('messages').update({ metadata: nextMetadata }).eq('id', message.id)
+    message.metadata = nextMetadata
+  }
 
   // 6. Update room.last_message_at
   await supabase
@@ -117,12 +151,14 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   )
 
   // 9. Mention-based routing
-  const mentions = parseMentions(content, allActive.map((m) => m.agents))
+  const mentions = parseMentions(rawContent, allActive.map((m) => m.agents))
   const replyMode = (room as { reply_mode: string }).reply_mode
 
   let targetAgents = allActive
 
-  if (replyMode === 'mentioned_only') {
+  if (discussionCommand) {
+    targetAgents = allActive
+  } else if (replyMode === 'mentioned_only') {
     if (mentions.length === 0) {
       await insertSystemMessage('No agents were mentioned. Use @agent_slug or @everyone.')
       return apiSuccess({ message, agent_runs: [] }, 201)

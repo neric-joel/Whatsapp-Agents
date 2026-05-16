@@ -1,5 +1,61 @@
 export const AGENTROOM_VERSION = '0.1.0';
 
+export type DiscussionPhase = 'individual' | 'critique' | 'consensus';
+
+export interface DiscussionCommand {
+  command: 'discuss' | 'debate';
+  prompt: string;
+}
+
+export function parseDiscussionCommand(content: string): DiscussionCommand | null {
+  const match = content.trim().match(/^\/(discuss|debate)\b\s*([\s\S]*)$/i);
+  if (!match) return null;
+
+  return {
+    command: match[1].toLowerCase() as DiscussionCommand['command'],
+    prompt: match[2].trim(),
+  };
+}
+
+export function nextDiscussionPhase(phase: DiscussionPhase): DiscussionPhase | null {
+  if (phase === 'individual') return 'critique';
+  if (phase === 'critique') return 'consensus';
+  return null;
+}
+
+export function buildDiscussionPhasePrompt(phase: DiscussionPhase, originalPrompt: string): string {
+  if (phase === 'critique') {
+    return [
+      'Discussion phase 2: critique and synthesis.',
+      '',
+      'Original problem:',
+      originalPrompt,
+      '',
+      'Read the independent agent answers above. Identify mistakes, missing edge cases, and over/under-abstraction. Engage directly with the other agents by name when useful. Do not just solve alone; compare approaches and move the group toward a stronger answer.',
+    ].join('\n');
+  }
+
+  if (phase === 'consensus') {
+    return [
+      'Discussion phase 3: consensus and conclusion.',
+      '',
+      'Original problem:',
+      originalPrompt,
+      '',
+      'Use the prior independent answers and critique round to produce one clear final consensus response for the room. State the final answer, explain the reasoning compactly, and mention any caveats the team agreed matter.',
+    ].join('\n');
+  }
+
+  return [
+    'Discussion phase 1: independent assessment.',
+    '',
+    'Original problem:',
+    originalPrompt,
+    '',
+    'Give your own independent answer first. Do not assume another agent has solved it yet. Be clear about your reasoning and any assumptions.',
+  ].join('\n');
+}
+
 export function conclusionDetected(content: string): boolean {
   const patterns = [
     /\bin conclusion\b/i,

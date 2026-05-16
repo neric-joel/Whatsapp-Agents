@@ -88,9 +88,9 @@ export default function PinnedItemsPanel({ roomId }: Props) {
   }
 
   if (error) return <div className="p-4 text-red-600 text-sm">Failed to load pins</div>
-  if (loading) return <div className="p-4 text-gray-500 text-sm">Loading pins...</div>
+  if (loading) return <div className="p-4 text-[var(--muted)] text-sm">Loading pins...</div>
   if (pins.length === 0) return (
-    <div className="p-4 text-gray-500 text-xs text-center">
+    <div className="p-4 text-[var(--muted)] text-xs text-center">
       Nothing pinned yet. Pin a message to save it here.
     </div>
   )
@@ -98,15 +98,15 @@ export default function PinnedItemsPanel({ roomId }: Props) {
   return (
     <div className="space-y-2 px-3 py-3">
       {pins.map((pin) => (
-        <div key={pin.id} className="rounded-xl border border-sky-100 bg-white p-3 shadow-sm">
+        <div key={pin.id} className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-3 shadow-sm">
           <div className="mb-1 flex items-center justify-between gap-2">
-            <span className="text-xs font-medium text-purple-700">{pin.pin_type}</span>
-            <span className="text-[11px] text-gray-400">{formatDate(pin.created_at)}</span>
+            <span className="text-xs font-medium text-[var(--accent-strong)]">{pin.pin_type}</span>
+            <span className="text-[11px] text-[var(--muted)]">{formatDate(pin.created_at)}</span>
           </div>
-          {pin.title && <div className="truncate text-sm font-medium text-gray-900">{pin.title}</div>}
+          {pin.title && <div className="truncate text-sm font-medium text-[var(--text)]">{pin.title}</div>}
           {pin.content && (
             <div
-              className="mt-1 overflow-hidden text-xs leading-5 text-gray-500"
+              className="mt-1 overflow-hidden text-xs leading-5 text-[var(--muted)]"
               style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}
             >
               {pin.content}
@@ -115,7 +115,7 @@ export default function PinnedItemsPanel({ roomId }: Props) {
           <button
             type="button"
             onClick={() => void unpin(pin.id)}
-            className="mt-2 text-xs text-gray-400 transition-colors hover:text-gray-700"
+            className="mt-2 text-xs text-[var(--muted)] transition-colors hover:text-[var(--text)]"
           >
             Unpin
           </button>

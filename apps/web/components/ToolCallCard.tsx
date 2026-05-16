@@ -21,7 +21,7 @@ function preview(value: string | Record<string, unknown> | null, lines: number) 
 
 export default function ToolCallCard({ toolCall, onApprove, onDeny }: ToolCallCardProps) {
   return (
-    <div className="mx-5 my-2 rounded-xl border border-sky-100 bg-[#f8fbff] p-3 text-sm text-slate-900">
+    <div className="mx-5 my-2 rounded-xl border border-[var(--border)] bg-[var(--panel)] p-3 text-sm text-[var(--text)]">
       <div className="mb-2 flex items-center justify-between gap-3">
         <span className="font-medium">{toolCall.tool_name}</span>
         <span className="text-xs text-gray-500">{toolCall.status}</span>

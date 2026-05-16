@@ -36,22 +36,22 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="flex min-h-screen w-full items-center justify-center bg-gradient-to-br from-[#dbeafe] via-[#ecfeff] to-[#ede9fe] px-4">
+    <div className="flex min-h-screen w-full items-center justify-center bg-[var(--app-bg)] px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold text-[#0f172a]">AgentRoom</h1>
-          <p className="mt-1 text-sm text-[#475569]">AI-powered group chat</p>
+          <h1 className="text-2xl font-bold text-[var(--text)]">AgentRoom</h1>
+          <p className="mt-1 text-sm text-[var(--muted)]">AI-powered group chat</p>
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-sky-100 bg-white shadow-xl">
-          <div className="flex border-b border-sky-100 bg-[#f8fbff]">
+        <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)] shadow-xl">
+          <div className="flex border-b border-[var(--border)] bg-[var(--surface)]">
             <button
               type="button"
               onClick={() => { setMode('signin'); setError(null) }}
               className={`flex-1 py-3 text-sm font-medium transition-colors ${
                 mode === 'signin'
-                  ? 'bg-[#2563eb] text-white'
-                  : 'text-[#475569] hover:text-[#0f172a]'
+                  ? 'bg-[var(--accent)] text-[var(--accent-text)]'
+                  : 'text-[var(--muted)] hover:text-[var(--text)]'
               }`}
             >
               Sign In
@@ -61,8 +61,8 @@ export default function AuthPage() {
               onClick={() => { setMode('signup'); setError(null) }}
               className={`flex-1 py-3 text-sm font-medium transition-colors ${
                 mode === 'signup'
-                  ? 'bg-[#2563eb] text-white'
-                  : 'text-[#475569] hover:text-[#0f172a]'
+                  ? 'bg-[var(--accent)] text-[var(--accent-text)]'
+                  : 'text-[var(--muted)] hover:text-[var(--text)]'
               }`}
             >
               Sign Up
@@ -71,7 +71,7 @@ export default function AuthPage() {
 
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
             <div>
-              <label htmlFor="email" className="block text-xs font-medium text-[#475569] mb-1.5">
+              <label htmlFor="email" className="block text-xs font-medium text-[var(--muted)] mb-1.5">
                 Email
               </label>
               <input
@@ -83,12 +83,12 @@ export default function AuthPage() {
                 autoComplete="email"
                 placeholder="you@example.com"
                 disabled={loading}
-                className="w-full rounded-md border border-sky-200 bg-white px-3 py-2 text-sm text-[#0f172a] placeholder-[#94a3b8] outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20 disabled:opacity-50"
+                className="w-full rounded-md border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--muted)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--focus-ring)] disabled:opacity-50"
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-xs font-medium text-[#475569] mb-1.5">
+              <label htmlFor="password" className="block text-xs font-medium text-[var(--muted)] mb-1.5">
                 Password
               </label>
               <input
@@ -100,7 +100,7 @@ export default function AuthPage() {
                 autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                 placeholder="Password"
                 disabled={loading}
-                className="w-full rounded-md border border-sky-200 bg-white px-3 py-2 text-sm text-[#0f172a] placeholder-[#94a3b8] outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20 disabled:opacity-50"
+                className="w-full rounded-md border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--muted)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--focus-ring)] disabled:opacity-50"
               />
             </div>
 
@@ -113,7 +113,7 @@ export default function AuthPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-md bg-[#2563eb] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#1d4ed8] disabled:opacity-50"
+              className="w-full rounded-md bg-[var(--accent)] py-2.5 text-sm font-semibold text-[var(--accent-text)] transition-colors hover:bg-[var(--accent-strong)] disabled:opacity-50"
             >
               {loading ? (mode === 'signup' ? 'Creating account...' : 'Signing in...') : (mode === 'signup' ? 'Create account' : 'Sign in')}
             </button>
