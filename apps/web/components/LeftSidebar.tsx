@@ -27,6 +27,25 @@ function TrashIcon() {
   )
 }
 
+function ClearChatIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.7">
+      <path d="M4.5 5.5h11v7h-6l-3.5 3v-3H4.5v-7Z" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M7 8h6M7 10.5h3.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function MoreIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="currentColor">
+      <circle cx="5" cy="10" r="1.4" />
+      <circle cx="10" cy="10" r="1.4" />
+      <circle cx="15" cy="10" r="1.4" />
+    </svg>
+  )
+}
+
 function ChevronIcon({ open }: { open: boolean }) {
   return (
     <svg aria-hidden="true" viewBox="0 0 20 20" className={`h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -51,6 +70,7 @@ export default function LeftSidebar() {
   const [roomActionError, setRoomActionError] = useState<string | null>(null)
   const [busyRoomId, setBusyRoomId] = useState<string | null>(null)
   const [showArchived, setShowArchived] = useState(false)
+  const [openRoomMenuId, setOpenRoomMenuId] = useState<string | null>(null)
 
   const { activeRooms, archivedRooms } = useMemo(() => ({
     activeRooms: rooms.filter((room) => !room.is_archived),
@@ -120,6 +140,7 @@ export default function LeftSidebar() {
         return
       }
       await refreshRooms()
+      setOpenRoomMenuId(null)
     } catch (err) {
       setRoomActionError(err instanceof Error ? err.message : 'Failed to update room')
     } finally {
@@ -130,7 +151,7 @@ export default function LeftSidebar() {
   async function deleteRoom(room: Room, event: MouseEvent<HTMLButtonElement>) {
     event.preventDefault()
     event.stopPropagation()
-    if (!confirm(`Delete "${room.name}"? This cannot be undone.`)) return
+    if (!window.confirm(`Delete "${room.name}"? This cannot be undone.`)) return
 
     setBusyRoomId(room.id)
     setRoomActionError(null)
@@ -142,6 +163,7 @@ export default function LeftSidebar() {
         return
       }
       await refreshRooms()
+      setOpenRoomMenuId(null)
       if (pathname === `/rooms/${room.id}`) router.push('/')
     } catch (err) {
       setRoomActionError(err instanceof Error ? err.message : 'Failed to delete room')
@@ -150,12 +172,37 @@ export default function LeftSidebar() {
     }
   }
 
+  async function clearRoomChat(room: Room, event: MouseEvent<HTMLButtonElement>) {
+    event.preventDefault()
+    event.stopPropagation()
+    if (!window.confirm(`Clear chat in "${room.name}"? This cannot be undone.`)) return
+
+    setBusyRoomId(room.id)
+    setRoomActionError(null)
+    try {
+      const res = await fetch(`/api/rooms/${room.id}/messages`, { method: 'DELETE' })
+      const payload = await res.json().catch(() => null) as ApiResponse<{ cleared: boolean }> | null
+      if (!res.ok || !payload?.ok) {
+        setRoomActionError(payload ? getApiErrorMessage(payload) ?? 'Failed to clear chat' : 'Failed to clear chat')
+        return
+      }
+      await refreshRooms()
+      setOpenRoomMenuId(null)
+      if (pathname === `/rooms/${room.id}`) router.refresh()
+    } catch (err) {
+      setRoomActionError(err instanceof Error ? err.message : 'Failed to clear chat')
+    } finally {
+      setBusyRoomId(null)
+    }
+  }
+
   function renderRoom(room: Room) {
     const isActive = pathname === `/rooms/${room.id}`
     const isBusy = busyRoomId === room.id
+    const isMenuOpen = openRoomMenuId === room.id
 
     return (
-      <div key={room.id} className="group mx-2 flex items-center gap-1">
+      <div key={room.id} className="group relative mx-2 flex items-center gap-1">
         <Link
           href={`/rooms/${room.id}`}
           className={`min-w-0 flex-1 truncate rounded-md px-3 py-2 text-sm transition-colors ${
@@ -166,27 +213,53 @@ export default function LeftSidebar() {
         >
           # {room.name}
         </Link>
-        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+        <div className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
           <button
             type="button"
-            onClick={(event) => toggleArchive(room, event)}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              setOpenRoomMenuId((current) => current === room.id ? null : room.id)
+            }}
             disabled={isBusy}
-            title={room.is_archived ? 'Unarchive room' : 'Archive room'}
-            aria-label={room.is_archived ? 'Unarchive room' : 'Archive room'}
+            title="Room actions"
+            aria-label="Room actions"
+            aria-expanded={isMenuOpen}
             className="rounded p-1 text-white/50 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-40"
           >
-            <ArchiveIcon />
+            <MoreIcon />
           </button>
-          <button
-            type="button"
-            onClick={(event) => deleteRoom(room, event)}
-            disabled={isBusy}
-            title="Delete room"
-            aria-label="Delete room"
-            className="rounded p-1 text-white/50 transition-colors hover:bg-white/10 hover:text-red-200 disabled:opacity-40"
-          >
-            <TrashIcon />
-          </button>
+          {isMenuOpen && (
+            <div className="absolute right-0 top-9 z-20 w-40 overflow-hidden rounded-md border border-zinc-200 bg-white py-1 text-sm shadow-xl">
+              <button
+                type="button"
+                onClick={(event) => toggleArchive(room, event)}
+                disabled={isBusy}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-40"
+              >
+                <ArchiveIcon />
+                {room.is_archived ? 'Unarchive' : 'Archive'}
+              </button>
+              <button
+                type="button"
+                onClick={(event) => clearRoomChat(room, event)}
+                disabled={isBusy}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-40"
+              >
+                <ClearChatIcon />
+                Clear Chat
+              </button>
+              <button
+                type="button"
+                onClick={(event) => deleteRoom(room, event)}
+                disabled={isBusy}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-red-600 transition-colors hover:bg-red-50 disabled:opacity-40"
+              >
+                <TrashIcon />
+                Delete
+              </button>
+            </div>
+          )}
         </div>
       </div>
     )

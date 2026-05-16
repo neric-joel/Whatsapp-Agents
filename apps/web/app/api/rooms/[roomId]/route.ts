@@ -1,18 +1,18 @@
 import { NextRequest } from 'next/server'
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { updateRoomArchiveSchema } from '@/lib/api-validation'
-import { requireRoomMember } from '@/lib/permissions'
+import { requireRoomOwner } from '@/lib/permissions'
 import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
 
 interface RouteParams { params: { roomId: string } }
 
-async function requireAuthenticatedRoomMember(req: NextRequest, roomId: string) {
+async function requireAuthenticatedRoomOwner(req: NextRequest, roomId: string) {
   const { data: { user }, error: authErr } = await getAuthenticatedUser(req)
   if (authErr || !user) return { error: apiError('UNAUTHORIZED', 'Unauthorized', 401) }
 
   const supabase = createSupabaseServiceClient()
   try {
-    await requireRoomMember(supabase, roomId, user.id)
+    await requireRoomOwner(supabase, roomId, user.id)
   } catch (e) {
     return { error: e as Response }
   }
@@ -21,7 +21,7 @@ async function requireAuthenticatedRoomMember(req: NextRequest, roomId: string) 
 }
 
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
-  const auth = await requireAuthenticatedRoomMember(req, params.roomId)
+  const auth = await requireAuthenticatedRoomOwner(req, params.roomId)
   if ('error' in auth) return auth.error
 
   const body = await req.json().catch(() => null)
@@ -43,7 +43,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
 }
 
 export async function DELETE(req: NextRequest, { params }: RouteParams) {
-  const auth = await requireAuthenticatedRoomMember(req, params.roomId)
+  const auth = await requireAuthenticatedRoomOwner(req, params.roomId)
   if ('error' in auth) return auth.error
 
   const { error } = await auth.supabase

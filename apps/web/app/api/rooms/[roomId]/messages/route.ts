@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server'
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { sendMessageSchema } from '@/lib/api-validation'
-import { requireRoomMember } from '@/lib/permissions'
+import { requireRoomMember, requireRoomOwner } from '@/lib/permissions'
+import { clearRoomChat } from '@/lib/room-chat-management'
 import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
 import { parseMentions } from '@/lib/mention-parser'
 
@@ -154,4 +155,21 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   }
 
   return apiSuccess({ message, agent_runs: agentRuns }, 201)
+}
+
+export async function DELETE(req: NextRequest, { params }: RouteParams) {
+  const { roomId } = params
+  const { data: { user }, error: authErr } = await getAuthenticatedUser(req)
+  if (authErr || !user) return apiError('UNAUTHORIZED', 'Unauthorized', 401)
+
+  const supabase = createSupabaseServiceClient()
+  try {
+    await requireRoomOwner(supabase, roomId, user.id)
+    await clearRoomChat(supabase, roomId)
+  } catch (e) {
+    if (e instanceof Response) return e
+    return apiError('INTERNAL_ERROR', e instanceof Error ? e.message : 'Failed to clear chat', 500)
+  }
+
+  return apiSuccess({ cleared: true })
 }
