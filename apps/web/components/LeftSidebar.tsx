@@ -3,6 +3,7 @@ import { FormEvent, MouseEvent, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useRooms } from '@/hooks/useRooms'
+import { useAuth } from '@/hooks/useAuth'
 import type { Room } from '@agentroom/shared'
 
 type ApiResponse<T> =
@@ -61,6 +62,7 @@ function getApiErrorMessage(response: ApiResponse<unknown>) {
 
 export default function LeftSidebar() {
   const { rooms, refreshRooms } = useRooms()
+  const { user, signOut } = useAuth()
   const pathname = usePathname()
   const router = useRouter()
   const [isCreateOpen, setIsCreateOpen] = useState(false)
@@ -315,13 +317,27 @@ export default function LeftSidebar() {
           </div>
         )}
       </nav>
-      <button
-        type="button"
-        onClick={openCreateModal}
-        className="px-4 py-3 text-left text-sm text-white/70 transition-colors hover:bg-white/10 hover:text-white"
-      >
-        + New Room
-      </button>
+      <div className="border-t border-white/10">
+        <button
+          type="button"
+          onClick={openCreateModal}
+          className="w-full px-4 py-3 text-left text-sm text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+        >
+          + New Room
+        </button>
+        {user && (
+          <div className="flex items-center gap-2 px-4 py-2 border-t border-white/10">
+            <span className="flex-1 truncate text-xs text-white/50" title={user.email}>{user.email}</span>
+            <button
+              type="button"
+              onClick={() => void signOut()}
+              className="shrink-0 rounded px-2 py-1 text-xs text-white/50 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              Sign out
+            </button>
+          </div>
+        )}
+      </div>
 
       {isCreateOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
