@@ -50,9 +50,9 @@ export async function buildContextPacket({
     .from('messages')
     .select('id, content, sender_type, sender_agent_id, created_at, metadata')
     .eq('room_id', run.room_id)
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: false })
     .limit(10)
-  const recentMessages = (recentRaw ?? []) as RecentMsg[]
+  const recentMessages = ((recentRaw ?? []) as RecentMsg[]).reverse()
 
   const { data: roomRaw } = await supabase
     .from('rooms')

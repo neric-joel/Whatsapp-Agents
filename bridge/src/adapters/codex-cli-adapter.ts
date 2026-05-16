@@ -15,14 +15,9 @@ export class CodexCliAdapter extends SubprocessAdapter {
   protected envVarName(): string { return 'CODEX_BIN' }
 
   protected buildStdin(packet: ContextPacketV1): string {
-    const triggerIndex = this.lastUserMessageIndex(packet.recent_messages)
-    const triggerMessage = triggerIndex >= 0
-      ? packet.recent_messages[triggerIndex]
-      : packet.trigger_message
-    const priorMessages = triggerIndex >= 0
-      ? packet.recent_messages.slice(0, triggerIndex)
-      : packet.recent_messages
-    const history = priorMessages
+    const triggerMessage = packet.trigger_message
+    const history = packet.recent_messages
+      .filter((m) => m.id !== triggerMessage.id)
       .map((message) => `${this.senderLabel(message.sender_type)}: ${message.content}`)
       .join('\n')
 
@@ -65,14 +60,6 @@ Respond directly and specifically to the CURRENT MESSAGE above as ${packet.agent
     if (senderType === 'user') return 'User'
     if (senderType === 'system') return 'System'
     return 'Agent'
-  }
-
-  private lastUserMessageIndex(messages: ContextPacketV1['recent_messages']): number {
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      if (messages[index]?.sender_type === 'user') return index
-    }
-
-    return -1
   }
 
   private extractMessageContent(event: Record<string, unknown>): string | null {
