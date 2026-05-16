@@ -155,6 +155,7 @@ export default function MessageTimeline({ roomId, refreshSignal, optimisticMessa
               onPin={handlePin}
               onReply={onReply}
               onDeleted={refetch}
+              onHallucinationDismiss={refetch}
             >
               {fileIds.map((fileId) => (
                 filesMap[fileId] ? <FileAttachmentCard key={fileId} file={filesMap[fileId]} /> : null

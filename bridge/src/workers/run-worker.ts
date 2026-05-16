@@ -5,6 +5,7 @@ import { redact } from '../lib/redact.js'
 import { getAdapter } from '../adapters/registry.js'
 import { buildContextPacket } from '../context/build-context-packet.js'
 import { conclusionDetected } from '../lib/conclusion.js'
+import { detectHallucination } from '../lib/hallucination.js'
 
 const WORKER_ID = process.env.BRIDGE_WORKER_ID ?? 'bridge-local-1'
 
@@ -163,6 +164,24 @@ export async function processRun(runId: string): Promise<void> {
     // h. Insert agent reply into messages
     const replyContent = redact(finalContent)
     const isConclusion = conclusionDetected(replyContent)
+    const hallucination = detectHallucination(replyContent)
+    log('info', 'hallucination.check', {
+      run_id: runId,
+      flagged: hallucination.flagged,
+      confidence: hallucination.confidence,
+    })
+    const metadata = {
+      agent_loop: {
+        is_conclusion: isConclusion,
+        round_index: runRow.round_index,
+      },
+      hallucination: {
+        flagged: hallucination.flagged,
+        confidence: hallucination.confidence,
+        reasons: hallucination.reasons,
+        checked_at: new Date().toISOString(),
+      },
+    }
     const { data: insertedMessage, error: insertMessageError } = await supabase.from('messages').insert({
       room_id: runRow.room_id,
       sender_type: 'agent',
@@ -170,12 +189,7 @@ export async function processRun(runId: string): Promise<void> {
       content: replyContent,
       content_type: 'text',
       round_index: runRow.round_index,
-      metadata: {
-        agent_loop: {
-          is_conclusion: isConclusion,
-          round_index: runRow.round_index,
-        },
-      },
+      metadata,
     }).select('id').single()
 
     if (insertMessageError || !insertedMessage) {

@@ -2,7 +2,9 @@
 
 import { useState, type ReactNode } from 'react'
 import { useToast } from '@/contexts/ToastContext'
+import { extractHallucination } from '@/lib/hallucination-detector'
 import { DELETED_MESSAGE_CONTENT } from '@/lib/message-management'
+import HallucinationBanner from './HallucinationBanner'
 
 function formatTime(ts: string) {
   return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -38,6 +40,7 @@ export interface MessageBubbleProps {
   onPin?: (messageId: string, content: string) => void | Promise<void>
   onReply?: (message: MessageBubbleProps['message']) => void
   onDeleted?: () => void
+  onHallucinationDismiss?: () => void
 }
 
 export default function MessageBubble({
@@ -48,12 +51,19 @@ export default function MessageBubble({
   onPin,
   onReply,
   onDeleted,
+  onHallucinationDismiss,
 }: MessageBubbleProps) {
   const { content, sender_type, created_at, agents, metadata } = message
   const [copied, setCopied] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const { showToast } = useToast()
   const isDeleted = content === DELETED_MESSAGE_CONTENT || Boolean(metadata?.deleted_at)
+  const hallucinationMeta = sender_type === 'agent' ? extractHallucination(metadata ?? {}) : null
+  const hallucinationState =
+    metadata?.hallucination && typeof metadata.hallucination === 'object'
+      ? metadata.hallucination as { accepted?: boolean }
+      : null
+  const isHallucinationRejected = hallucinationState?.accepted === false
 
   async function handleCopy() {
     try {
@@ -150,13 +160,20 @@ export default function MessageBubble({
             </span>
             <span className="text-xs text-gray-400">{formatTime(created_at)}</span>
           </div>
-          <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3 text-sm leading-6 text-gray-900 shadow-sm">
+          <div className={`rounded-2xl border border-gray-100 bg-white px-4 py-3 text-sm leading-6 text-gray-900 shadow-sm ${isHallucinationRejected ? 'line-through decoration-yellow-700 decoration-2' : ''}`}>
             {isDeleted ? (
               <span className="italic text-gray-400">{DELETED_MESSAGE_CONTENT}</span>
             ) : (
               content
             )}
           </div>
+          {hallucinationMeta && !hallucinationState?.accepted && (
+            <HallucinationBanner
+              meta={hallucinationMeta}
+              messageId={message.id}
+              onDismiss={() => onHallucinationDismiss?.()}
+            />
+          )}
           {children}
           <div className="mt-1.5 flex items-center gap-2">
             {actionButtons}
