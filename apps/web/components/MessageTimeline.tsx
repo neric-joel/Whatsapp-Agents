@@ -9,6 +9,7 @@ import MessageBubble from './MessageBubble'
 import AgentRunCard from './AgentRunCard'
 import ToolCallCard from './ToolCallCard'
 import FileAttachmentCard from './FileAttachmentCard'
+import { buildTimelineEvents } from '@/lib/timeline-events'
 
 export interface OptimisticMessage {
   id: string
@@ -66,7 +67,7 @@ export default function MessageTimeline({ roomId, refreshSignal, optimisticMessa
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, optimisticMessages, runs])
+  }, [messages, optimisticMessages])
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient()
@@ -116,6 +117,7 @@ export default function MessageTimeline({ roomId, refreshSignal, optimisticMessa
       metadata: m.metadata ?? {},
     })),
   ]
+  const timelineEvents = buildTimelineEvents(allMessages, runs)
 
   async function handlePin(messageId: string, content: string) {
     const res = await fetch(`/api/rooms/${roomId}/pins`, {
@@ -143,12 +145,17 @@ export default function MessageTimeline({ roomId, refreshSignal, optimisticMessa
             </div>
           </div>
         )}
-        {allMessages.map((msg) => {
+        {timelineEvents.map((event) => {
+          if (event.type === 'run') {
+            return <AgentRunCard key={event.id} run={event.run} />
+          }
+
+          const msg = event.message
           const ids = (msg.metadata as { file_ids?: unknown }).file_ids
           const fileIds = Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []
           return (
             <MessageBubble
-              key={msg.id}
+              key={event.id}
               message={msg}
               roomId={roomId}
               currentUserName={currentUserName}
@@ -163,9 +170,6 @@ export default function MessageTimeline({ roomId, refreshSignal, optimisticMessa
             </MessageBubble>
           )
         })}
-        {runs.map((run) => (
-          <AgentRunCard key={run.id} run={run} />
-        ))}
         {toolCalls.length > 0 && (
           <div className="mt-3 border-t border-gray-200 pt-3">
             {toolCalls.map((tc) => (

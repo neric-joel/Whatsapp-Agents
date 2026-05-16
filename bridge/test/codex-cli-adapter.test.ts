@@ -115,7 +115,7 @@ test('codex adapter builds a prompt that highlights the current user message', (
   const prompt = adapter.stdin(packet)
 
   assert.match(prompt, /^You are CodexAgent, a coding assistant in the room "Dev Room"\./)
-  assert.match(prompt, /Conversation so far:/)
+  assert.match(prompt, /Relevant recent context only\./)
   assert.match(prompt, /Agent: Previous reply/)
   assert.match(prompt, /-----\nCURRENT MESSAGE YOU MUST RESPOND TO:\nPlease fix this\n-----/)
   assert.match(prompt, /Respond directly and specifically to the CURRENT MESSAGE above as CodexAgent\./)
@@ -129,7 +129,7 @@ test('codex adapter omits conversation section when there is no prior history', 
     recent_messages: [packet.recent_messages[1]],
   })
 
-  assert.doesNotMatch(prompt, /Conversation so far:/)
+  assert.doesNotMatch(prompt, /Relevant recent context only\./)
   assert.match(prompt, /CURRENT MESSAGE YOU MUST RESPOND TO:\nPlease fix this/)
 })
 

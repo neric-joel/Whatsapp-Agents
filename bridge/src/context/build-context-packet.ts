@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { AgentProvider, ContextPacketV1, PinnedItem, ReplyMode, SenderType } from '@agentroom/shared'
+import { readContextMessageLimit, readContextMessageMaxChars, trimContextMessages } from './context-window.js'
 
 interface BuildContextArgs {
   supabase: SupabaseClient
@@ -46,13 +47,16 @@ export async function buildContextPacket({
   agentInfo,
   triggerMsg,
 }: BuildContextArgs): Promise<ContextPacketV1> {
+  const contextMessageLimit = readContextMessageLimit()
+  const contextMessageMaxChars = readContextMessageMaxChars()
   const { data: recentRaw } = await supabase
     .from('messages')
     .select('id, content, sender_type, sender_agent_id, created_at, metadata')
     .eq('room_id', run.room_id)
+    .lte('created_at', triggerMsg.created_at)
     .order('created_at', { ascending: false })
-    .limit(10)
-  const recentMessages = ((recentRaw ?? []) as RecentMsg[]).reverse()
+    .limit(contextMessageLimit)
+  const recentMessages = trimContextMessages(((recentRaw ?? []) as RecentMsg[]).reverse(), contextMessageMaxChars)
 
   const { data: roomRaw } = await supabase
     .from('rooms')

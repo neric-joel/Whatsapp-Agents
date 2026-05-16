@@ -26,7 +26,7 @@ export class CodexCliAdapter extends SubprocessAdapter {
     ]
 
     if (history) {
-      sections.push(`Conversation so far:\n${history}`)
+      sections.push(`Relevant recent context only. Use it as background, but prioritize the current message if there is any conflict:\n${history}`)
     }
 
     sections.push(`-----
