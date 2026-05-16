@@ -9,9 +9,14 @@
     "db:reset":     "supabase db reset",
     "typecheck":    "pnpm -r typecheck",
     "lint":         "pnpm -r lint",
-    "test":         "pnpm -r --if-present run test"
+    "test":         "pnpm -r --if-present run test",
+    "stress:agents": "tsx scripts/stress-test-agents.ts"
   },
   "devDependencies": {
+    "@supabase/supabase-js": "^2.105.3",
+    "@types/node": "^20.11.0",
+    "dotenv": "^16.6.1",
+    "tsx": "^4.21.0",
     "typescript": "^5.4.0"
   },
   "pnpm": {
