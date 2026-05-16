@@ -1,5 +1,19 @@
 export const AGENTROOM_VERSION = '0.1.0';
 
+export function conclusionDetected(content: string): boolean {
+  const patterns = [
+    /\bin conclusion\b/i,
+    /\bfinal answer\b/i,
+    /\btherefore the answer is\b/i,
+    /\bto summarize\b/i,
+    /\bin summary\b/i,
+    /\[CONCLUSION\]/i,
+    /^conclusion:/im,
+  ];
+
+  return patterns.some((p) => p.test(content));
+}
+
 // ─── DATABASE ROW TYPES ───
 
 export interface Room {

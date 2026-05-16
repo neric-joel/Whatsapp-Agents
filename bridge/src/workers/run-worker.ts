@@ -4,6 +4,7 @@ import { log } from '../lib/logger.js'
 import { redact } from '../lib/redact.js'
 import { getAdapter } from '../adapters/registry.js'
 import { buildContextPacket } from '../context/build-context-packet.js'
+import { conclusionDetected } from '../lib/conclusion.js'
 
 const WORKER_ID = process.env.BRIDGE_WORKER_ID ?? 'bridge-local-1'
 
@@ -25,6 +26,12 @@ interface AgentRunRow {
   status: string
   round_index: number
   agents: AgentInfo | null
+}
+
+interface RoomLoopSettings {
+  allow_agent_to_agent: boolean
+  max_agent_rounds: number
+  max_agent_hops: number
 }
 
 export async function processRun(runId: string): Promise<void> {
@@ -154,14 +161,65 @@ export async function processRun(runId: string): Promise<void> {
     if (!finalContent) throw new Error('Adapter produced no final_response')
 
     // h. Insert agent reply into messages
-    await supabase.from('messages').insert({
+    const replyContent = redact(finalContent)
+    const isConclusion = conclusionDetected(replyContent)
+    const { data: insertedMessage, error: insertMessageError } = await supabase.from('messages').insert({
       room_id: runRow.room_id,
       sender_type: 'agent',
       sender_agent_id: runRow.agent_id,
-      content: redact(finalContent),
+      content: replyContent,
       content_type: 'text',
       round_index: runRow.round_index,
-    })
+      metadata: {
+        agent_loop: {
+          is_conclusion: isConclusion,
+          round_index: runRow.round_index,
+        },
+      },
+    }).select('id').single()
+
+    if (insertMessageError || !insertedMessage) {
+      throw new Error(insertMessageError?.message ?? 'Failed to insert agent reply')
+    }
+
+    const insertedMessageId = (insertedMessage as { id: string }).id
+
+    const { data: roomLoopRaw, error: roomLoopError } = await supabase
+      .from('rooms')
+      .select('allow_agent_to_agent, max_agent_rounds, max_agent_hops')
+      .eq('id', runRow.room_id)
+      .single()
+
+    if (roomLoopError) {
+      throw new Error(roomLoopError.message)
+    }
+
+    const roomLoop = roomLoopRaw as unknown as RoomLoopSettings | null
+
+    if (roomLoop?.allow_agent_to_agent && !isConclusion) {
+      const nextRound = runRow.round_index + 1
+      const nextHop = nextRound
+
+      if (nextRound < roomLoop.max_agent_rounds && nextHop < roomLoop.max_agent_hops) {
+        const { data: newRun, error: enqueueError } = await supabase
+          .from('agent_runs')
+          .insert({
+            room_id: runRow.room_id,
+            agent_id: runRow.agent_id,
+            trigger_msg_id: insertedMessageId,
+            status: 'queued',
+            round_index: nextRound,
+          })
+          .select('id')
+          .single()
+
+        if (enqueueError || !newRun) {
+          throw new Error(enqueueError?.message ?? 'Failed to enqueue follow-up agent run')
+        }
+
+        log('info', 'loop.enqueue', { run_id: (newRun as { id: string }).id, round_index: nextRound })
+      }
+    }
 
     // i. Mark run completed
     await supabase
