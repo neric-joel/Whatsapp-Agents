@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useRooms } from '@/hooks/useRooms'
 import { useAuth } from '@/hooks/useAuth'
+import { notifyChatCleared } from '@/lib/chat-events'
 import type { Room } from '@agentroom/shared'
 
 type ApiResponse<T> =
@@ -190,7 +191,10 @@ export default function LeftSidebar() {
       }
       await refreshRooms()
       setOpenRoomMenuId(null)
-      if (pathname === `/rooms/${room.id}`) router.refresh()
+      if (pathname === `/rooms/${room.id}`) {
+        notifyChatCleared(room.id)
+        router.refresh()
+      }
     } catch (err) {
       setRoomActionError(err instanceof Error ? err.message : 'Failed to clear chat')
     } finally {
@@ -210,7 +214,7 @@ export default function LeftSidebar() {
           className={`min-w-0 flex-1 truncate rounded-md px-3 py-2 text-sm transition-[background-color,color,transform] duration-150 hover:scale-[1.01] ${
             isActive
               ? 'bg-white/20 font-semibold text-white'
-              : 'text-white/90 hover:bg-white/10 hover:text-white'
+              : 'text-teal-50/90 hover:bg-white/10 hover:text-white'
           }`}
         >
           # {room.name}
@@ -268,7 +272,7 @@ export default function LeftSidebar() {
   }
 
   return (
-    <aside className="w-[260px] flex-shrink-0 h-full bg-gradient-to-b from-[#18181b] to-[#111113] flex flex-col">
+    <aside className="w-[260px] flex-shrink-0 h-full bg-gradient-to-b from-[#0f766e] via-[#2563eb] to-[#4338ca] flex flex-col">
       <div className="p-4 pb-2">
         <span className="text-base font-bold text-white">AgentRoom</span>
       </div>
@@ -294,7 +298,7 @@ export default function LeftSidebar() {
           {activeRooms.map(renderRoom)}
         </div>
         {roomActionError && (
-          <p className="mx-4 mt-3 rounded border border-white/10 bg-white/10 px-3 py-2 text-xs text-red-100">
+          <p className="mx-4 mt-3 rounded border border-white/20 bg-white/15 px-3 py-2 text-xs text-rose-50">
             {roomActionError}
           </p>
         )}
@@ -340,7 +344,7 @@ export default function LeftSidebar() {
       </div>
 
       {isCreateOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 px-4">
           <form onSubmit={handleCreateRoom} className="w-full max-w-sm rounded-lg bg-white p-5 shadow-2xl">
             <h2 className="text-lg font-semibold text-zinc-950">New room</h2>
             <label className="mt-4 block text-sm font-medium text-zinc-700" htmlFor="room-name">

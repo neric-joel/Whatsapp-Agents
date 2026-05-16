@@ -1,9 +1,10 @@
 'use client'
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import RoomHeader from '@/components/RoomHeader'
 import MessageTimeline from '@/components/MessageTimeline'
 import ComposeBox from '@/components/ComposeBox'
 import PinnedItemsPanel from '@/components/PinnedItemsPanel'
+import { subscribeToChatCleared } from '@/lib/chat-events'
 import type { OptimisticMessage, ReplyingMessage } from '@/components/MessageTimeline'
 
 export default function RoomPage({ params }: { params: { roomId: string } }) {
@@ -20,6 +21,8 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
     setRefreshSignal((s) => s + 1)
     setOptimistic([])
   }, [])
+
+  useEffect(() => subscribeToChatCleared(roomId, handleRefetch), [roomId, handleRefetch])
 
   return (
     <div className="flex min-h-0 flex-1">
@@ -39,8 +42,8 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
           onCancelReply={() => setReplyingTo(null)}
         />
       </div>
-      <aside className="hidden w-72 flex-shrink-0 border-l border-gray-200 bg-[#F8F8F8] lg:block">
-        <div className="border-b border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-900">
+      <aside className="hidden w-72 flex-shrink-0 border-l border-sky-100 bg-[#eef6ff] lg:block">
+        <div className="border-b border-sky-100 bg-[#f8fbff] px-4 py-3 text-sm font-medium text-slate-900">
           Pinned
         </div>
         <PinnedItemsPanel roomId={roomId} />

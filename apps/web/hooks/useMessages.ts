@@ -45,8 +45,14 @@ export function useMessages(roomId: string, refreshSignal?: number) {
       .channel(`messages-rt-${roomId}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages', filter: `room_id=eq.${roomId}` },
+        { event: '*', schema: 'public', table: 'messages', filter: `room_id=eq.${roomId}` },
         async (payload) => {
+          if (payload.eventType === 'DELETE') {
+            const oldId = (payload.old as { id?: string }).id
+            if (oldId) setMessages((prev) => prev.filter((message) => message.id !== oldId))
+            return
+          }
+
           const newId = (payload.new as { id: string }).id
           // Fetch with agents join so we have the agent name
           const { data } = await supabase

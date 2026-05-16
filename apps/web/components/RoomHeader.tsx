@@ -197,7 +197,7 @@ export default function RoomHeader({ roomId }: Props) {
   const activeAgentMembers = members.filter((member) => !member.muted && member.agent.is_active)
 
   return (
-    <header className="relative flex min-h-[72px] flex-shrink-0 items-center border-b border-gray-200 bg-white px-4 py-3">
+    <header className="relative flex min-h-[72px] flex-shrink-0 items-center border-b border-sky-100 bg-[#f8fbff] px-4 py-3">
       <div className="flex min-w-0 flex-1 flex-col gap-1 pr-4">
         <div className="flex min-w-0 items-center gap-3">
           <h1 className="truncate text-lg font-semibold text-gray-900"># {roomName ?? '...'}</h1>
@@ -235,7 +235,7 @@ export default function RoomHeader({ roomId }: Props) {
       </button>
 
       {panelOpen && (
-        <div className="absolute right-4 top-[72px] z-50 w-[360px] max-w-[calc(100vw-2rem)] border border-gray-200 bg-white shadow-xl">
+        <div className="absolute right-4 top-[72px] z-50 w-[360px] max-w-[calc(100vw-2rem)] border border-sky-100 bg-white shadow-xl">
           <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-3 py-2">
             <span className="text-sm font-semibold text-gray-900">Agents</span>
             <button

@@ -3,6 +3,8 @@ export type AgentProvider = 'claude_code' | 'codex_cli' | 'ruflo' | 'mock'
 export interface ProviderStyle {
   bubble: string
   border: string
+  text: string
+  avatar: string
   nameColor: string
   dot: string
   glow: string
@@ -10,32 +12,40 @@ export interface ProviderStyle {
 
 export const PROVIDER_STYLES: Record<AgentProvider, ProviderStyle> = {
   claude_code: {
-    bubble: 'bg-[#1c1410]',
-    border: 'border-[#92400e]/30',
-    nameColor: 'text-[#f59e0b]',
-    dot: 'bg-[#f59e0b]',
-    glow: 'shadow-[0_0_12px_rgba(245,158,11,0.15)]',
+    bubble: 'bg-[#fff7ed]',
+    border: 'border-[#fdba74]/70',
+    text: 'text-[#432818]',
+    avatar: 'bg-[#ea580c]',
+    nameColor: 'text-[#c2410c]',
+    dot: 'bg-[#ea580c]',
+    glow: 'shadow-[0_0_14px_rgba(234,88,12,0.16)]',
   },
   codex_cli: {
-    bubble: 'bg-[#0c1618]',
-    border: 'border-[#0e7490]/30',
-    nameColor: 'text-[#06b6d4]',
-    dot: 'bg-[#06b6d4]',
-    glow: 'shadow-[0_0_12px_rgba(6,182,212,0.15)]',
+    bubble: 'bg-[#ecfeff]',
+    border: 'border-[#67e8f9]/70',
+    text: 'text-[#083344]',
+    avatar: 'bg-[#0891b2]',
+    nameColor: 'text-[#0e7490]',
+    dot: 'bg-[#0891b2]',
+    glow: 'shadow-[0_0_14px_rgba(8,145,178,0.16)]',
   },
   ruflo: {
-    bubble: 'bg-[#1a0f1e]',
-    border: 'border-[#7e22ce]/30',
-    nameColor: 'text-[#c084fc]',
-    dot: 'bg-[#c084fc]',
-    glow: 'shadow-[0_0_12px_rgba(192,132,252,0.15)]',
+    bubble: 'bg-[#f5f3ff]',
+    border: 'border-[#c4b5fd]/70',
+    text: 'text-[#2e1065]',
+    avatar: 'bg-[#7c3aed]',
+    nameColor: 'text-[#7c3aed]',
+    dot: 'bg-[#7c3aed]',
+    glow: 'shadow-[0_0_14px_rgba(124,58,237,0.16)]',
   },
   mock: {
-    bubble: 'bg-[#1a1a1a]',
-    border: 'border-[#3f3f46]/30',
-    nameColor: 'text-[#a1a1aa]',
-    dot: 'bg-[#a1a1aa]',
-    glow: 'shadow-[0_0_8px_rgba(161,161,170,0.1)]',
+    bubble: 'bg-[#f1f5f9]',
+    border: 'border-[#cbd5e1]/80',
+    text: 'text-[#0f172a]',
+    avatar: 'bg-[#64748b]',
+    nameColor: 'text-[#475569]',
+    dot: 'bg-[#64748b]',
+    glow: 'shadow-[0_0_10px_rgba(100,116,139,0.12)]',
   },
 }
 

@@ -5,6 +5,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { extractHallucination } from '@/lib/hallucination-detector'
 import { DELETED_MESSAGE_CONTENT } from '@/lib/message-management'
 import { getProviderStyle } from '@/lib/provider-styles'
+import FormattedMessageContent from './FormattedMessageContent'
 import HallucinationBanner from './HallucinationBanner'
 
 function formatTime(ts: string) {
@@ -154,8 +155,8 @@ export default function MessageBubble({
 
     return (
       <div className="group flex animate-message-in flex-row items-start gap-3 px-5 py-2">
-        <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border ${providerStyle.bubble} ${providerStyle.border}`}>
-          <span className="text-[11px] font-semibold text-zinc-100">
+        <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border ${providerStyle.avatar} ${providerStyle.border}`}>
+          <span className="text-[11px] font-semibold text-white">
             {agents ? initials(agents.name) : 'AG'}
           </span>
         </div>
@@ -167,11 +168,11 @@ export default function MessageBubble({
             </span>
             <span className="text-xs text-gray-400">{formatTime(created_at)}</span>
           </div>
-          <div className={`rounded-2xl border px-4 py-3 text-sm leading-6 text-zinc-100 shadow-sm ${providerStyle.bubble} ${providerStyle.border} ${isHallucinationRejected ? 'line-through decoration-yellow-500 decoration-2' : ''}`}>
+          <div className={`rounded-2xl border px-4 py-3 text-sm leading-6 shadow-sm ${providerStyle.bubble} ${providerStyle.border} ${providerStyle.text} ${isHallucinationRejected ? 'line-through decoration-yellow-500 decoration-2' : ''}`}>
             {isDeleted ? (
               <span className="italic text-zinc-500">{DELETED_MESSAGE_CONTENT}</span>
             ) : (
-              content
+              <FormattedMessageContent content={content} />
             )}
           </div>
           {showHallucinationBanner && hallucinationMeta && (
@@ -194,11 +195,11 @@ export default function MessageBubble({
     return (
       <div className="group flex animate-message-in flex-row items-start justify-end gap-3 px-5 py-2">
         <div className="flex max-w-[72%] flex-col items-end">
-          <div className={`rounded-2xl px-4 py-3 text-sm leading-6 ${isDeleted ? 'bg-gray-50 text-gray-400' : 'bg-purple-700 text-white'}`}>
+          <div className={`rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${isDeleted ? 'bg-slate-50 text-slate-400' : 'bg-[#2563eb] text-white'}`}>
             {isDeleted ? (
               <span className="italic">{DELETED_MESSAGE_CONTENT}</span>
             ) : (
-              content
+              <FormattedMessageContent content={content} />
             )}
           </div>
           {children}

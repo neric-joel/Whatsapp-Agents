@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 export interface ToolCallRow {
@@ -12,16 +12,23 @@ export interface ToolCallRow {
   error: string | null
 }
 
-export function useToolCalls(roomId: string) {
+export function useToolCalls(roomId: string, refreshSignal?: number) {
   const [toolCalls, setToolCalls] = useState<ToolCallRow[]>([])
 
-  useEffect(() => {
+  const fetchToolCalls = useCallback(() => {
     const supabase = createSupabaseBrowserClient()
     supabase.from('tool_calls').select('*')
       .eq('room_id', roomId)
       .in('status', ['waiting_approval', 'approved', 'running', 'succeeded', 'failed', 'denied'])
       .then(({ data }) => setToolCalls((data as ToolCallRow[]) ?? []))
+  }, [roomId])
 
+  useEffect(() => {
+    fetchToolCalls()
+  }, [fetchToolCalls, refreshSignal])
+
+  useEffect(() => {
+    const supabase = createSupabaseBrowserClient()
     const sub = supabase.channel(`toolcalls:${roomId}`)
       .on('postgres_changes', {
         event: '*',
@@ -31,6 +38,7 @@ export function useToolCalls(roomId: string) {
       }, (payload) => {
         if (payload.eventType === 'INSERT') setToolCalls((p) => [...p, payload.new as ToolCallRow])
         else if (payload.eventType === 'UPDATE') setToolCalls((p) => p.map((tc) => tc.id === payload.new.id ? payload.new as ToolCallRow : tc))
+        else if (payload.eventType === 'DELETE') setToolCalls((p) => p.filter((tc) => tc.id !== payload.old.id))
       }).subscribe()
     return () => { void sub.unsubscribe() }
   }, [roomId])

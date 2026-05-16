@@ -36,22 +36,22 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="flex min-h-screen w-full items-center justify-center bg-[#09090b] px-4">
+    <div className="flex min-h-screen w-full items-center justify-center bg-gradient-to-br from-[#dbeafe] via-[#ecfeff] to-[#ede9fe] px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold text-[#f4f4f5]">AgentRoom</h1>
-          <p className="mt-1 text-sm text-[#71717a]">AI-powered group chat</p>
+          <h1 className="text-2xl font-bold text-[#0f172a]">AgentRoom</h1>
+          <p className="mt-1 text-sm text-[#475569]">AI-powered group chat</p>
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-[#27272a] bg-[#18181b]">
-          <div className="flex border-b border-[#27272a]">
+        <div className="overflow-hidden rounded-xl border border-sky-100 bg-white shadow-xl">
+          <div className="flex border-b border-sky-100 bg-[#f8fbff]">
             <button
               type="button"
               onClick={() => { setMode('signin'); setError(null) }}
               className={`flex-1 py-3 text-sm font-medium transition-colors ${
                 mode === 'signin'
-                  ? 'bg-[#27272a] text-[#f4f4f5]'
-                  : 'text-[#71717a] hover:text-[#a1a1aa]'
+                  ? 'bg-[#2563eb] text-white'
+                  : 'text-[#475569] hover:text-[#0f172a]'
               }`}
             >
               Sign In
@@ -61,8 +61,8 @@ export default function AuthPage() {
               onClick={() => { setMode('signup'); setError(null) }}
               className={`flex-1 py-3 text-sm font-medium transition-colors ${
                 mode === 'signup'
-                  ? 'bg-[#27272a] text-[#f4f4f5]'
-                  : 'text-[#71717a] hover:text-[#a1a1aa]'
+                  ? 'bg-[#2563eb] text-white'
+                  : 'text-[#475569] hover:text-[#0f172a]'
               }`}
             >
               Sign Up
@@ -71,7 +71,7 @@ export default function AuthPage() {
 
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
             <div>
-              <label htmlFor="email" className="block text-xs font-medium text-[#a1a1aa] mb-1.5">
+              <label htmlFor="email" className="block text-xs font-medium text-[#475569] mb-1.5">
                 Email
               </label>
               <input
@@ -83,12 +83,12 @@ export default function AuthPage() {
                 autoComplete="email"
                 placeholder="you@example.com"
                 disabled={loading}
-                className="w-full rounded-md border border-[#3f3f46] bg-[#09090b] px-3 py-2 text-sm text-[#f4f4f5] placeholder-[#52525b] outline-none transition focus:border-[#8b5cf6] focus:ring-2 focus:ring-[#8b5cf6]/20 disabled:opacity-50"
+                className="w-full rounded-md border border-sky-200 bg-white px-3 py-2 text-sm text-[#0f172a] placeholder-[#94a3b8] outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20 disabled:opacity-50"
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-xs font-medium text-[#a1a1aa] mb-1.5">
+              <label htmlFor="password" className="block text-xs font-medium text-[#475569] mb-1.5">
                 Password
               </label>
               <input
@@ -98,14 +98,14 @@ export default function AuthPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-                placeholder="••••••••"
+                placeholder="Password"
                 disabled={loading}
-                className="w-full rounded-md border border-[#3f3f46] bg-[#09090b] px-3 py-2 text-sm text-[#f4f4f5] placeholder-[#52525b] outline-none transition focus:border-[#8b5cf6] focus:ring-2 focus:ring-[#8b5cf6]/20 disabled:opacity-50"
+                className="w-full rounded-md border border-sky-200 bg-white px-3 py-2 text-sm text-[#0f172a] placeholder-[#94a3b8] outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20 disabled:opacity-50"
               />
             </div>
 
             {error && (
-              <p className="rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-xs text-red-400">
+              <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
                 {error}
               </p>
             )}
@@ -113,9 +113,9 @@ export default function AuthPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-md bg-[#8b5cf6] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-violet-500 disabled:opacity-50"
+              className="w-full rounded-md bg-[#2563eb] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#1d4ed8] disabled:opacity-50"
             >
-              {loading ? (mode === 'signup' ? 'Creating account…' : 'Signing in…') : (mode === 'signup' ? 'Create account' : 'Sign in')}
+              {loading ? (mode === 'signup' ? 'Creating account...' : 'Signing in...') : (mode === 'signup' ? 'Create account' : 'Sign in')}
             </button>
           </form>
         </div>

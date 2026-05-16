@@ -44,7 +44,14 @@ export function useAgentRuns(roomId: string, refreshSignal?: number) {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'agent_runs', filter: `room_id=eq.${roomId}` },
-        () => { fetchRuns() }
+        (payload) => {
+          if (payload.eventType === 'DELETE') {
+            const oldId = (payload.old as { id?: string }).id
+            if (oldId) setRuns((prev) => prev.filter((run) => run.id !== oldId))
+            return
+          }
+          fetchRuns()
+        }
       )
       .subscribe()
     return () => { void supabase.removeChannel(channel) }

@@ -16,7 +16,7 @@ export default function Page() {
   if (loading) return null
 
   return (
-    <div className="flex-1 flex items-center justify-center bg-white">
+    <div className="flex-1 flex items-center justify-center bg-[#f5f7fb]">
       <p className="text-gray-500 text-sm">No rooms yet</p>
     </div>
   )

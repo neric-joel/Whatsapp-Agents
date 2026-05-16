@@ -98,7 +98,7 @@ export default function PinnedItemsPanel({ roomId }: Props) {
   return (
     <div className="space-y-2 px-3 py-3">
       {pins.map((pin) => (
-        <div key={pin.id} className="rounded-xl border border-gray-100 bg-white p-3 shadow-sm">
+        <div key={pin.id} className="rounded-xl border border-sky-100 bg-white p-3 shadow-sm">
           <div className="mb-1 flex items-center justify-between gap-2">
             <span className="text-xs font-medium text-purple-700">{pin.pin_type}</span>
             <span className="text-[11px] text-gray-400">{formatDate(pin.created_at)}</span>

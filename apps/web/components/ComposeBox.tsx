@@ -215,7 +215,7 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
     : ''
 
   return (
-    <div className="flex-shrink-0 border-t border-gray-200 bg-white px-4 py-3">
+    <div className="flex-shrink-0 border-t border-slate-200 bg-[#eef6ff] px-4 py-3">
       {replyingTo && (
         <div className="mb-3 flex items-start gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
           <div className="min-w-0 flex-1 border-l-2 border-purple-700 pl-3">
@@ -236,7 +236,7 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
         {showDropdown && (
           <ul
             ref={dropdownRef}
-            className="absolute bottom-full left-0 right-[52px] z-50 mb-2 max-h-48 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg"
+            className="absolute bottom-full left-0 right-[52px] z-50 mb-2 max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg"
           >
             {mentionOptions.map((opt) => (
               <li
@@ -257,7 +257,7 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
           onKeyDown={handleKeyDown}
           placeholder={`Message #${room?.name ?? '...'}...`}
           rows={1}
-          className="max-h-32 min-h-[46px] flex-1 resize-none overflow-y-auto rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition-shadow placeholder:text-gray-400 focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
+          className="max-h-32 min-h-[46px] flex-1 resize-none overflow-y-auto rounded-xl border border-sky-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition-shadow placeholder:text-slate-400 focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
         />
         {sendError && (
           <p className="absolute left-1 top-full mt-1 px-1 text-xs text-red-600">{sendError}</p>
@@ -310,7 +310,7 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
         <button
           onClick={() => void submit()}
           disabled={(!text.trim() && !attachedFile) || sending || uploading}
-          className="flex-shrink-0 rounded-lg bg-purple-700 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-purple-800 disabled:opacity-40"
+          className="flex-shrink-0 rounded-lg bg-[#2563eb] px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-[#1d4ed8] disabled:opacity-40"
         >
           Send
         </button>

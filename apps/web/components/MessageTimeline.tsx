@@ -60,7 +60,7 @@ function LoadingSkeleton() {
 export default function MessageTimeline({ roomId, refreshSignal, optimisticMessages = [], onReply }: Props) {
   const { messages, loading, refetch } = useMessages(roomId, refreshSignal)
   const { runs } = useAgentRuns(roomId, refreshSignal)
-  const toolCalls = useToolCalls(roomId)
+  const toolCalls = useToolCalls(roomId, refreshSignal)
   const [filesMap, setFilesMap] = useState<Record<string, FileRow>>({})
   const [currentUserName, setCurrentUserName] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -100,7 +100,7 @@ export default function MessageTimeline({ roomId, refreshSignal, optimisticMessa
 
   if (loading) {
     return (
-      <div className="flex-1 overflow-y-auto bg-white">
+      <div className="flex-1 overflow-y-auto bg-[#f5f7fb]">
         <LoadingSkeleton />
       </div>
     )
@@ -135,7 +135,7 @@ export default function MessageTimeline({ roomId, refreshSignal, optimisticMessa
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-white">
+    <div className="flex-1 overflow-y-auto bg-[#f5f7fb]">
       <div className="min-h-full py-4">
         {allMessages.length === 0 && runs.length === 0 && !loading && (
           <div className="flex min-h-full items-center justify-center p-8 text-center">
