@@ -1,5 +1,5 @@
 import { SubprocessAdapter } from './subprocess-adapter.js'
-import type { ContextPacketV1 } from '@agentroom/shared'
+import type { AgentEvent, ContextPacketV1 } from '@agentroom/shared'
 
 export class ClaudeCodeAdapter extends SubprocessAdapter {
   readonly name = 'claude-code'
@@ -17,4 +17,31 @@ export class ClaudeCodeAdapter extends SubprocessAdapter {
   }
 
   protected envVarName(): string { return 'CLAUDE_BIN' }
+
+  protected parseStdoutLine(line: string): AgentEvent | null {
+    let obj: Record<string, unknown>
+
+    try {
+      obj = JSON.parse(line) as Record<string, unknown>
+    } catch {
+      return null
+    }
+
+    if (obj.is_error === true) {
+      const message = typeof obj.result === 'string'
+        ? obj.result
+        : typeof obj.error === 'string'
+          ? obj.error
+          : typeof obj.message === 'string'
+            ? obj.message
+            : 'Claude returned an error.'
+      return { type: 'error', run_id: '', message }
+    }
+
+    if (obj.type === 'result' && typeof obj.result === 'string') {
+      return { type: 'visible_message', run_id: '', content: obj.result }
+    }
+
+    return super.parseStdoutLine(line)
+  }
 }
