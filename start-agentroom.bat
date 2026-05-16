@@ -8,12 +8,12 @@ echo   AgentRoom - Starting Stack...
 echo ========================================
 echo.
 echo [1/5] Checking Docker Desktop...
-docker info >/dev/null 2>&1
+docker info >nul 2>&1
 if errorlevel 1 (
     echo [!] Starting Docker Desktop - waiting 35s...
     start "" "C:\Program Files\Docker\Docker\Docker Desktop.exe"
-    timeout /t 35 /nobreak >/dev/null
-    docker info >/dev/null 2>&1
+    timeout /t 35 /nobreak >nul
+    docker info >nul 2>&1
     if errorlevel 1 (
         echo [ERROR] Docker failed to start. Please start manually.
         pause & exit /b 1
@@ -22,7 +22,7 @@ if errorlevel 1 (
 echo [OK] Docker running.
 echo.
 echo [2/5] Checking Supabase on port 54321...
-powershell -Command "try{(New-Object Net.Sockets.TcpClient('127.0.0.1',54321)).Close();exit 0}catch{exit 1}" >/dev/null 2>&1
+powershell -Command "try{(New-Object Net.Sockets.TcpClient('127.0.0.1',54321)).Close();exit 0}catch{exit 1}" >nul 2>&1
 if errorlevel 1 (
     echo [!] Starting Supabase...
     supabase start
@@ -37,23 +37,46 @@ if errorlevel 1 (
 )
 echo.
 echo [4/5] Starting web server...
-echo [!] Clearing stale Next.js dev cache...
-powershell -NoProfile -Command "if (Test-Path -LiteralPath 'apps\web\.next') { Remove-Item -LiteralPath 'apps\web\.next' -Recurse -Force }"
-start "AgentRoom Web" cmd /k "cd /d %~dp0 && pnpm --filter web dev"
-timeout /t 6 /nobreak >/dev/null
+powershell -NoProfile -Command "try { $r=Invoke-WebRequest -Uri 'http://localhost:3000/api/health' -UseBasicParsing -TimeoutSec 3; if ($r.StatusCode -eq 200) { exit 0 } } catch {}; exit 1" >nul 2>&1
+if errorlevel 1 (
+    echo [!] No healthy web server detected; clearing any stale port 3000 listener...
+    powershell -NoProfile -Command "$listeners=Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue; foreach ($listener in $listeners) { Stop-Process -Id $listener.OwningProcess -Force -ErrorAction SilentlyContinue }"
+    echo [!] Clearing stale Next.js dev cache...
+    powershell -NoProfile -Command "if (Test-Path -LiteralPath 'apps\web\.next') { Remove-Item -LiteralPath 'apps\web\.next' -Recurse -Force }"
+    start "AgentRoom Web" cmd /k "cd /d %~dp0 && pnpm --filter web dev"
+) else (
+    echo [OK] Web server already healthy on port 3000.
+)
+powershell -NoProfile -Command "$deadline=(Get-Date).AddSeconds(45); do { try { $r=Invoke-WebRequest -Uri 'http://localhost:3000/api/health' -UseBasicParsing -TimeoutSec 3; if ($r.StatusCode -eq 200) { exit 0 } } catch {}; Start-Sleep -Seconds 1 } while ((Get-Date) -lt $deadline); exit 1"
+if errorlevel 1 (
+    echo [!] Web server became unhealthy during startup; restarting cleanly...
+    powershell -NoProfile -Command "$listeners=Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue; foreach ($listener in $listeners) { Stop-Process -Id $listener.OwningProcess -Force -ErrorAction SilentlyContinue }; if (Test-Path -LiteralPath 'apps\web\.next') { Remove-Item -LiteralPath 'apps\web\.next' -Recurse -Force }"
+    start "AgentRoom Web" cmd /k "cd /d %~dp0 && pnpm --filter web dev"
+    powershell -NoProfile -Command "$deadline=(Get-Date).AddSeconds(45); do { try { $r=Invoke-WebRequest -Uri 'http://localhost:3000/api/health' -UseBasicParsing -TimeoutSec 3; if ($r.StatusCode -eq 200) { exit 0 } } catch {}; Start-Sleep -Seconds 1 } while ((Get-Date) -lt $deadline); exit 1"
+    if errorlevel 1 (
+        echo [ERROR] Web server did not become ready at http://localhost:3000.
+        pause & exit /b 1
+    )
+)
 echo.
 echo [5/5] Starting bridge daemon...
-start "AgentRoom Bridge" cmd /k "cd /d %~dp0 && pnpm --filter bridge dev"
-timeout /t 4 /nobreak >/dev/null
+powershell -NoProfile -Command "$root=(Resolve-Path '.').Path; $bridge=Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and (($_.Name -eq 'cmd.exe' -and $_.CommandLine -like '*pnpm --filter bridge dev*' -and $_.CommandLine -like ('*' + $root + '*')) -or ($_.Name -eq 'node.exe' -and $_.CommandLine -like ('*' + $root + '*bridge*tsx*watch src/index.ts*'))) }; if ($bridge) { exit 0 } else { exit 1 }" >nul 2>&1
+if errorlevel 1 (
+    start "AgentRoom Bridge" cmd /k "cd /d %~dp0 && pnpm --filter bridge dev"
+    timeout /t 4 /nobreak >nul
+) else (
+    echo [OK] Bridge daemon already running.
+)
 echo.
 echo [OK] Opening browser...
-start http://localhost:3000
+start http://localhost:3000/auth
 echo.
 echo ========================================
 echo   AgentRoom is running!
-echo   http://localhost:3000
+echo   http://localhost:3000/auth
 echo   Supabase Studio: http://127.0.0.1:54323
 echo   Close "AgentRoom Web" and
 echo   "AgentRoom Bridge" windows to stop.
 echo ========================================
-pause >/dev/null
+pause >nul
+exit /b 0
