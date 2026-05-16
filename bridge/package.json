@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "dev":       "tsx watch src/index.ts",
+    "test":      "tsx --test test/**/*.test.ts",
     "typecheck": "tsc --noEmit",
     "lint":      "tsc --noEmit"
   },

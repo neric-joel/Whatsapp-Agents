@@ -1,5 +1,5 @@
 import { SubprocessAdapter } from './subprocess-adapter.js'
-import type { ContextPacketV1 } from '@agentroom/shared'
+import type { AgentEvent, ContextPacketV1, SenderType } from '@agentroom/shared'
 
 export class CodexCliAdapter extends SubprocessAdapter {
   readonly name = 'codex-cli'
@@ -9,8 +9,72 @@ export class CodexCliAdapter extends SubprocessAdapter {
   }
 
   protected buildArgs(_packet: ContextPacketV1): string[] {
-    return ['--json']
+    return ['exec', '--json', '-']
   }
 
   protected envVarName(): string { return 'CODEX_BIN' }
+
+  protected buildStdin(packet: ContextPacketV1): string {
+    const history = packet.recent_messages
+      .map((message) => `${this.senderLabel(message.sender_type)}: ${message.content}`)
+      .join('\n')
+
+    return `You are ${packet.agent.name}, a coding assistant.
+Room: ${packet.room.name}
+
+Conversation history:
+${history}
+
+Respond helpfully and concisely as ${packet.agent.name}.`
+  }
+
+  protected parseStdoutLine(line: string): AgentEvent | null {
+    let obj: Record<string, unknown>
+
+    try {
+      obj = JSON.parse(line) as Record<string, unknown>
+    } catch {
+      return { type: 'visible_message', run_id: '', content: line }
+    }
+
+    const content = this.extractMessageContent(obj)
+    if (content) {
+      return { type: 'visible_message', run_id: '', content }
+    }
+
+    return null
+  }
+
+  private senderLabel(senderType: SenderType): string {
+    if (senderType === 'user') return 'User'
+    if (senderType === 'system') return 'System'
+    return 'Agent'
+  }
+
+  private extractMessageContent(event: Record<string, unknown>): string | null {
+    if (this.isMessageEvent(event)) {
+      return this.contentFromRecord(event)
+    }
+
+    const item = event.item
+    if (this.isRecord(item) && this.isMessageEvent(item)) {
+      return this.contentFromRecord(item)
+    }
+
+    return null
+  }
+
+  private isMessageEvent(event: Record<string, unknown>): boolean {
+    return event.type === 'message' || event.type === 'agent_message'
+  }
+
+  private contentFromRecord(record: Record<string, unknown>): string | null {
+    if (typeof record.content === 'string') return record.content
+    if (typeof record.text === 'string') return record.text
+    return null
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value)
+  }
 }
