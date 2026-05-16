@@ -37,7 +37,7 @@ if errorlevel 1 (
 )
 echo.
 echo [4/5] Starting web server...
-powershell -NoProfile -Command "try { $health=Invoke-WebRequest -Uri 'http://localhost:3000/api/health' -UseBasicParsing -TimeoutSec 3; if ($health.StatusCode -ne 200) { exit 1 }; $roomsOk=$false; try { Invoke-WebRequest -Uri 'http://localhost:3000/api/rooms' -Method POST -ContentType 'application/json' -Body '{\"name\":\"readiness\"}' -UseBasicParsing -TimeoutSec 3 | Out-Null } catch { if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 401) { $roomsOk=$true } }; if ($roomsOk) { exit 0 } } catch {}; exit 1" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\check-web-ready.ps1" >nul 2>&1
 if errorlevel 1 (
     echo [!] No fully healthy web server detected; clearing any stale port 3000 listener...
     powershell -NoProfile -Command "$listeners=Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue; foreach ($listener in $listeners) { Stop-Process -Id $listener.OwningProcess -Force -ErrorAction SilentlyContinue }"
@@ -47,12 +47,12 @@ if errorlevel 1 (
 ) else (
     echo [OK] Web server already healthy on port 3000.
 )
-powershell -NoProfile -Command "$deadline=(Get-Date).AddSeconds(45); do { try { $r=Invoke-WebRequest -Uri 'http://localhost:3000/api/health' -UseBasicParsing -TimeoutSec 3; if ($r.StatusCode -eq 200) { exit 0 } } catch {}; Start-Sleep -Seconds 1 } while ((Get-Date) -lt $deadline); exit 1"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$deadline=(Get-Date).AddSeconds(45); do { & '.\scripts\check-web-ready.ps1'; if ($LASTEXITCODE -eq 0) { exit 0 }; Start-Sleep -Seconds 1 } while ((Get-Date) -lt $deadline); exit 1"
 if errorlevel 1 (
     echo [!] Web server became unhealthy during startup; restarting cleanly...
     powershell -NoProfile -Command "$listeners=Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue; foreach ($listener in $listeners) { Stop-Process -Id $listener.OwningProcess -Force -ErrorAction SilentlyContinue }; if (Test-Path -LiteralPath 'apps\web\.next') { Remove-Item -LiteralPath 'apps\web\.next' -Recurse -Force }"
     start "AgentRoom Web" cmd /k "cd /d %~dp0 && pnpm --filter web dev"
-    powershell -NoProfile -Command "$deadline=(Get-Date).AddSeconds(45); do { try { $r=Invoke-WebRequest -Uri 'http://localhost:3000/api/health' -UseBasicParsing -TimeoutSec 3; if ($r.StatusCode -eq 200) { exit 0 } } catch {}; Start-Sleep -Seconds 1 } while ((Get-Date) -lt $deadline); exit 1"
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "$deadline=(Get-Date).AddSeconds(45); do { & '.\scripts\check-web-ready.ps1'; if ($LASTEXITCODE -eq 0) { exit 0 }; Start-Sleep -Seconds 1 } while ((Get-Date) -lt $deadline); exit 1"
     if errorlevel 1 (
         echo [ERROR] Web server did not become ready at http://localhost:3000.
         pause & exit /b 1
