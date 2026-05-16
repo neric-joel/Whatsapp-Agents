@@ -205,7 +205,7 @@ export default function LeftSidebar() {
       <div key={room.id} className="group relative mx-2 flex items-center gap-1">
         <Link
           href={`/rooms/${room.id}`}
-          className={`min-w-0 flex-1 truncate rounded-md px-3 py-2 text-sm transition-colors ${
+          className={`min-w-0 flex-1 truncate rounded-md px-3 py-2 text-sm transition-[background-color,color,transform] duration-150 hover:scale-[1.01] ${
             isActive
               ? 'bg-white/20 font-semibold text-white'
               : 'text-white/90 hover:bg-white/10 hover:text-white'
@@ -266,7 +266,7 @@ export default function LeftSidebar() {
   }
 
   return (
-    <aside className="w-[260px] flex-shrink-0 h-full bg-[#4A154B] flex flex-col">
+    <aside className="w-[260px] flex-shrink-0 h-full bg-gradient-to-b from-[#18181b] to-[#111113] flex flex-col">
       <div className="p-4 pb-2">
         <span className="text-base font-bold text-white">AgentRoom</span>
       </div>

@@ -1,5 +1,7 @@
 'use client'
 
+import { getProviderStyle } from '@/lib/provider-styles'
+
 type RunStatus = 'queued' | 'running' | 'completed' | 'failed'
 
 function initials(name: string) {
@@ -40,18 +42,20 @@ const statusClass: Record<RunStatus, string> = {
 export default function AgentRunCard({ run, onRetry }: AgentRunCardProps) {
   const { status, agents } = run
   const error = run.error ?? run.error_message
+  const providerStyle = getProviderStyle(agents?.provider)
+  const isThinking = status === 'queued' || status === 'running'
 
   return (
-    <div className="mx-5 my-2 rounded-xl border border-gray-100 bg-[#F8F8F8] px-4 py-3">
+    <div className={`mx-5 my-2 rounded-xl border border-gray-100 bg-[#F8F8F8] px-4 py-3 transition-shadow ${status === 'running' ? providerStyle.glow : ''}`}>
       <div className="flex items-start gap-3">
-        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-purple-700">
-          <span className="text-[11px] font-semibold text-white">
+        <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border ${providerStyle.bubble} ${providerStyle.border}`}>
+          <span className="text-[11px] font-semibold text-zinc-100">
             {agents ? initials(agents.name) : 'AG'}
           </span>
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-3">
-            <span className="truncate text-sm font-medium text-purple-700">
+            <span className={`truncate text-sm font-medium ${providerStyle.nameColor}`}>
               {agents?.name ?? 'Agent'}
             </span>
             <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${statusClass[status]}`}>
@@ -59,21 +63,20 @@ export default function AgentRunCard({ run, onRetry }: AgentRunCardProps) {
             </span>
           </div>
           <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
-            {status === 'running' ? (
+            {isThinking ? (
               <>
-                <span>Thinking</span>
-                <span className="flex gap-1">
+                <span>{status === 'queued' ? 'Waiting to respond' : 'Thinking'}</span>
+                <span className="flex gap-1" aria-hidden="true">
                   {[0, 1, 2].map((i) => (
-                    <span
+                    <div
                       key={i}
-                      className="h-1 w-1 rounded-full bg-purple-500 animate-pulse"
-                      style={{ animationDelay: `${i * 0.15}s` }}
+                      className={`thinking-dot h-1.5 w-1.5 rounded-full ${providerStyle.dot}`}
                     />
                   ))}
                 </span>
               </>
             ) : (
-              <span>{status === 'queued' ? 'Waiting to respond' : statusLabel[status]}</span>
+              <span>{statusLabel[status]}</span>
             )}
           </div>
           {status === 'failed' && error && (

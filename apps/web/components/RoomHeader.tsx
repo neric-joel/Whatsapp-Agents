@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { getProviderStyle } from '@/lib/provider-styles'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 interface Props {
@@ -37,6 +38,7 @@ export default function RoomHeader({ roomId }: Props) {
   const [busyMemberId, setBusyMemberId] = useState<string | null>(null)
 
   useEffect(() => {
+    let cancelled = false
     const supabase = createSupabaseBrowserClient()
     Promise.all([
       supabase.from('rooms').select('name').eq('id', roomId).single(),
@@ -45,10 +47,24 @@ export default function RoomHeader({ roomId }: Props) {
         .select('id', { count: 'exact', head: true })
         .eq('room_id', roomId)
         .eq('member_type', 'agent'),
-    ]).then(([roomRes, membersRes]) => {
+      fetch(`/api/rooms/${roomId}/members`)
+        .then((res) => res.json().catch(() => ({})))
+        .catch(() => ({})) as Promise<{
+          ok?: boolean
+          data?: RoomAgentMember[]
+        }>,
+    ]).then(([roomRes, membersRes, roomMembersRes]) => {
+      if (cancelled) return
       if (roomRes.data) setRoomName((roomRes.data as { name: string }).name)
       if (membersRes.count != null) setAgentCount(membersRes.count)
+      if (roomMembersRes.ok && roomMembersRes.data) {
+        setMembers(roomMembersRes.data)
+        setAgentCount(roomMembersRes.data.length)
+      }
     })
+    return () => {
+      cancelled = true
+    }
   }, [roomId])
 
   function selectFirstAvailableAgent(nextAgents: AgentSummary[], nextMembers: RoomAgentMember[]) {
@@ -178,13 +194,31 @@ export default function RoomHeader({ roomId }: Props) {
 
   const currentAgentIds = new Set(members.map((member) => member.agent_id))
   const availableAgents = agents.filter((agent) => !currentAgentIds.has(agent.id))
+  const activeAgentMembers = members.filter((member) => !member.muted && member.agent.is_active)
 
   return (
-    <header className="relative flex h-14 flex-shrink-0 items-center border-b border-gray-200 bg-white px-4 py-3">
-      <div className="flex min-w-0 flex-1 items-center gap-3">
-        <h1 className="truncate text-lg font-semibold text-gray-900"># {roomName ?? '...'}</h1>
-        <span className="h-5 w-px bg-gray-200" aria-hidden="true" />
-        <span className="text-sm text-gray-500">{agentCount} agents</span>
+    <header className="relative flex min-h-[72px] flex-shrink-0 items-center border-b border-gray-200 bg-white px-4 py-3">
+      <div className="flex min-w-0 flex-1 flex-col gap-1 pr-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <h1 className="truncate text-lg font-semibold text-gray-900"># {roomName ?? '...'}</h1>
+          <span className="h-5 w-px bg-gray-200" aria-hidden="true" />
+          <span className="text-sm text-gray-500">{agentCount} agents</span>
+        </div>
+        <div className="flex min-h-4 items-center gap-1.5" aria-label="Active agents">
+          {activeAgentMembers.slice(0, 10).map((member) => {
+            const providerStyle = getProviderStyle(member.agent.provider)
+            return (
+              <span
+                key={member.id}
+                className={`h-2.5 w-2.5 rounded-full ring-2 ring-white ${providerStyle.dot}`}
+                title={member.agent.name}
+              />
+            )
+          })}
+          {activeAgentMembers.length > 10 && (
+            <span className="text-xs font-medium text-gray-400">+{activeAgentMembers.length - 10}</span>
+          )}
+        </div>
       </div>
 
       <button
@@ -201,7 +235,7 @@ export default function RoomHeader({ roomId }: Props) {
       </button>
 
       {panelOpen && (
-        <div className="absolute right-4 top-14 z-50 w-[360px] max-w-[calc(100vw-2rem)] border border-gray-200 bg-white shadow-xl">
+        <div className="absolute right-4 top-[72px] z-50 w-[360px] max-w-[calc(100vw-2rem)] border border-gray-200 bg-white shadow-xl">
           <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-3 py-2">
             <span className="text-sm font-semibold text-gray-900">Agents</span>
             <button

@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react'
 import { useToast } from '@/contexts/ToastContext'
 import { extractHallucination } from '@/lib/hallucination-detector'
 import { DELETED_MESSAGE_CONTENT } from '@/lib/message-management'
+import { getProviderStyle } from '@/lib/provider-styles'
 import HallucinationBanner from './HallucinationBanner'
 
 function formatTime(ts: string) {
@@ -61,9 +62,12 @@ export default function MessageBubble({
   const hallucinationMeta = sender_type === 'agent' ? extractHallucination(metadata ?? {}) : null
   const hallucinationState =
     metadata?.hallucination && typeof metadata.hallucination === 'object'
-      ? metadata.hallucination as { accepted?: boolean }
+      ? metadata.hallucination as { accepted?: boolean; flagged?: boolean }
       : null
   const isHallucinationRejected = hallucinationState?.accepted === false
+  const showHallucinationBanner = Boolean(
+    hallucinationState?.flagged && !hallucinationState.accepted && hallucinationMeta,
+  )
 
   async function handleCopy() {
     try {
@@ -146,28 +150,31 @@ export default function MessageBubble({
   )
 
   if (sender_type === 'agent') {
+    const providerStyle = getProviderStyle(agents?.provider)
+
     return (
-      <div className="group flex flex-row items-start gap-3 px-5 py-2">
-        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-purple-700">
-          <span className="text-[11px] font-semibold text-white">
+      <div className="group flex animate-message-in flex-row items-start gap-3 px-5 py-2">
+        <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border ${providerStyle.bubble} ${providerStyle.border}`}>
+          <span className="text-[11px] font-semibold text-zinc-100">
             {agents ? initials(agents.name) : 'AG'}
           </span>
         </div>
         <div className="flex max-w-[72%] flex-col">
           <div className="mb-1 flex items-center gap-2">
-            <span className="text-xs font-semibold text-purple-700">
+            <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${providerStyle.nameColor}`}>
+              <span className={`h-1 w-1 rounded-full ${providerStyle.dot}`} aria-hidden="true" />
               {agents?.name ?? 'Agent'}
             </span>
             <span className="text-xs text-gray-400">{formatTime(created_at)}</span>
           </div>
-          <div className={`rounded-2xl border border-gray-100 bg-white px-4 py-3 text-sm leading-6 text-gray-900 shadow-sm ${isHallucinationRejected ? 'line-through decoration-yellow-700 decoration-2' : ''}`}>
+          <div className={`rounded-2xl border px-4 py-3 text-sm leading-6 text-zinc-100 shadow-sm ${providerStyle.bubble} ${providerStyle.border} ${isHallucinationRejected ? 'line-through decoration-yellow-500 decoration-2' : ''}`}>
             {isDeleted ? (
-              <span className="italic text-gray-400">{DELETED_MESSAGE_CONTENT}</span>
+              <span className="italic text-zinc-500">{DELETED_MESSAGE_CONTENT}</span>
             ) : (
               content
             )}
           </div>
-          {hallucinationMeta && !hallucinationState?.accepted && (
+          {showHallucinationBanner && hallucinationMeta && (
             <HallucinationBanner
               meta={hallucinationMeta}
               messageId={message.id}
@@ -185,7 +192,7 @@ export default function MessageBubble({
 
   if (sender_type === 'user') {
     return (
-      <div className="group flex flex-row items-start justify-end gap-3 px-5 py-2">
+      <div className="group flex animate-message-in flex-row items-start justify-end gap-3 px-5 py-2">
         <div className="flex max-w-[72%] flex-col items-end">
           <div className={`rounded-2xl px-4 py-3 text-sm leading-6 ${isDeleted ? 'bg-gray-50 text-gray-400' : 'bg-purple-700 text-white'}`}>
             {isDeleted ? (
@@ -208,7 +215,7 @@ export default function MessageBubble({
   }
 
   return (
-    <div className="flex justify-center px-5 py-3">
+    <div className="flex animate-message-in justify-center px-5 py-3">
       <span className="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-500">{content}</span>
     </div>
   )

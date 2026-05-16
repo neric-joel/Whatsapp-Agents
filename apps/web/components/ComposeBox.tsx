@@ -232,7 +232,7 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
           </button>
         </div>
       )}
-      <div className="relative flex items-end gap-3">
+      <div className="relative flex items-end gap-3 rounded-2xl transition focus-within:ring-2 focus-within:ring-[#8b5cf6]/20">
         {showDropdown && (
           <ul
             ref={dropdownRef}
