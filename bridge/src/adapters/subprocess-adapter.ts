@@ -101,15 +101,6 @@ export abstract class SubprocessAdapter implements AgentAdapter {
 
     const rawOutput = stdoutLines.join('\n').trim()
 
-    if (exitCode !== null && exitCode !== 0) {
-      const stderr = stderrLines.join('\n').trim()
-      yield {
-        type: 'error', run_id: packet.run_id,
-        message: `Process exited with code ${exitCode}. Stderr: ${stderr || '(empty)'}`,
-      }
-      return
-    }
-
     let finalResponseSeen = false
     const visibleMessages: string[] = []
 
@@ -119,6 +110,16 @@ export abstract class SubprocessAdapter implements AgentAdapter {
       if (event.type === 'final_response') finalResponseSeen = true
       if (event.type === 'visible_message') visibleMessages.push(event.content)
       if (event.type === 'error') return
+    }
+
+    if (exitCode !== null && exitCode !== 0 && !finalResponseSeen) {
+      const stderr = stderrLines.join('\n').trim()
+      const detail = stderr || rawOutput || '(no output)'
+      yield {
+        type: 'error', run_id: packet.run_id,
+        message: `Process exited with code ${exitCode}. Output: ${detail}`,
+      }
+      return
     }
 
     if (!finalResponseSeen && visibleMessages.length > 0) {
