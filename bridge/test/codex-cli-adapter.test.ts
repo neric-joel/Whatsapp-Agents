@@ -110,17 +110,48 @@ test('codex adapter invokes codex exec with JSONL stdin mode', () => {
   assert.deepEqual(adapter.args(packet), ['exec', '--json', '-'])
 })
 
-test('codex adapter builds a natural language prompt from the packet', () => {
+test('codex adapter builds a prompt that highlights the current user message', () => {
   const adapter = new TestCodexCliAdapter()
   const prompt = adapter.stdin(packet)
 
-  assert.match(prompt, /^You are CodexAgent, a coding assistant\./)
-  assert.match(prompt, /Room: Dev Room/)
-  assert.match(prompt, /Conversation history:/)
+  assert.match(prompt, /^You are CodexAgent, a coding assistant in the room "Dev Room"\./)
+  assert.match(prompt, /Conversation so far:/)
   assert.match(prompt, /Agent: Previous reply/)
-  assert.match(prompt, /User: Please fix this/)
-  assert.match(prompt, /Respond helpfully and concisely as CodexAgent\./)
+  assert.match(prompt, /-----\nCURRENT MESSAGE YOU MUST RESPOND TO:\nPlease fix this\n-----/)
+  assert.match(prompt, /Respond directly and specifically to the CURRENT MESSAGE above as CodexAgent\./)
   assert.throws(() => JSON.parse(prompt))
+})
+
+test('codex adapter omits conversation section when there is no prior history', () => {
+  const adapter = new TestCodexCliAdapter()
+  const prompt = adapter.stdin({
+    ...packet,
+    recent_messages: [packet.recent_messages[1]],
+  })
+
+  assert.doesNotMatch(prompt, /Conversation so far:/)
+  assert.match(prompt, /CURRENT MESSAGE YOU MUST RESPOND TO:\nPlease fix this/)
+})
+
+test('codex adapter uses the last user message as the current message', () => {
+  const adapter = new TestCodexCliAdapter()
+  const prompt = adapter.stdin({
+    ...packet,
+    recent_messages: [
+      ...packet.recent_messages,
+      {
+        id: 'msg-3',
+        content: 'Trailing agent response',
+        sender_type: 'agent',
+        sender_agent_id: 'agent-2',
+        created_at: '2026-05-15T00:02:00.000Z',
+        metadata: {},
+      },
+    ],
+  })
+
+  assert.match(prompt, /CURRENT MESSAGE YOU MUST RESPOND TO:\nPlease fix this/)
+  assert.doesNotMatch(prompt, /CURRENT MESSAGE YOU MUST RESPOND TO:\nTrailing agent response/)
 })
 
 test('codex adapter parses actual codex agent_message JSONL events', () => {
