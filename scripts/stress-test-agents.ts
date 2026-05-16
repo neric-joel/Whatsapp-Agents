@@ -18,6 +18,11 @@ type Agent = {
   slug: string
 }
 
+type SelectedProblem = {
+  problemIndex: number
+  problem: Problem
+}
+
 type Room = {
   id: string
   name: string
@@ -161,21 +166,44 @@ function createServiceClientFromBridgeEnv(): SupabaseClient {
   })
 }
 
-async function findOrCreateRoom(supabase: SupabaseClient, testUserId: string): Promise<Room> {
+export function buildStressRoomName({
+  prefix,
+  fresh,
+}: {
+  prefix: string
+  fresh: boolean
+}): string {
+  return fresh ? `${prefix} - ${new Date().toISOString()}` : prefix
+}
+
+async function findOrCreateRoom(
+  supabase: SupabaseClient,
+  testUserId: string,
+  roomName: string,
+  fresh: boolean,
+): Promise<Room> {
+  if (fresh) {
+    return insertRoom(supabase, testUserId, roomName)
+  }
+
   const { data: existingRoom, error: findError } = await supabase
     .from('rooms')
     .select('id, name')
-    .eq('name', ROOM_NAME)
+    .eq('name', roomName)
     .limit(1)
     .maybeSingle()
 
   if (findError) throw new Error(`Failed to find stress test room: ${findError.message}`)
   if (existingRoom) return existingRoom as Room
 
+  return insertRoom(supabase, testUserId, roomName)
+}
+
+async function insertRoom(supabase: SupabaseClient, testUserId: string, roomName: string): Promise<Room> {
   const { data: insertedRoom, error: insertError } = await supabase
     .from('rooms')
     .insert({
-      name: ROOM_NAME,
+      name: roomName,
       room_type: 'group',
       reply_mode: 'everyone',
       max_agent_rounds: 3,
@@ -183,6 +211,7 @@ async function findOrCreateRoom(supabase: SupabaseClient, testUserId: string): P
     })
     .select('id, name')
     .single()
+
 
   if (insertError || !insertedRoom) {
     throw new Error(`Failed to create stress test room: ${insertError?.message ?? 'no row returned'}`)
@@ -204,6 +233,21 @@ async function getActiveAgents(supabase: SupabaseClient): Promise<Agent[]> {
   if (agents.length === 0) throw new Error('No active agents found')
 
   return filterAgentsForStress(agents, process.env.STRESS_AGENT_SLUGS)
+}
+
+export function assertRequiredAgents(agents: Agent[], rawRequiredSlugs: string | undefined): void {
+  if (!rawRequiredSlugs) return
+
+  const agentSlugs = new Set(agents.map((agent) => agent.slug))
+  const missingSlugs = rawRequiredSlugs
+    .split(',')
+    .map((slug) => slug.trim())
+    .filter(Boolean)
+    .filter((slug) => !agentSlugs.has(slug))
+
+  if (missingSlugs.length > 0) {
+    throw new Error(`Missing required active agents: ${missingSlugs.join(', ')}`)
+  }
 }
 
 export function filterAgentsForStress(agents: Agent[], rawSlugs: string | undefined): Agent[] {
@@ -452,14 +496,42 @@ function parseTimeoutMs(): number {
   return timeoutMs
 }
 
+export function selectProblemsForStress(problems: Problem[], rawIndexes: string | undefined): SelectedProblem[] {
+  if (!rawIndexes) {
+    return problems.map((problem, problemIndex) => ({ problemIndex, problem }))
+  }
+
+  const selected = rawIndexes
+    .split(',')
+    .map((index) => index.trim())
+    .filter(Boolean)
+    .map((index) => Number(index))
+    .map((problemIndex) => {
+      if (!Number.isInteger(problemIndex) || problemIndex < 0 || problemIndex >= problems.length) {
+        throw new Error(`Invalid STRESS_PROBLEM_INDEXES entry: ${problemIndex}`)
+      }
+      return { problemIndex, problem: problems[problemIndex] }
+    })
+
+  if (selected.length === 0) throw new Error('STRESS_PROBLEM_INDEXES did not select any problems')
+
+  return selected
+}
+
 async function main(): Promise<void> {
   const supabase = createServiceClientFromBridgeEnv()
   const timeoutMs = parseTimeoutMs()
   const stressRunId = crypto.randomUUID()
   const testUserId = await findTestUserId(supabase)
-  const room = await findOrCreateRoom(supabase, testUserId)
+  const roomName = buildStressRoomName({
+    prefix: process.env.STRESS_ROOM_NAME_PREFIX ?? ROOM_NAME,
+    fresh: process.env.STRESS_CREATE_FRESH_ROOM === 'true',
+  })
+  const room = await findOrCreateRoom(supabase, testUserId, roomName, process.env.STRESS_CREATE_FRESH_ROOM === 'true')
   const agents = await getActiveAgents(supabase)
+  assertRequiredAgents(agents, process.env.STRESS_REQUIRED_AGENT_SLUGS)
   await ensureAgentRoomMembers(supabase, room.id, agents)
+  const selectedProblems = selectProblemsForStress(PROBLEMS, process.env.STRESS_PROBLEM_INDEXES)
 
   const allResults: AgentRunResult[] = []
 
@@ -469,7 +541,7 @@ async function main(): Promise<void> {
   console.log(`Timeout per message: ${Math.round(timeoutMs / 1000)}s`)
   console.log('')
 
-  for (const [problemIndex, problem] of PROBLEMS.entries()) {
+  for (const { problemIndex, problem } of selectedProblems) {
     const message = await insertUserMessage(supabase, room.id, testUserId, problem, problemIndex, stressRunId)
     const initialRuns = await insertInitialAgentRuns(supabase, room.id, message.id, agents)
     const waitResult = await waitForRuns(
@@ -488,7 +560,7 @@ async function main(): Promise<void> {
     console.log('')
   }
 
-  console.log(formatSummary(PROBLEMS.length, allResults))
+  console.log(formatSummary(selectedProblems.length, allResults))
 }
 
 if (require.main === module) {

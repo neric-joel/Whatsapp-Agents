@@ -2,9 +2,12 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   PROBLEMS,
+  assertRequiredAgents,
   buildEvaluationPrompt,
+  buildStressRoomName,
   filterAgentsForStress,
   formatProblemReport,
+  selectProblemsForStress,
   summarizeProblemResults,
   type AgentRunResult,
   type Problem,
@@ -51,6 +54,34 @@ describe('stress test report helpers', () => {
     ]
 
     assert.deepEqual(filterAgentsForStress(agents, 'reviewer'), [agents[1]])
+  })
+
+  it('requires mandatory agent slugs before a main evaluation run', () => {
+    const agents = [
+      { id: 'a1', name: 'Claude Thinker', slug: 'claude_thinker' },
+      { id: 'a2', name: 'Codex Builder', slug: 'codex_builder' },
+      { id: 'a3', name: 'Reviewer', slug: 'reviewer' },
+    ]
+
+    assert.doesNotThrow(() => assertRequiredAgents(agents, 'claude_thinker,codex_builder'))
+    assert.throws(
+      () => assertRequiredAgents(agents, 'claude_thinker,missing_agent'),
+      /Missing required active agents: missing_agent/,
+    )
+  })
+
+  it('selects specific problem indexes for scheduled evaluations', () => {
+    const selected = selectProblemsForStress(PROBLEMS, '9,14')
+
+    assert.deepEqual(selected.map(({ problemIndex, problem }) => [problemIndex, problem.cat, problem.level]), [
+      [9, 'MATH', 'MEDIUM'],
+      [14, 'PHILOSOPHY', 'HARD'],
+    ])
+  })
+
+  it('builds a fresh room name when requested', () => {
+    assert.match(buildStressRoomName({ prefix: 'Scheduled Eval', fresh: true }), /^Scheduled Eval - \d{4}-\d{2}-\d{2}T/)
+    assert.equal(buildStressRoomName({ prefix: 'Scheduled Eval', fresh: false }), 'Scheduled Eval')
   })
 
   it('contains the full five-domain, four-tier evaluation bank', () => {
