@@ -65,7 +65,7 @@ function LoadingSkeleton() {
 
 export default function MessageTimeline({ roomId, refreshSignal, optimisticMessages = [], onReply }: Props) {
   const { messages, loading, refetch } = useMessages(roomId, refreshSignal)
-  const { runs } = useAgentRuns(roomId, refreshSignal)
+  const { runs, refetch: refetchRuns } = useAgentRuns(roomId, refreshSignal)
   const toolCalls = useToolCalls(roomId, refreshSignal)
   const [filesMap, setFilesMap] = useState<Record<string, FileRow>>({})
   const [currentUserName, setCurrentUserName] = useState<string | null>(null)
@@ -201,6 +201,11 @@ export default function MessageTimeline({ roomId, refreshSignal, optimisticMessa
     })
   }
 
+  async function handleCancelRun(runId: string) {
+    await fetch(`/api/agent-runs/${runId}/cancel`, { method: 'POST' })
+    refetchRuns()
+  }
+
   return (
     <div className="flex-1 overflow-y-auto bg-[var(--surface)]">
       <div className="min-h-full py-4">
@@ -214,7 +219,7 @@ export default function MessageTimeline({ roomId, refreshSignal, optimisticMessa
         )}
         {timelineEvents.map((event) => {
           if (event.type === 'run') {
-            return <AgentRunCard key={event.id} run={event.run} />
+            return <AgentRunCard key={event.id} run={event.run} onCancel={(runId) => { void handleCancelRun(runId) }} />
           }
 
           const msg = event.message

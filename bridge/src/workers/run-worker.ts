@@ -9,10 +9,19 @@ import { detectHallucination } from '../lib/hallucination.js'
 import { sanitizeAgentOutput } from '../lib/agent-output.js'
 import { maybeScheduleDiscussionContinuation } from '../lib/discussion-orchestrator.js'
 import { maybeScheduleAgentMentionFollowUps } from '../lib/agent-follow-up.js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 type DiscussionMode = 'independent' | 'tag_turns'
 
 const WORKER_ID = process.env.BRIDGE_WORKER_ID ?? 'bridge-local-1'
+const CANCEL_POLL_MS = 1000
+
+class RunCancelledError extends Error {
+  constructor() {
+    super('Run was cancelled.')
+    this.name = 'RunCancelledError'
+  }
+}
 
 interface AgentInfo {
   id: string
@@ -68,7 +77,17 @@ export async function processRun(runId: string): Promise<void> {
     log('info', 'run.start', { run_id: runId, agent_id: runRow.agent_id, room_id: runRow.room_id })
 
     // c. Update to running
-    await supabase.from('agent_runs').update({ status: 'running' }).eq('id', runId)
+    const { data: running } = await supabase
+      .from('agent_runs')
+      .update({ status: 'running' })
+      .eq('id', runId)
+      .eq('status', 'claimed')
+      .select('id')
+      .single()
+    if (!running) {
+      log('debug', 'run.skipped', { run_id: runId, reason: 'cancelled_before_running' })
+      return
+    }
 
     // d. Fetch trigger message
     const fallbackMsg = { id: runId, content: '(no trigger)', sender_type: 'user', created_at: new Date().toISOString(), metadata: {} as Record<string, unknown> }
@@ -103,71 +122,79 @@ export async function processRun(runId: string): Promise<void> {
     // g. Run adapter, collect final response
     const adapter = getAdapter(agentInfo.adapter_type ?? 'mock')
     const controller = new AbortController()
+    const stopCancellationWatcher = watchRunCancellation(supabase, runId, controller)
     let finalContent = ''
 
-    for await (const event of adapter.run(packet, controller.signal)) {
-      if (event.type === 'final_response') {
-        finalContent = event.response.content
-      } else if (event.type === 'error') {
-        throw new Error(event.message)
-      } else if (event.type === 'tool_call_requested') {
-        const requiresApproval = event.requires_approval
+    try {
+      for await (const event of adapter.run(packet, controller.signal)) {
+        if (event.type === 'final_response') {
+          finalContent = event.response.content
+        } else if (event.type === 'error') {
+          if (controller.signal.aborted) throw new RunCancelledError()
+          throw new Error(event.message)
+        } else if (event.type === 'tool_call_requested') {
+          const requiresApproval = event.requires_approval
 
-        const { data: tc } = await supabase.from('tool_calls').insert({
-          room_id: runRow.room_id,
-          run_id: runRow.id,
-          agent_id: agentInfo.id,
-          tool_name: event.tool_name,
-          tool_category: event.tool_category ?? null,
-          input_args: event.arguments,
-          status: requiresApproval ? 'waiting_approval' : 'queued',
-          requires_approval: requiresApproval,
-        }).select().single()
+          const { data: tc } = await supabase.from('tool_calls').insert({
+            room_id: runRow.room_id,
+            run_id: runRow.id,
+            agent_id: agentInfo.id,
+            tool_name: event.tool_name,
+            tool_category: event.tool_category ?? null,
+            input_args: event.arguments,
+            status: requiresApproval ? 'waiting_approval' : 'queued',
+            requires_approval: requiresApproval,
+          }).select().single()
 
-        if (tc) {
-          const commandArg = (event.arguments['command'] as string | undefined) ?? ''
-          if (isDeniedCommand(commandArg)) {
-            await supabase.from('tool_calls').update({
-              status: 'denied',
-              error: 'Command blocked by denylist',
-            }).eq('id', tc.id)
-            log('warn', 'tool.denied', { run_id: runId, tool_name: event.tool_name, reason: 'denylist' })
-            throw new Error('Command blocked by denylist')
+          if (tc) {
+            const commandArg = (event.arguments['command'] as string | undefined) ?? ''
+            if (isDeniedCommand(commandArg)) {
+              await supabase.from('tool_calls').update({
+                status: 'denied',
+                error: 'Command blocked by denylist',
+              }).eq('id', tc.id)
+              log('warn', 'tool.denied', { run_id: runId, tool_name: event.tool_name, reason: 'denylist' })
+              throw new Error('Command blocked by denylist')
+            }
           }
-        }
 
-        if (tc && requiresApproval) {
-          let finalStatus = 'failed'
-          log('info', 'tool.approval.waiting', { run_id: runId, tool_name: event.tool_name })
-          for (let i = 0; i < 15; i++) {
-            await new Promise<void>((r) => setTimeout(r, 2000))
-            const { data: updated } = await supabase.from('tool_calls').select('status').eq('id', tc.id).single()
-            if (updated?.status === 'approved') { finalStatus = 'approved'; break }
-            if (updated?.status === 'denied') { finalStatus = 'denied'; break }
-          }
-          if (finalStatus === 'approved') {
-            log('info', 'tool.approval.received', { run_id: runId, tool_name: event.tool_name, approved: true })
-            await supabase.from('tool_calls').update({ status: 'running' }).eq('id', tc.id)
-            const result = { ok: true, stdout: 'approved' }
+          if (tc && requiresApproval) {
+            let finalStatus = 'failed'
+            log('info', 'tool.approval.waiting', { run_id: runId, tool_name: event.tool_name })
+            for (let i = 0; i < 15; i++) {
+              if (controller.signal.aborted) throw new RunCancelledError()
+              await new Promise<void>((r) => setTimeout(r, 2000))
+              const { data: updated } = await supabase.from('tool_calls').select('status').eq('id', tc.id).single()
+              if (updated?.status === 'approved') { finalStatus = 'approved'; break }
+              if (updated?.status === 'denied') { finalStatus = 'denied'; break }
+            }
+            if (finalStatus === 'approved') {
+              log('info', 'tool.approval.received', { run_id: runId, tool_name: event.tool_name, approved: true })
+              await supabase.from('tool_calls').update({ status: 'running' }).eq('id', tc.id)
+              const result = { ok: true, stdout: 'approved' }
+              await supabase.from('tool_calls').update({ status: 'succeeded', output: redact(JSON.stringify(result)) }).eq('id', tc.id)
+            } else {
+              log(finalStatus === 'denied' ? 'info' : 'warn', finalStatus === 'denied' ? 'tool.approval.received' : 'tool.approval.timeout', {
+                run_id: runId,
+                tool_name: event.tool_name,
+                ...(finalStatus === 'denied' ? { approved: false } : {}),
+              })
+              await supabase.from('tool_calls').update({
+                status: finalStatus === 'denied' ? 'denied' : 'failed',
+                error: finalStatus === 'denied' ? null : 'approval timeout',
+              }).eq('id', tc.id)
+            }
+          } else if (tc) {
+            const result = { ok: true, stdout: 'executed' }
             await supabase.from('tool_calls').update({ status: 'succeeded', output: redact(JSON.stringify(result)) }).eq('id', tc.id)
-          } else {
-            log(finalStatus === 'denied' ? 'info' : 'warn', finalStatus === 'denied' ? 'tool.approval.received' : 'tool.approval.timeout', {
-              run_id: runId,
-              tool_name: event.tool_name,
-              ...(finalStatus === 'denied' ? { approved: false } : {}),
-            })
-            await supabase.from('tool_calls').update({
-              status: finalStatus === 'denied' ? 'denied' : 'failed',
-              error: finalStatus === 'denied' ? null : 'approval timeout',
-            }).eq('id', tc.id)
           }
-        } else if (tc) {
-          const result = { ok: true, stdout: 'executed' }
-          await supabase.from('tool_calls').update({ status: 'succeeded', output: redact(JSON.stringify(result)) }).eq('id', tc.id)
         }
       }
+    } finally {
+      stopCancellationWatcher()
     }
 
+    if (controller.signal.aborted) throw new RunCancelledError()
     if (!finalContent) throw new Error('Adapter produced no final_response')
 
     // h. Insert agent reply into messages
@@ -234,6 +261,14 @@ export async function processRun(runId: string): Promise<void> {
 
   } catch (err) {
     const message = redact(err instanceof Error ? err.message : String(err))
+    if (err instanceof RunCancelledError) {
+      await supabase
+        .from('agent_runs')
+        .update({ status: 'cancelled', error_message: message, completed_at: new Date().toISOString() })
+        .eq('id', runId)
+      log('warn', 'run.cancelled', { run_id: runId })
+      return
+    }
     await supabase
       .from('agent_runs')
       .update({ status: 'failed', error_message: message })
@@ -241,4 +276,31 @@ export async function processRun(runId: string): Promise<void> {
     log('error', 'run.failed', { run_id: runId, error: message })
     throw err
   }
+}
+
+function watchRunCancellation(
+  supabase: SupabaseClient,
+  runId: string,
+  controller: AbortController,
+): () => void {
+  const interval = setInterval(() => {
+    if (controller.signal.aborted) return
+
+    void (async () => {
+      try {
+        const { data } = await supabase
+          .from('agent_runs')
+          .select('status')
+          .eq('id', runId)
+          .single()
+        if ((data as { status?: string } | null)?.status === 'cancelled') {
+          controller.abort()
+        }
+      } catch {
+        // Best-effort cancellation watcher; the main run path owns error handling.
+      }
+    })()
+  }, CANCEL_POLL_MS)
+
+  return () => clearInterval(interval)
 }

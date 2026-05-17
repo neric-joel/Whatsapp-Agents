@@ -2,7 +2,7 @@
 
 import { getProviderStyle } from '@/lib/provider-styles'
 
-type RunStatus = 'queued' | 'running' | 'completed' | 'failed'
+type RunStatus = 'queued' | 'claimed' | 'running' | 'completed' | 'failed' | 'cancelled'
 
 function initials(name: string) {
   return name
@@ -23,27 +23,32 @@ export interface AgentRunCardProps {
     agents: { name: string; provider: string } | null
   }
   onRetry?: () => void
+  onCancel?: (runId: string) => void
 }
 
 const statusLabel: Record<RunStatus, string> = {
   queued: 'Queued',
+  claimed: 'Starting',
   running: 'Running',
   completed: 'Completed',
   failed: 'Failed',
+  cancelled: 'Cancelled',
 }
 
 const statusClass: Record<RunStatus, string> = {
   queued: 'bg-gray-200 text-gray-600',
+  claimed: 'bg-gray-200 text-gray-600',
   running: 'bg-purple-100 text-purple-700',
   completed: 'bg-green-100 text-green-700',
   failed: 'bg-red-100 text-red-700',
+  cancelled: 'bg-gray-200 text-gray-600',
 }
 
-export default function AgentRunCard({ run, onRetry }: AgentRunCardProps) {
+export default function AgentRunCard({ run, onRetry, onCancel }: AgentRunCardProps) {
   const { status, agents } = run
   const error = run.error ?? run.error_message
   const providerStyle = getProviderStyle(agents?.provider)
-  const isThinking = status === 'queued' || status === 'running'
+  const isThinking = status === 'queued' || status === 'claimed' || status === 'running'
 
   return (
     <div className={`mx-5 my-2 max-w-3xl rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-3 transition-shadow ${status === 'running' ? providerStyle.glow : ''}`}>
@@ -65,7 +70,7 @@ export default function AgentRunCard({ run, onRetry }: AgentRunCardProps) {
           <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
             {isThinking ? (
               <>
-                <span>{status === 'queued' ? 'Waiting to respond' : 'Thinking'}</span>
+                <span>{status === 'queued' ? 'Waiting to respond' : status === 'claimed' ? 'Starting' : 'Thinking'}</span>
                 <span className="flex gap-1" aria-hidden="true">
                   {[0, 1, 2].map((i) => (
                     <div
@@ -79,6 +84,15 @@ export default function AgentRunCard({ run, onRetry }: AgentRunCardProps) {
               <span>{statusLabel[status]}</span>
             )}
           </div>
+          {isThinking && onCancel && (
+            <button
+              type="button"
+              onClick={() => onCancel(run.id)}
+              className="mt-2 rounded-md border border-red-200 px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50"
+            >
+              Stop
+            </button>
+          )}
           {status === 'failed' && error && (
             <p className="mt-2 line-clamp-2 text-xs text-red-600">{error}</p>
           )}

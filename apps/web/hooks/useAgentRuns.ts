@@ -4,7 +4,7 @@ import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 export interface DbAgentRun {
   id: string
-  status: 'queued' | 'running' | 'failed'
+  status: 'queued' | 'claimed' | 'running' | 'failed' | 'cancelled'
   agent_id: string
   trigger_msg_id: string | null
   error_message: string | null
@@ -26,7 +26,7 @@ export function useAgentRuns(roomId: string, refreshSignal?: number) {
       .from('agent_runs')
       .select('id, status, agent_id, trigger_msg_id, error_message, discussion_mode, deliberation_depth, deliberation_root_id, created_at, updated_at, agents(name, provider)')
       .eq('room_id', roomId)
-      .in('status', ['queued', 'running', 'failed'])
+      .in('status', ['queued', 'claimed', 'running', 'failed', 'cancelled'])
       .order('created_at', { ascending: true })
       .then(({ data }) => {
         setRuns((data as unknown as DbAgentRun[]) ?? [])
@@ -60,5 +60,5 @@ export function useAgentRuns(roomId: string, refreshSignal?: number) {
     return () => { void supabase.removeChannel(channel) }
   }, [roomId, fetchRuns])
 
-  return { runs, loading }
+  return { runs, loading, refetch: fetchRuns }
 }

@@ -1,7 +1,8 @@
 'use client'
-import { useState, useEffect, useRef, useMemo, KeyboardEvent, ChangeEvent } from 'react'
+import { useState, useEffect, useRef, useMemo, KeyboardEvent, ChangeEvent, ClipboardEvent } from 'react'
 import { useRooms } from '@/hooks/useRooms'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+import { getImageFilesFromClipboardItems } from '@/lib/pasted-files'
 import type { OptimisticMessage } from './MessageTimeline'
 
 interface Props {
@@ -104,10 +105,7 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
     textareaRef.current?.focus()
   }
 
-  async function handleFileSelect(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-
+  async function uploadAttachment(file: File) {
     setUploading(true)
     setFileError(null)
     try {
@@ -146,6 +144,19 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
     } finally {
       setUploading(false)
     }
+  }
+
+  async function handleFileSelect(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    await uploadAttachment(file)
+  }
+
+  function handlePaste(e: ClipboardEvent<HTMLTextAreaElement>) {
+    const [file] = getImageFilesFromClipboardItems(e.clipboardData?.items ?? null)
+    if (!file || uploading || sending) return
+    e.preventDefault()
+    void uploadAttachment(file.name ? file : new File([file], `pasted-screenshot-${Date.now()}.png`, { type: file.type || 'image/png' }))
   }
 
   async function submit() {
@@ -255,6 +266,7 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
           value={text}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder={`Message #${room?.name ?? '...'}...`}
           rows={1}
           className="max-h-32 min-h-[46px] flex-1 resize-none overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm text-[var(--text)] outline-none transition-shadow placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--focus-ring)]"
