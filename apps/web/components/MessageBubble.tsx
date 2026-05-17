@@ -39,7 +39,9 @@ export interface MessageBubbleProps {
   children?: ReactNode
   roomId: string
   currentUserName?: string | null
+  pinId?: string | null
   onPin?: (messageId: string, content: string) => void | Promise<void>
+  onUnpin?: (messageId: string, pinId: string) => void | Promise<void>
   onReply?: (message: MessageBubbleProps['message']) => void
   onDeleted?: () => void
   onHallucinationDismiss?: () => void
@@ -50,7 +52,9 @@ export default function MessageBubble({
   children,
   roomId,
   currentUserName,
+  pinId,
   onPin,
+  onUnpin,
   onReply,
   onDeleted,
   onHallucinationDismiss,
@@ -91,6 +95,16 @@ export default function MessageBubble({
     }
   }
 
+  async function handleUnpin() {
+    if (!onUnpin || !pinId) return
+    try {
+      await onUnpin(message.id, pinId)
+      showToast('Message unpinned', 'success')
+    } catch {
+      showToast('Failed to unpin message', 'error')
+    }
+  }
+
   async function handleDelete() {
     if (deleting) return
     setDeleting(true)
@@ -128,7 +142,15 @@ export default function MessageBubble({
           Reply
         </button>
       )}
-      {onPin && (
+      {pinId && onUnpin ? (
+        <button
+          type="button"
+          onClick={() => void handleUnpin()}
+          className="rounded-md px-2 py-1 text-[11px] font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
+        >
+          Unpin
+        </button>
+      ) : onPin ? (
         <button
           type="button"
           onClick={() => void handlePin()}
@@ -136,7 +158,7 @@ export default function MessageBubble({
         >
           Pin
         </button>
-      )}
+      ) : null}
       {sender_type === 'user' && !isDeleted && (
         <button
           type="button"

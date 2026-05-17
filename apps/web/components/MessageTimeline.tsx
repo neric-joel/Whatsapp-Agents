@@ -10,6 +10,7 @@ import AgentRunCard from './AgentRunCard'
 import ToolCallCard from './ToolCallCard'
 import FileAttachmentCard from './FileAttachmentCard'
 import { buildTimelineEvents } from '@/lib/timeline-events'
+import { applyPinnedItemChange, buildPinsByMessageId, removePinnedItemById, type PinMessageRow } from '@/lib/pins'
 
 export interface OptimisticMessage {
   id: string
@@ -32,6 +33,11 @@ interface FileRow {
   filename: string
   mime_type: string
   size_bytes: number
+}
+
+interface PinnedItemRow extends PinMessageRow {
+  room_id: string
+  sort_order: number
 }
 
 interface Props {
@@ -63,6 +69,7 @@ export default function MessageTimeline({ roomId, refreshSignal, optimisticMessa
   const toolCalls = useToolCalls(roomId, refreshSignal)
   const [filesMap, setFilesMap] = useState<Record<string, FileRow>>({})
   const [currentUserName, setCurrentUserName] = useState<string | null>(null)
+  const [pinsByMessageId, setPinsByMessageId] = useState<Record<string, string>>({})
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -98,6 +105,49 @@ export default function MessageTimeline({ roomId, refreshSignal, optimisticMessa
       })
   }, [messages, filesMap])
 
+  useEffect(() => {
+    let mounted = true
+
+    fetch(`/api/rooms/${roomId}/pins`)
+      .then(async (res) => {
+        const json = await res.json() as { ok: boolean; data?: PinnedItemRow[]; error?: { message?: string } }
+        if (!res.ok || !json.ok) throw new Error(json.error?.message ?? 'Failed to load pins')
+        return json.data ?? []
+      })
+      .then((pins) => {
+        if (mounted) setPinsByMessageId(buildPinsByMessageId(pins))
+      })
+      .catch(() => {
+        if (mounted) setPinsByMessageId({})
+      })
+
+    return () => { mounted = false }
+  }, [roomId])
+
+  useEffect(() => {
+    const supabase = createSupabaseBrowserClient()
+    const sub = supabase.channel(`timeline-pins:${roomId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'pinned_items',
+        filter: `room_id=eq.${roomId}`,
+      }, (payload) => {
+        if (payload.eventType === 'DELETE') {
+          const oldPin = payload.old as { id?: string }
+          const deletedPinId = oldPin.id
+          if (deletedPinId) setPinsByMessageId((prev) => removePinnedItemById(prev, deletedPinId))
+          return
+        }
+
+        const pin = payload.new as PinnedItemRow
+        setPinsByMessageId((prev) => applyPinnedItemChange(prev, pin))
+      })
+      .subscribe()
+
+    return () => { void sub.unsubscribe() }
+  }, [roomId])
+
   if (loading) {
     return (
       <div className="flex-1 overflow-y-auto bg-[var(--surface)]">
@@ -131,7 +181,24 @@ export default function MessageTimeline({ roomId, refreshSignal, optimisticMessa
         visibility: 'primary',
       }),
     })
-    if (!res.ok) throw new Error('Failed to pin message')
+    const json = await res.json().catch(() => null) as { ok?: boolean; data?: PinnedItemRow } | null
+    if (!res.ok || !json?.ok || !json.data) throw new Error('Failed to pin message')
+    const pin = json.data
+    setPinsByMessageId((prev) => applyPinnedItemChange(prev, pin))
+  }
+
+  async function handleUnpin(messageId: string, pinId: string) {
+    const res = await fetch(`/api/pins/${pinId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active: false }),
+    })
+    if (!res.ok) throw new Error('Failed to unpin message')
+    setPinsByMessageId((prev) => {
+      const next = { ...prev }
+      if (next[messageId] === pinId) delete next[messageId]
+      return next
+    })
   }
 
   return (
@@ -159,7 +226,9 @@ export default function MessageTimeline({ roomId, refreshSignal, optimisticMessa
               message={msg}
               roomId={roomId}
               currentUserName={currentUserName}
+              pinId={pinsByMessageId[msg.id] ?? null}
               onPin={handlePin}
+              onUnpin={handleUnpin}
               onReply={onReply}
               onDeleted={refetch}
               onHallucinationDismiss={refetch}
