@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import { log } from './lib/logger.js'
 import { createServiceClient } from './lib/supabase.js'
+import { recoverStaleRuns } from './lib/stale-runs.js'
 import { processRun } from './workers/run-worker.js'
 
 const WORKER_ID    = process.env.BRIDGE_WORKER_ID               ?? 'bridge-local-1'
@@ -8,6 +9,7 @@ const POLL_MS      = +(process.env.BRIDGE_POLL_INTERVAL_MS      ?? 2000)
 const MAX_CONC     = +(process.env.BRIDGE_MAX_CONCURRENT_RUNS   ?? 3)
 const HEARTBEAT_MS = +(process.env.BRIDGE_HEARTBEAT_INTERVAL_MS ?? 5000)
 const STALE_MS     = +(process.env.BRIDGE_STALE_RUN_TIMEOUT_MS  ?? 60000)
+const STALE_SWEEP_MS = Math.max(HEARTBEAT_MS, Math.min(STALE_MS, 30000))
 
 const activeRuns = new Set<string>()
 
@@ -35,23 +37,17 @@ async function pollOnce() {
   }
 }
 
-async function recoverStaleRuns() {
+async function recoverStaleRunsOnce(reason: string) {
   const supabase = createServiceClient()
-  const cutoff = new Date(Date.now() - STALE_MS).toISOString()
-  const { data: staleRuns } = await supabase
-    .from('agent_runs')
-    .select('id')
-    .in('status', ['claimed', 'running'])
-    .or(`heartbeat_at.is.null,heartbeat_at.lt.${cutoff}`)
-
-  for (const run of staleRuns ?? []) {
-    const runId = run.id as string
-    await supabase
-      .from('agent_runs')
-      .update({ status: 'failed', error_message: 'stale: recovered on startup' })
-      .eq('id', runId)
-    log('warn', 'run.stale.recovered', { run_id: runId })
-  }
+  const count = await recoverStaleRuns({
+    supabase,
+    staleMs: STALE_MS,
+    reason,
+    logRecovered: (runId) => {
+      log('warn', 'run.stale.recovered', { run_id: runId })
+    },
+  })
+  if (count > 0) log('warn', 'run.stale.recovery.complete', { count })
 }
 
 async function sendHeartbeat() {
@@ -68,10 +64,11 @@ async function sendHeartbeat() {
 }
 
 async function main() {
-  log('info', 'bridge.start', { poll_interval_ms: POLL_MS, max_concurrent: MAX_CONC })
-  await recoverStaleRuns()
+  log('info', 'bridge.start', { poll_interval_ms: POLL_MS, max_concurrent: MAX_CONC, stale_sweep_ms: STALE_SWEEP_MS })
+  await recoverStaleRunsOnce('stale: recovered on startup')
   setInterval(() => { pollOnce().catch(err => log('error', 'poll.error', { error: err instanceof Error ? err.message : String(err) })) }, POLL_MS)
   setInterval(() => { sendHeartbeat().catch(err => log('error', 'heartbeat.error', { error: err instanceof Error ? err.message : String(err) })) }, HEARTBEAT_MS)
+  setInterval(() => { recoverStaleRunsOnce('stale: recovered by periodic sweep').catch(err => log('error', 'stale.recovery.error', { error: err instanceof Error ? err.message : String(err) })) }, STALE_SWEEP_MS)
 }
 
 main().catch(err => {

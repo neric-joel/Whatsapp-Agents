@@ -38,6 +38,8 @@ export abstract class SubprocessAdapter implements AgentAdapter {
 
     let exitResolve!: () => void
     const exitPromise = new Promise<void>((r) => { exitResolve = r })
+    let forceExitResolve!: () => void
+    const forceExitPromise = new Promise<void>((r) => { forceExitResolve = r })
 
     const child = spawn(command, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -59,11 +61,16 @@ export abstract class SubprocessAdapter implements AgentAdapter {
     child.on('close', (code) => { exitCode = code; exitResolve() })
     child.on('error', (err) => { spawnError = err; exitResolve() })
 
-    // SIGTERM → 2s grace → SIGKILL; does NOT resolve exitPromise (let 'close' do it)
+    // SIGTERM → 2s grace → force-kill. Some Windows shells do not close when the
+    // spawned CLI ignores termination, so forceExitPromise prevents a stuck run.
     let killTimer: ReturnType<typeof setTimeout> | null = null
+    let forceExitTimer: ReturnType<typeof setTimeout> | null = null
     const kill = () => {
       child.kill('SIGTERM')
-      killTimer = setTimeout(() => { child.kill('SIGKILL') }, 2_000)
+      killTimer = setTimeout(() => {
+        this.forceKillProcessTree(child.pid)
+        forceExitTimer = setTimeout(() => { forceExitResolve() }, 1_000)
+      }, 2_000)
     }
     signal.addEventListener('abort', kill, { once: true })
 
@@ -73,11 +80,12 @@ export abstract class SubprocessAdapter implements AgentAdapter {
       ? setTimeout(() => { timedOut = true; kill() }, timeoutMs)
       : null
 
-    // Wait for process to actually exit (no heartbeat — liveness is the daemon's job)
-    await exitPromise
+    // Wait for process exit, but do not let a killed subprocess keep the run alive forever.
+    await Promise.race([exitPromise, forceExitPromise])
 
     if (timeoutHandle) clearTimeout(timeoutHandle)
     if (killTimer) clearTimeout(killTimer)
+    if (forceExitTimer) clearTimeout(forceExitTimer)
     signal.removeEventListener('abort', kill)
 
     if (spawnError) {
@@ -153,6 +161,25 @@ export abstract class SubprocessAdapter implements AgentAdapter {
       case 'tool_call_requested':
       case 'visible_message':
         return { ...event, run_id: runId }
+    }
+  }
+
+  private forceKillProcessTree(pid: number | undefined): void {
+    if (!pid) return
+
+    if (process.platform === 'win32' && pid) {
+      const killer = spawn('taskkill', ['/pid', String(pid), '/T', '/F'], {
+        stdio: 'ignore',
+        windowsHide: true,
+      })
+      killer.on('error', () => { /* best effort */ })
+      return
+    }
+
+    try {
+      process.kill(pid, 'SIGKILL')
+    } catch {
+      try { process.kill(pid, 'SIGTERM') } catch { /* best effort */ }
     }
   }
 }

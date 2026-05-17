@@ -68,6 +68,14 @@ class TestSubprocessAdapter extends SubprocessAdapter {
   }
 }
 
+class TimeoutSubprocessAdapter extends TestSubprocessAdapter {
+  protected buildArgs(_packet: ContextPacketV1): string[] {
+    return ['-e', 'setInterval(() => {}, 1000)']
+  }
+
+  protected getTimeoutMs(): number { return 25 }
+}
+
 class TestCodexCliAdapter extends CodexCliAdapter {
   args(packet: ContextPacketV1): string[] {
     return this.buildArgs(packet)
@@ -105,6 +113,22 @@ test('subprocess adapter parses AgentResponseV1 stdout lines', () => {
       content: 'hello',
       content_type: 'text',
     },
+  })
+})
+
+test('subprocess adapter returns a timeout error instead of hanging', async () => {
+  const adapter = new TimeoutSubprocessAdapter()
+  const events: AgentEvent[] = []
+
+  for await (const event of adapter.run(packet, new AbortController().signal)) {
+    events.push(event)
+  }
+
+  assert.equal(events.length, 1)
+  assert.deepEqual(events[0], {
+    type: 'error',
+    run_id: 'run-1',
+    message: "Adapter 'test' timed out after 25ms.",
   })
 })
 
