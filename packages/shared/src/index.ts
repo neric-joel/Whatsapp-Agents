@@ -1,6 +1,7 @@
 export const AGENTROOM_VERSION = '0.1.0';
 
 export type DiscussionPhase = 'individual' | 'critique' | 'consensus';
+export type DiscussionMode = 'independent' | 'tag_turns';
 
 export interface DiscussionCommand {
   command: 'discuss' | 'debate';
@@ -94,6 +95,7 @@ export interface Room {
   max_agent_rounds: number;
   max_agent_hops: number;
   allow_agent_to_agent: boolean;
+  discussion_mode: DiscussionMode;
   visibility: string;
   is_archived: boolean;
   last_message_at: string | null;
@@ -159,6 +161,9 @@ export interface AgentRun {
   trigger_msg_id: string | null;
   status: RunStatus;
   round_index: number;
+  discussion_mode: DiscussionMode;
+  deliberation_depth: number;
+  deliberation_root_id: string | null;
   error_message: string | null;
   partial_content: string | null;
   worker_id: string | null;
@@ -237,13 +242,16 @@ export type ToolCallStatus = 'pending' | 'waiting_approval' | 'approved' | 'runn
 export interface ContextPacketV1 {
   schema_version: 1;
   run_id: string;
-  room: Pick<Room, 'id' | 'name' | 'reply_mode' | 'max_agent_rounds'>;
+  room: Pick<Room, 'id' | 'name' | 'reply_mode' | 'max_agent_rounds' | 'discussion_mode'>;
   agent: Pick<Agent, 'id' | 'name' | 'slug' | 'system_prompt' | 'provider'>;
   trigger_message: Pick<Message, 'id' | 'content' | 'sender_type' | 'created_at'>;
   recent_messages: Array<Pick<Message, 'id' | 'content' | 'sender_type' | 'sender_agent_id' | 'created_at' | 'metadata'>>;
   pinned_items?: PinnedItem[];
   files?: Array<{ id: string; filename: string; mime_type: string; size_bytes: number; extracted_text_preview: string | null }>;
   round_index: number;
+  discussion_mode: DiscussionMode;
+  deliberation_depth: number;
+  deliberation_root_id: string | null;
 }
 
 // ─── AGENT RESPONSE V1 ───

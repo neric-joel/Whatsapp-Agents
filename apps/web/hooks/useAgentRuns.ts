@@ -8,6 +8,9 @@ export interface DbAgentRun {
   agent_id: string
   trigger_msg_id: string | null
   error_message: string | null
+  discussion_mode: 'independent' | 'tag_turns'
+  deliberation_depth: number
+  deliberation_root_id: string | null
   created_at: string
   updated_at: string
   agents: { name: string; provider: string } | null
@@ -21,7 +24,7 @@ export function useAgentRuns(roomId: string, refreshSignal?: number) {
     const supabase = createSupabaseBrowserClient()
     supabase
       .from('agent_runs')
-      .select('id, status, agent_id, trigger_msg_id, error_message, created_at, updated_at, agents(name, provider)')
+      .select('id, status, agent_id, trigger_msg_id, error_message, discussion_mode, deliberation_depth, deliberation_root_id, created_at, updated_at, agents(name, provider)')
       .eq('room_id', roomId)
       .in('status', ['queued', 'running', 'failed'])
       .order('created_at', { ascending: true })

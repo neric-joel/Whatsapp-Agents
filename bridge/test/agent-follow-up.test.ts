@@ -5,8 +5,21 @@ import { maybeScheduleAgentMentionFollowUps } from '../src/lib/agent-follow-up.j
 
 type QueryResult = { data?: unknown; error?: unknown }
 
-function createSupabaseStub() {
+interface StubOptions {
+  room?: {
+    allow_agent_to_agent?: boolean
+    max_agent_rounds?: number
+  }
+  existingRuns?: Array<{ agent_id: string }>
+}
+
+function createSupabaseStub(options: StubOptions = {}) {
   const inserted: unknown[] = []
+  const room = {
+    allow_agent_to_agent: true,
+    max_agent_rounds: 4,
+    ...(options.room ?? {}),
+  }
 
   return {
     inserted,
@@ -20,7 +33,7 @@ function createSupabaseStub() {
               },
               single(): Promise<QueryResult> {
                 if (table === 'rooms') {
-                  return Promise.resolve({ data: { allow_agent_to_agent: true, max_agent_rounds: 4 } })
+                  return Promise.resolve({ data: room })
                 }
                 return Promise.resolve({ data: null })
               },
@@ -45,7 +58,7 @@ function createSupabaseStub() {
                   return
                 }
                 if (table === 'agent_runs') {
-                  resolve({ data: [] })
+                  resolve({ data: options.existingRuns ?? [] })
                   return
                 }
                 resolve({ data: [] })
@@ -62,17 +75,44 @@ function createSupabaseStub() {
   }
 }
 
-test('schedules next-round run for explicitly mentioned agent replies', async () => {
+test('agent reply in independent mode with @mention creates no follow-up', async () => {
   const supabase = createSupabaseStub()
 
   const targets = await maybeScheduleAgentMentionFollowUps({
     supabase: supabase.client as never,
+    currentRun: {
+      id: 'run-1',
+      discussion_mode: 'independent',
+      deliberation_depth: 0,
+      deliberation_root_id: null,
+    },
     roomId: 'room-1',
     sourceAgentId: 'source',
     sourceMessageId: 'message-1',
     replyContent: '@Reviewer please challenge this.',
     roundIndex: 0,
-    isConclusion: false,
+  })
+
+  assert.deepEqual(targets, [])
+  assert.deepEqual(supabase.inserted, [])
+})
+
+test('agent reply in tag_turns mode with @mention creates exactly the mentioned follow-up run', async () => {
+  const supabase = createSupabaseStub()
+
+  const targets = await maybeScheduleAgentMentionFollowUps({
+    supabase: supabase.client as never,
+    currentRun: {
+      id: 'run-1',
+      discussion_mode: 'tag_turns',
+      deliberation_depth: 0,
+      deliberation_root_id: null,
+    },
+    roomId: 'room-1',
+    sourceAgentId: 'source',
+    sourceMessageId: 'message-1',
+    replyContent: '@Reviewer please challenge this.',
+    roundIndex: 0,
   })
 
   assert.deepEqual(targets, ['reviewer'])
@@ -83,6 +123,107 @@ test('schedules next-round run for explicitly mentioned agent replies', async ()
       trigger_msg_id: 'message-1',
       status: 'queued',
       round_index: 1,
+      discussion_mode: 'tag_turns',
+      deliberation_depth: 1,
+      deliberation_root_id: 'run-1',
     },
   ])
+})
+
+test('agent reply with no mention creates no follow-up', async () => {
+  const supabase = createSupabaseStub()
+
+  const targets = await maybeScheduleAgentMentionFollowUps({
+    supabase: supabase.client as never,
+    currentRun: {
+      id: 'run-1',
+      discussion_mode: 'tag_turns',
+      deliberation_depth: 0,
+      deliberation_root_id: null,
+    },
+    roomId: 'room-1',
+    sourceAgentId: 'source',
+    sourceMessageId: 'message-1',
+    replyContent: 'I think we have a conclusion.',
+    roundIndex: 0,
+  })
+
+  assert.deepEqual(targets, [])
+  assert.deepEqual(supabase.inserted, [])
+})
+
+test('agent reply at max deliberation depth creates no follow-up', async () => {
+  const supabase = createSupabaseStub({ room: { max_agent_rounds: 2 } })
+
+  const targets = await maybeScheduleAgentMentionFollowUps({
+    supabase: supabase.client as never,
+    currentRun: {
+      id: 'run-1',
+      discussion_mode: 'tag_turns',
+      deliberation_depth: 1,
+      deliberation_root_id: null,
+    },
+    roomId: 'room-1',
+    sourceAgentId: 'source',
+    sourceMessageId: 'message-1',
+    replyContent: '@Reviewer please challenge this.',
+    roundIndex: 1,
+  })
+
+  assert.deepEqual(targets, [])
+  assert.deepEqual(supabase.inserted, [])
+})
+
+test('follow-up runs propagate existing deliberation root and increment depth', async () => {
+  const supabase = createSupabaseStub()
+
+  await maybeScheduleAgentMentionFollowUps({
+    supabase: supabase.client as never,
+    currentRun: {
+      id: 'run-2',
+      discussion_mode: 'tag_turns',
+      deliberation_depth: 2,
+      deliberation_root_id: 'root-run',
+    },
+    roomId: 'room-1',
+    sourceAgentId: 'source',
+    sourceMessageId: 'message-2',
+    replyContent: '@Reviewer please challenge this.',
+    roundIndex: 2,
+  })
+
+  assert.deepEqual(supabase.inserted, [
+    {
+      room_id: 'room-1',
+      agent_id: 'reviewer',
+      trigger_msg_id: 'message-2',
+      status: 'queued',
+      round_index: 3,
+      discussion_mode: 'tag_turns',
+      deliberation_depth: 3,
+      deliberation_root_id: 'root-run',
+    },
+  ])
+})
+
+test('duplicate mentions do not create duplicate follow-up runs', async () => {
+  const supabase = createSupabaseStub()
+
+  const targets = await maybeScheduleAgentMentionFollowUps({
+    supabase: supabase.client as never,
+    currentRun: {
+      id: 'run-1',
+      discussion_mode: 'tag_turns',
+      deliberation_depth: 0,
+      deliberation_root_id: null,
+    },
+    roomId: 'room-1',
+    sourceAgentId: 'source',
+    sourceMessageId: 'message-1',
+    replyContent: '@Reviewer @reviewer @Reviewer please challenge this.',
+    roundIndex: 0,
+  })
+
+  assert.deepEqual(targets, ['reviewer'])
+  assert.equal(supabase.inserted.length, 1)
 })

@@ -4,6 +4,7 @@ export const createRoomSchema = z.object({
   name: z.string().min(1).max(100),
   room_type: z.string().optional(),
   reply_mode: z.enum(['all', 'mentioned_only']).optional(),
+  discussion_mode: z.enum(['independent', 'tag_turns']).optional(),
   visibility: z.enum(['private', 'public']).optional(),
 })
 

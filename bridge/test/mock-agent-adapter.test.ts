@@ -12,6 +12,7 @@ const packet: ContextPacketV1 = {
     name: 'Demo',
     reply_mode: 'everyone',
     max_agent_rounds: 3,
+    discussion_mode: 'independent',
   },
   agent: {
     id: 'agent-reviewer',
@@ -45,6 +46,9 @@ const packet: ContextPacketV1 = {
     },
   ],
   round_index: 0,
+  discussion_mode: 'independent',
+  deliberation_depth: 0,
+  deliberation_root_id: null,
 }
 
 test('mock adapter responds to the trigger message instead of older history', async () => {

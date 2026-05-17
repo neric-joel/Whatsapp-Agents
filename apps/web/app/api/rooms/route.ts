@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
       name,
       room_type: data.room_type ?? 'group',
       reply_mode: data.reply_mode === 'all' ? 'everyone' : data.reply_mode ?? 'everyone',
+      discussion_mode: data.discussion_mode ?? 'independent',
       visibility: data.visibility ?? 'private',
       created_by_user_id: user.id,
     })

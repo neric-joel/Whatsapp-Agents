@@ -22,6 +22,7 @@ const packet: ContextPacketV1 = {
     name: 'Demo',
     reply_mode: 'everyone',
     max_agent_rounds: 3,
+    discussion_mode: 'independent',
   },
   agent: {
     id: 'agent-1',
@@ -55,6 +56,9 @@ const packet: ContextPacketV1 = {
     },
   ],
   round_index: 1,
+  discussion_mode: 'independent',
+  deliberation_depth: 0,
+  deliberation_root_id: null,
 }
 
 test('claude prompt labels prior turns as relevant recent context only', () => {

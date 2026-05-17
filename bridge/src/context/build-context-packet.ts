@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { AgentProvider, ContextPacketV1, PinnedItem, ReplyMode, SenderType } from '@agentroom/shared'
+import type { AgentProvider, ContextPacketV1, DiscussionMode, PinnedItem, ReplyMode, SenderType } from '@agentroom/shared'
 import { readContextMessageLimit, readContextMessageMaxChars, trimContextMessages } from './context-window.js'
 
 interface BuildContextArgs {
@@ -8,6 +8,9 @@ interface BuildContextArgs {
     id: string
     room_id: string
     round_index: number
+    discussion_mode: DiscussionMode
+    deliberation_depth: number
+    deliberation_root_id: string | null
   }
   agentInfo: {
     id: string
@@ -60,11 +63,17 @@ export async function buildContextPacket({
 
   const { data: roomRaw } = await supabase
     .from('rooms')
-    .select('id, name, reply_mode, max_agent_rounds')
+    .select('id, name, reply_mode, max_agent_rounds, discussion_mode')
     .eq('id', run.room_id)
     .single()
   if (!roomRaw) throw new Error(`Room ${run.room_id} not found`)
-  const room = roomRaw as unknown as { id: string; name: string; reply_mode: string; max_agent_rounds: number }
+  const room = roomRaw as unknown as {
+    id: string
+    name: string
+    reply_mode: string
+    max_agent_rounds: number
+    discussion_mode: DiscussionMode
+  }
 
   const { data: pinnedItems } = await supabase
     .from('pinned_items')
@@ -102,6 +111,7 @@ export async function buildContextPacket({
       name: room.name,
       reply_mode: room.reply_mode as ReplyMode,
       max_agent_rounds: room.max_agent_rounds,
+      discussion_mode: room.discussion_mode,
     },
     agent: {
       id: agentInfo.id,
@@ -127,5 +137,8 @@ export async function buildContextPacket({
     pinned_items: (pinnedItems ?? []) as PinnedItem[],
     files,
     round_index: run.round_index,
+    discussion_mode: run.discussion_mode,
+    deliberation_depth: run.deliberation_depth,
+    deliberation_root_id: run.deliberation_root_id,
   }
 }

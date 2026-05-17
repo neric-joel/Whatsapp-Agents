@@ -10,6 +10,8 @@ import { sanitizeAgentOutput } from '../lib/agent-output.js'
 import { maybeScheduleDiscussionContinuation } from '../lib/discussion-orchestrator.js'
 import { maybeScheduleAgentMentionFollowUps } from '../lib/agent-follow-up.js'
 
+type DiscussionMode = 'independent' | 'tag_turns'
+
 const WORKER_ID = process.env.BRIDGE_WORKER_ID ?? 'bridge-local-1'
 
 interface AgentInfo {
@@ -29,6 +31,9 @@ interface AgentRunRow {
   trigger_msg_id: string | null
   status: string
   round_index: number
+  discussion_mode: DiscussionMode
+  deliberation_depth: number
+  deliberation_root_id: string | null
   agents: AgentInfo | null
 }
 
@@ -39,7 +44,7 @@ export async function processRun(runId: string): Promise<void> {
   // a. Fetch run with agent data
   const { data: runRaw } = await supabase
     .from('agent_runs')
-    .select('id, room_id, agent_id, trigger_msg_id, status, round_index, agents!agent_id(id, name, slug, system_prompt, provider, adapter_type, tool_permissions)')
+    .select('id, room_id, agent_id, trigger_msg_id, status, round_index, discussion_mode, deliberation_depth, deliberation_root_id, agents!agent_id(id, name, slug, system_prompt, provider, adapter_type, tool_permissions)')
     .eq('id', runId)
     .single()
 
@@ -83,7 +88,14 @@ export async function processRun(runId: string): Promise<void> {
     // f. Build ContextPacketV1
     const packet = await buildContextPacket({
       supabase,
-      run: { id: runId, room_id: runRow.room_id, round_index: runRow.round_index },
+      run: {
+        id: runId,
+        room_id: runRow.room_id,
+        round_index: runRow.round_index,
+        discussion_mode: runRow.discussion_mode,
+        deliberation_depth: runRow.deliberation_depth,
+        deliberation_root_id: runRow.deliberation_root_id,
+      },
       agentInfo,
       triggerMsg,
     })
@@ -200,12 +212,17 @@ export async function processRun(runId: string): Promise<void> {
       .eq('id', runId)
     await maybeScheduleAgentMentionFollowUps({
       supabase,
+      currentRun: {
+        id: runRow.id,
+        discussion_mode: runRow.discussion_mode,
+        deliberation_depth: runRow.deliberation_depth,
+        deliberation_root_id: runRow.deliberation_root_id,
+      },
       roomId: runRow.room_id,
       sourceAgentId: runRow.agent_id,
       sourceMessageId: insertedMessage.id,
       replyContent,
       roundIndex: runRow.round_index,
-      isConclusion,
     })
     await maybeScheduleDiscussionContinuation({
       supabase,

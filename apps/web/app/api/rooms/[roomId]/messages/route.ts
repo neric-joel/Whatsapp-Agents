@@ -5,7 +5,8 @@ import { requireRoomMember, requireRoomOwner } from '@/lib/permissions'
 import { clearRoomChat } from '@/lib/room-chat-management'
 import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
 import { parseMentions } from '@/lib/mention-parser'
-import { buildDiscussionPhasePrompt, parseDiscussionRequest } from '@agentroom/shared'
+import { buildInitialAgentRunRows } from '@/lib/agent-runs'
+import { buildDiscussionPhasePrompt, parseDiscussionRequest, type DiscussionMode } from '@agentroom/shared'
 
 interface RouteParams { params: { roomId: string } }
 
@@ -54,7 +55,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   // 4. Fetch room for reply_mode and loop guard limits
   const { data: room } = await supabase
     .from('rooms')
-    .select('id, reply_mode, max_agent_rounds, max_agent_hops, allow_agent_to_agent')
+    .select('id, reply_mode, max_agent_rounds, max_agent_hops, allow_agent_to_agent, discussion_mode')
     .eq('id', roomId)
     .single()
 
@@ -126,6 +127,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   // 7. Loop guard
   const maxRounds = (room as { max_agent_rounds: number }).max_agent_rounds
   const maxHops = (room as { max_agent_hops: number }).max_agent_hops
+  const discussionMode = ((room as { discussion_mode?: DiscussionMode }).discussion_mode ?? 'independent')
 
   if (roundIndex >= maxRounds) {
     await insertSystemMessage(`Loop guard: agent discussion stopped after ${maxRounds} rounds.`)
@@ -174,13 +176,13 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   // 10. Create one agent_run per qualifying agent
   const agentRuns: unknown[] = []
   if (targetAgents.length > 0) {
-    const runs = targetAgents.map((m) => ({
-      room_id: roomId,
-      agent_id: m.agent_id,
-      trigger_msg_id: message.id,
-      status: 'queued',
-      round_index: roundIndex,
-    }))
+    const runs = buildInitialAgentRunRows({
+      roomId,
+      messageId: message.id,
+      targetAgents,
+      roundIndex,
+      discussionMode,
+    })
 
     const { data: insertedRuns } = await supabase
       .from('agent_runs')
