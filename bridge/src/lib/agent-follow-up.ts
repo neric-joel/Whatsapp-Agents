@@ -25,8 +25,7 @@ interface CurrentRun {
 }
 
 interface RoomDeliberationSettings {
-  discussion_mode?: DiscussionMode
-  max_deliberation_depth?: number
+  max_agent_rounds?: number
 }
 
 export async function maybeScheduleAgentMentionFollowUps({
@@ -50,14 +49,12 @@ export async function maybeScheduleAgentMentionFollowUps({
 
   const { data: room } = await supabase
     .from('rooms')
-    .select('discussion_mode, max_deliberation_depth')
+    .select('max_agent_rounds')
     .eq('id', roomId)
     .single()
 
   const settings = room as RoomDeliberationSettings | null
-  if (settings?.discussion_mode !== 'tag_turns') return []
-
-  const maxDepth = settings.max_deliberation_depth ?? 0
+  const maxDepth = Math.max((settings?.max_agent_rounds ?? 1) - 1, 0)
   if (maxDepth <= 0 || currentRun.deliberation_depth >= maxDepth) return []
 
   const nextRoundIndex = roundIndex + 1

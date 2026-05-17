@@ -18,8 +18,15 @@ test('discussion phase prompts force critique instead of another solo answer', (
   const prompt = buildDiscussionPhasePrompt('critique', 'prove sqrt(2) irrational')
 
   assert.match(prompt, /critique and synthesis/i)
-  assert.match(prompt, /Read the independent agent answers above/i)
-  assert.match(prompt, /Do not just solve alone/i)
+  assert.match(prompt, /Read the independent agent contributions above/i)
+  assert.match(prompt, /Do not restart as a solo solution/i)
+})
+
+test('discussion phase 1 asks for teammate contribution rather than final solo solve', () => {
+  const prompt = buildDiscussionPhasePrompt('individual', 'evaluate an integral')
+
+  assert.match(prompt, /teammate, not a full final answer/i)
+  assert.match(prompt, /@mentioning one other agent/i)
 })
 
 test('reads valid discussion metadata only', () => {

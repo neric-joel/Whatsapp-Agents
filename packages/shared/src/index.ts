@@ -45,7 +45,7 @@ export function buildDiscussionPhasePrompt(phase: DiscussionPhase, originalPromp
       'Original problem:',
       originalPrompt,
       '',
-      'Read the independent agent answers above. Identify mistakes, missing edge cases, and over/under-abstraction. Engage directly with the other agents by name when useful. Do not just solve alone; compare approaches and move the group toward a stronger answer.',
+      'Read the independent agent contributions above. Identify mistakes, missing edge cases, and over/under-abstraction. Respond to specific agents by name, compare approaches, and add the missing step needed for the team answer. Do not restart as a solo solution.',
     ].join('\n');
   }
 
@@ -56,7 +56,7 @@ export function buildDiscussionPhasePrompt(phase: DiscussionPhase, originalPromp
       'Original problem:',
       originalPrompt,
       '',
-      'Use the prior independent answers and critique round to produce one clear final consensus response for the room. State the final answer, explain the reasoning compactly, and mention any caveats the team agreed matter.',
+      'Use the prior independent answers and critique round to produce one clear final consensus response for the room. State the final answer, explain the reasoning compactly, and mention any caveats the team agreed matter. Do not @mention another agent in this final consensus.',
     ].join('\n');
   }
 
@@ -66,7 +66,7 @@ export function buildDiscussionPhasePrompt(phase: DiscussionPhase, originalPromp
     'Original problem:',
     originalPrompt,
     '',
-    'Give your own independent answer first. Do not assume another agent has solved it yet. Be clear about your reasoning and any assumptions.',
+    'Contribute one focused piece of the solution as a teammate, not a full final answer. State your approach, key reasoning, and what you want another agent to challenge or extend. End by explicitly @mentioning one other agent when you need their next move.',
   ].join('\n');
 }
 

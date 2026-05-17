@@ -13,6 +13,17 @@ pre {
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
+.message-markdown .katex-display {
+  margin: 0.75rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.15rem;
+}
+
+.message-markdown .katex {
+  white-space: normal;
+}
+
 :root,
 :root[data-agentroom-theme="light-modern"] {
   --app-bg: #f4f4f5;

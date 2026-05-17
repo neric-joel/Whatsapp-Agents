@@ -6,6 +6,7 @@ import { clearRoomChat } from '@/lib/room-chat-management'
 import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
 import { parseMentions } from '@/lib/mention-parser'
 import { buildInitialAgentRunRows } from '@/lib/agent-runs'
+import { selectTargetAgents } from '@/lib/agent-targeting'
 import { buildDiscussionPhasePrompt, parseDiscussionRequest, type DiscussionMode } from '@agentroom/shared'
 
 interface RouteParams { params: { roomId: string } }
@@ -168,32 +169,27 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   const mentions = parseMentions(rawContent, allActive.map((m) => m.agents))
   const replyMode = (room as { reply_mode: string }).reply_mode
 
-  let targetAgents = allActive
-
-  if (discussionRequest) {
-    targetAgents = allActive
-  } else if (replyMode === 'mentioned_only') {
-    if (mentions.length === 0) {
-      await insertSystemMessage('No agents were mentioned. Use @agent_slug or @everyone.')
-      return apiSuccess({ message, agent_runs: [] }, 201)
-    }
-    const hasEveryone = mentions.some((m) => m.type === 'everyone')
-    if (!hasEveryone) {
-      const ids = new Set(mentions.filter((m) => m.type === 'agent').map((m) => m.agent_id))
-      targetAgents = allActive.filter((m) => ids.has(m.agent_id))
-    }
+  const { targetAgents, systemMessage } = selectTargetAgents({
+    allActive,
+    mentions,
+    replyMode,
+    isDiscussionRequest: Boolean(discussionRequest),
+  })
+  if (systemMessage) {
+    await insertSystemMessage(systemMessage)
+    return apiSuccess({ message, agent_runs: [] }, 201)
   }
-  // 'everyone' / 'smart' / other → all active agents (no change)
 
   // 10. Create one agent_run per qualifying agent
   const agentRuns: unknown[] = []
   if (targetAgents.length > 0) {
+    const runDiscussionMode: DiscussionMode = discussionRequest ? 'tag_turns' : discussionMode
     const runs = buildInitialAgentRunRows({
       roomId,
       messageId: message.id,
       targetAgents,
       roundIndex,
-      discussionMode,
+      discussionMode: runDiscussionMode,
     })
 
     const { data: insertedRuns } = await supabase

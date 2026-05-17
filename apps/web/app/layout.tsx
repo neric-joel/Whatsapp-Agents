@@ -1,4 +1,5 @@
 import './globals.css'
+import 'katex/dist/katex.min.css'
 import AuthGuard from '@/components/AuthGuard'
 import { ToastProvider } from '@/contexts/ToastContext'
 

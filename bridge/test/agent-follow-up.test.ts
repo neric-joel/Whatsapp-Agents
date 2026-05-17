@@ -10,7 +10,6 @@ interface StubOptions {
     allow_agent_to_agent?: boolean
     max_agent_rounds?: number
     discussion_mode?: 'independent' | 'tag_turns'
-    max_deliberation_depth?: number
   }
   existingRuns?: Array<{ agent_id: string }>
 }
@@ -21,7 +20,6 @@ function createSupabaseStub(options: StubOptions = {}) {
     allow_agent_to_agent: true,
     max_agent_rounds: 4,
     discussion_mode: 'tag_turns' as const,
-    max_deliberation_depth: 3,
     ...(options.room ?? {}),
   }
 
@@ -101,7 +99,7 @@ test('agent reply in independent mode with @mention creates no follow-up', async
   assert.deepEqual(supabase.inserted, [])
 })
 
-test('room independent mode disables follow-up even when current run was created for tag turns', async () => {
+test('current run tag_turns mode allows follow-up even if the room default is independent', async () => {
   const supabase = createSupabaseStub({ room: { discussion_mode: 'independent' } })
 
   const targets = await maybeScheduleAgentMentionFollowUps({
@@ -119,8 +117,8 @@ test('room independent mode disables follow-up even when current run was created
     roundIndex: 0,
   })
 
-  assert.deepEqual(targets, [])
-  assert.deepEqual(supabase.inserted, [])
+  assert.deepEqual(targets, ['reviewer'])
+  assert.equal(supabase.inserted.length, 1)
 })
 
 test('agent reply in tag_turns mode with @mention creates exactly the mentioned follow-up run', async () => {
@@ -179,7 +177,7 @@ test('agent reply with no mention creates no follow-up', async () => {
 })
 
 test('agent reply at max deliberation depth creates no follow-up', async () => {
-  const supabase = createSupabaseStub({ room: { max_deliberation_depth: 1 } })
+  const supabase = createSupabaseStub({ room: { max_agent_rounds: 2 } })
 
   const targets = await maybeScheduleAgentMentionFollowUps({
     supabase: supabase.client as never,

@@ -25,7 +25,8 @@ describe('discussion slash command', () => {
 
   it('builds critique and consensus prompts', () => {
     expect(nextDiscussionPhase('individual')).toBe('critique')
-    expect(buildDiscussionPhasePrompt('critique', 'math')).toContain('Do not just solve alone')
+    expect(buildDiscussionPhasePrompt('individual', 'math')).toContain('not a full final answer')
+    expect(buildDiscussionPhasePrompt('critique', 'math')).toContain('Do not restart as a solo solution')
     expect(buildDiscussionPhasePrompt('consensus', 'math')).toContain('one clear final consensus')
   })
 })
