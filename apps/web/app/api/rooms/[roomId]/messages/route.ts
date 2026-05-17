@@ -95,6 +95,18 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   if (msgErr || !message) return apiError('INTERNAL_ERROR', msgErr?.message ?? 'Failed to insert message', 500)
 
+  const rawFileIds = (data.metadata as { file_ids?: unknown } | undefined)?.file_ids
+  const fileIds = Array.isArray(rawFileIds)
+    ? rawFileIds.filter((id): id is string => typeof id === 'string')
+    : []
+  if (fileIds.length > 0) {
+    await supabase
+      .from('files')
+      .update({ message_id: message.id, metadata: { upload_status: 'attached' } })
+      .in('id', fileIds)
+      .eq('room_id', roomId)
+  }
+
   if (discussionRequest) {
     const nextMetadata = {
       ...initialMetadata,

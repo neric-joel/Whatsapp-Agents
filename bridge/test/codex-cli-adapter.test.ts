@@ -150,6 +150,26 @@ test('codex adapter builds a prompt that highlights the current user message', (
   assert.throws(() => JSON.parse(prompt))
 })
 
+test('codex adapter includes extracted attachment text in the prompt', () => {
+  const adapter = new TestCodexCliAdapter()
+  const prompt = adapter.stdin({
+    ...packet,
+    files: [
+      {
+        id: 'file-1',
+        filename: 'equation.png',
+        mime_type: 'image/png',
+        size_bytes: 3587,
+        extracted_text_preview: String.raw`\int_0^{\pi/2} \frac{dx}{(1+\tan x)^2}`,
+      },
+    ],
+  })
+
+  assert.match(prompt, /Attached files/)
+  assert.match(prompt, /equation\.png/)
+  assert.match(prompt, /\\int_0\^\{\\pi\/2\}/)
+})
+
 test('codex adapter omits conversation section when there is no prior history', () => {
   const adapter = new TestCodexCliAdapter()
   const prompt = adapter.stdin({

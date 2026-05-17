@@ -70,6 +70,25 @@ test('claude prompt labels prior turns as relevant recent context only', () => {
   assert.match(prompt, /CURRENT MESSAGE YOU MUST RESPOND TO:\nAnswer this now/)
 })
 
+test('claude prompt includes extracted attachment text', () => {
+  const adapter = new TestClaudeCodeAdapter()
+  const prompt = adapter.stdin({
+    ...packet,
+    files: [
+      {
+        id: 'file-1',
+        filename: 'equation.png',
+        mime_type: 'image/png',
+        size_bytes: 3587,
+        extracted_text_preview: String.raw`\int_0^{\pi/2} \frac{dx}{(1+\tan x)^2}`,
+      },
+    ],
+  })
+
+  assert.match(prompt, /Attached files/)
+  assert.match(prompt, /\\int_0\^\{\\pi\/2\}/)
+})
+
 test('extracts visible message content from claude result output', () => {
   const adapter = new TestClaudeCodeAdapter()
   const event = adapter.parse(JSON.stringify({

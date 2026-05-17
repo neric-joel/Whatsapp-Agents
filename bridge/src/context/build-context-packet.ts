@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { AgentProvider, ContextPacketV1, DiscussionMode, PinnedItem, ReplyMode, SenderType } from '@agentroom/shared'
 import { readContextMessageLimit, readContextMessageMaxChars, trimContextMessages } from './context-window.js'
+import { hydrateFilePreviews, type ContextFilePreview, type FilePreviewRow } from './file-context.js'
 
 interface BuildContextArgs {
   supabase: SupabaseClient
@@ -34,14 +35,6 @@ interface RecentMsg {
   sender_agent_id: string | null
   created_at: string
   metadata: Record<string, unknown>
-}
-
-interface FilePreviewRow {
-  id: string
-  filename: string
-  mime_type: string
-  size_bytes: number
-  extracted_text: string | null
 }
 
 export async function buildContextPacket({
@@ -87,20 +80,14 @@ export async function buildContextPacket({
     return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []
   })
 
-  let files: Array<{ id: string; filename: string; mime_type: string; size_bytes: number; extracted_text_preview: string | null }> = []
+  let files: ContextFilePreview[] = []
   if (fileIds.length > 0) {
     const uniqueFileIds = [...new Set(fileIds)].slice(0, 10)
     const { data: fileRows } = await supabase
       .from('files')
-      .select('id, filename, mime_type, size_bytes, extracted_text')
+      .select('id, filename, mime_type, size_bytes, storage_path, storage_bucket, extracted_text, metadata')
       .in('id', uniqueFileIds)
-    files = ((fileRows ?? []) as FilePreviewRow[]).map((f) => ({
-      id: f.id,
-      filename: f.filename,
-      mime_type: f.mime_type,
-      size_bytes: f.size_bytes,
-      extracted_text_preview: f.extracted_text ? String(f.extracted_text).slice(0, 500) : null,
-    }))
+    files = await hydrateFilePreviews(supabase, (fileRows ?? []) as FilePreviewRow[])
   }
 
   return {

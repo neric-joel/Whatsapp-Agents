@@ -1,4 +1,5 @@
 import { SubprocessAdapter } from './subprocess-adapter.js'
+import { formatFilesForPrompt } from '../context/file-context.js'
 import type { AgentEvent, ContextPacketV1, SenderType } from '@agentroom/shared'
 
 export class ClaudeCodeAdapter extends SubprocessAdapter {
@@ -32,6 +33,9 @@ export class ClaudeCodeAdapter extends SubprocessAdapter {
     if (history) {
       sections.push(`Relevant recent context only. Use it as background, but prioritize the current message if there is any conflict:\n${history}`)
     }
+
+    const fileContext = formatFilesForPrompt(packet.files)
+    if (fileContext) sections.push(fileContext)
 
     sections.push(`-----
 CURRENT MESSAGE YOU MUST RESPOND TO:
