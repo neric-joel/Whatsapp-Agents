@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { splitMessageBlocks } from '../message-format'
+import { parseInlineMarkdown, splitMessageBlocks } from '../message-format'
 
 describe('splitMessageBlocks', () => {
   it('keeps paragraphs separated by blank lines', () => {
@@ -20,6 +20,24 @@ describe('splitMessageBlocks', () => {
     expect(splitMessageBlocks('Use:\n```ts\nconst x = 1\n```')).toEqual([
       { type: 'paragraph', text: 'Use:' },
       { type: 'code', text: 'const x = 1' },
+    ])
+  })
+
+  it('parses inline bold, italic, and code spans', () => {
+    expect(parseInlineMarkdown('Use **bold**, *italic*, and `code`.')).toEqual([
+      { type: 'text', text: 'Use ' },
+      { type: 'bold', text: 'bold' },
+      { type: 'text', text: ', ' },
+      { type: 'italic', text: 'italic' },
+      { type: 'text', text: ', and ' },
+      { type: 'code', text: 'code' },
+      { type: 'text', text: '.' },
+    ])
+  })
+
+  it('leaves unclosed markdown markers as text', () => {
+    expect(parseInlineMarkdown('This is **not closed')).toEqual([
+      { type: 'text', text: 'This is **not closed' },
     ])
   })
 })

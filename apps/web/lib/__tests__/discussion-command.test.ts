@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { buildDiscussionPhasePrompt, nextDiscussionPhase, parseDiscussionCommand } from '@agentroom/shared'
+import {
+  buildDiscussionPhasePrompt,
+  nextDiscussionPhase,
+  parseDiscussionCommand,
+  parseDiscussionRequest,
+} from '@agentroom/shared'
 
 describe('discussion slash command', () => {
   it('parses /discuss prompts', () => {
@@ -8,6 +13,14 @@ describe('discussion slash command', () => {
       prompt: 'solve 3x + 7 = 22',
     })
     expect(parseDiscussionCommand('solve normally')).toBeNull()
+  })
+
+  it('treats @everyone questions as discussion requests', () => {
+    expect(parseDiscussionRequest('@everyone Are humans innately good or evil?')).toEqual({
+      command: 'discuss',
+      prompt: 'Are humans innately good or evil?',
+    })
+    expect(parseDiscussionRequest('@everyone hi guys')).toBeNull()
   })
 
   it('builds critique and consensus prompts', () => {

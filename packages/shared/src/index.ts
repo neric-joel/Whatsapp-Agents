@@ -17,6 +17,19 @@ export function parseDiscussionCommand(content: string): DiscussionCommand | nul
   };
 }
 
+export function parseDiscussionRequest(content: string): DiscussionCommand | null {
+  const command = parseDiscussionCommand(content);
+  if (command) return command;
+
+  const everyoneQuestion = content.trim().match(/^@everyone\b\s+([\s\S]*\?)\s*$/i);
+  if (!everyoneQuestion) return null;
+
+  return {
+    command: 'discuss',
+    prompt: everyoneQuestion[1].trim(),
+  };
+}
+
 export function nextDiscussionPhase(phase: DiscussionPhase): DiscussionPhase | null {
   if (phase === 'individual') return 'critique';
   if (phase === 'critique') return 'consensus';

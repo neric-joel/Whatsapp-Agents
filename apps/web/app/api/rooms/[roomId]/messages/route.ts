@@ -5,7 +5,7 @@ import { requireRoomMember, requireRoomOwner } from '@/lib/permissions'
 import { clearRoomChat } from '@/lib/room-chat-management'
 import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
 import { parseMentions } from '@/lib/mention-parser'
-import { buildDiscussionPhasePrompt, parseDiscussionCommand } from '@agentroom/shared'
+import { buildDiscussionPhasePrompt, parseDiscussionRequest } from '@agentroom/shared'
 
 interface RouteParams { params: { roomId: string } }
 
@@ -37,14 +37,14 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   }
   const data = parseResult.data
   const rawContent = data.content.trim()
-  const discussionCommand = parseDiscussionCommand(rawContent)
-  const content = discussionCommand
-    ? buildDiscussionPhasePrompt('individual', discussionCommand.prompt)
+  const discussionRequest = parseDiscussionRequest(rawContent)
+  const content = discussionRequest
+    ? buildDiscussionPhasePrompt('individual', discussionRequest.prompt)
     : rawContent
   if (!content) {
     return apiError('VALIDATION_ERROR', 'Invalid request body', 400, { fieldErrors: { content: ['content is required'] } })
   }
-  if (discussionCommand && !discussionCommand.prompt) {
+  if (discussionRequest && !discussionRequest.prompt) {
     return apiError('VALIDATION_ERROR', 'Use /discuss followed by the problem you want agents to solve together.', 400)
   }
 
@@ -63,13 +63,13 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   // 5. Insert message
   const initialMetadata = {
     ...(data.metadata ?? {}),
-    ...(discussionCommand
+    ...(discussionRequest
       ? {
           discussion: {
             enabled: true,
-            command: discussionCommand.command,
+            command: discussionRequest.command,
             phase: 'individual',
-            original_prompt: discussionCommand.prompt,
+            original_prompt: discussionRequest.prompt,
           },
         }
       : {}),
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   if (msgErr || !message) return apiError('INTERNAL_ERROR', msgErr?.message ?? 'Failed to insert message', 500)
 
-  if (discussionCommand) {
+  if (discussionRequest) {
     const nextMetadata = {
       ...initialMetadata,
       discussion: {
@@ -156,7 +156,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   let targetAgents = allActive
 
-  if (discussionCommand) {
+  if (discussionRequest) {
     targetAgents = allActive
   } else if (replyMode === 'mentioned_only') {
     if (mentions.length === 0) {
