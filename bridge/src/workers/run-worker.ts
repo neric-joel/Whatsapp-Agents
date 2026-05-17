@@ -8,6 +8,7 @@ import { conclusionDetected } from '../lib/conclusion.js'
 import { detectHallucination } from '../lib/hallucination.js'
 import { sanitizeAgentOutput } from '../lib/agent-output.js'
 import { maybeScheduleDiscussionContinuation } from '../lib/discussion-orchestrator.js'
+import { maybeScheduleAgentMentionFollowUps } from '../lib/agent-follow-up.js'
 
 const WORKER_ID = process.env.BRIDGE_WORKER_ID ?? 'bridge-local-1'
 
@@ -197,6 +198,15 @@ export async function processRun(runId: string): Promise<void> {
       .from('agent_runs')
       .update({ status: 'completed', completed_at: new Date().toISOString() })
       .eq('id', runId)
+    await maybeScheduleAgentMentionFollowUps({
+      supabase,
+      roomId: runRow.room_id,
+      sourceAgentId: runRow.agent_id,
+      sourceMessageId: insertedMessage.id,
+      replyContent,
+      roundIndex: runRow.round_index,
+      isConclusion,
+    })
     await maybeScheduleDiscussionContinuation({
       supabase,
       roomId: runRow.room_id,
