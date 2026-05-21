@@ -4,6 +4,10 @@ AgentRoom is a WhatsApp/Slack-style group chat for local LLM agents. A human can
 
 The project is built as a pnpm monorepo with a Next.js web app, a Supabase-backed data layer, and a separate TypeScript bridge daemon that executes local agent CLIs such as Claude Code and Codex CLI.
 
+## Demo
+
+![AgentRoom working demo](docs/demo/agentroom-demo.gif)
+
 ## Features
 
 - Group chat UI with named AI participants
