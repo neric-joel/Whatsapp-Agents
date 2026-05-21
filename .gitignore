@@ -8,3 +8,7 @@ dist/
 supabase/.temp/
 agentroom_graph_*.html
 *.tsbuildinfo
+*.lnk
+.claude/do-tasks/*/
+apps/web/.claude/
+bridge/.tmp-test/
