@@ -66,7 +66,7 @@ async function signIn(
   await page.goto('/auth')
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password').fill(password)
-  await page.getByRole('button', { name: 'Sign in' }).click()
+  await page.locator('button[type="submit"]').click()
   // AuthGuard redirects to "/" which then redirects to the first room.
   // Wait for the URL to leave /auth.
   await expect(page).not.toHaveURL(/\/auth/, { timeout: 20_000 })
@@ -84,7 +84,7 @@ test.describe('sign-in form interaction', () => {
     await page.goto('/auth')
     await page.getByLabel('Email').fill('nobody@example.com')
     await page.getByLabel('Password').fill('wrongpassword')
-    await page.getByRole('button', { name: 'Sign in' }).click()
+    await page.locator('button[type="submit"]').click()
 
     // The form should remain on /auth (not redirect)
     await expect(page).toHaveURL(/\/auth/)

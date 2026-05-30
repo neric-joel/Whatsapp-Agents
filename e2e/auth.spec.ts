@@ -37,10 +37,11 @@ test.describe('Auth redirect', () => {
     // Heading
     await expect(page.getByRole('heading', { name: 'AgentRoom' })).toBeVisible()
 
-    // Tab buttons (Sign In is selected by default)
-    const signInTab = page.getByRole('button', { name: 'Sign In' })
+    // Tab buttons (Sign In is selected by default). exact:true disambiguates the
+    // "Sign In" tab from the "Sign in" submit button (getByRole is case-insensitive).
+    const signInTab = page.getByRole('button', { name: 'Sign In', exact: true })
     await expect(signInTab).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Sign Up' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Sign Up', exact: true })).toBeVisible()
 
     // Email field — identified by label "Email" or placeholder
     const emailInput = page.getByLabel('Email')
@@ -52,17 +53,17 @@ test.describe('Auth redirect', () => {
     await expect(passwordInput).toBeVisible()
     await expect(passwordInput).toHaveAttribute('type', 'password')
 
-    // Submit button shows "Sign in" in signin mode
-    await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible()
+    // Submit button (type=submit) shows "Sign in" in signin mode.
+    await expect(page.locator('button[type="submit"]')).toHaveText('Sign in')
   })
 
   test('switching to Sign Up tab updates the submit button label', async ({ page }) => {
     await page.goto('/auth')
 
-    await page.getByRole('button', { name: 'Sign Up' }).click()
+    await page.getByRole('button', { name: 'Sign Up', exact: true }).click()
 
-    // Submit button changes to "Create account"
-    await expect(page.getByRole('button', { name: 'Create account' })).toBeVisible()
+    // Submit button (type=submit) changes to "Create account"
+    await expect(page.locator('button[type="submit"]')).toHaveText('Create account')
 
     // The password field autocomplete attribute changes to new-password in signup mode.
     // This validates the mode state is actually toggled.
@@ -73,8 +74,8 @@ test.describe('Auth redirect', () => {
     await page.goto('/auth')
 
     // HTML5 required validation should block submit when fields are empty.
-    // We click the button directly (not via keyboard) to trigger validation.
-    await page.getByRole('button', { name: 'Sign in' }).click()
+    // We click the submit button directly (not via keyboard) to trigger validation.
+    await page.locator('button[type="submit"]').click()
 
     // Still on /auth — the required constraint prevents form submission.
     await expect(page).toHaveURL(/\/auth/)
