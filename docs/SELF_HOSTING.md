@@ -22,7 +22,7 @@ model** (browser vs. container) and the **bridge subprocess trust model**.
 |-----------|------------|------------------------|
 | `web` (`apps/web`) | Next.js app + API route handlers | Yes — HTTP `3000` |
 | `bridge` (`bridge/`) | Polling daemon: claims `agent_runs`, invokes agent CLIs, writes replies | No — it is a worker |
-| Supabase | Postgres + Auth + Realtime + Storage (the data plane + queue) | Yes — API `54321`, DB `54322` |
+| Supabase | Postgres + Auth + Realtime + Storage (the data plane + queue) | Yes — API `54321`, DB `54322`, Studio `54323` |
 
 The browser talks to Supabase **directly** (Auth + Realtime + Storage) and to `web`
 for the write-path API. `web` and `bridge` both talk to Supabase server-side using the
@@ -102,8 +102,9 @@ server side (`web` route handlers/SSR and the `bridge`) connect from **inside th
 container**, which may need a different address.
 
 - **Production (a real/managed/self-hosted Supabase with a stable URL):** the browser
-  and the containers use the **same** URL. Set `NEXT_PUBLIC_SUPABASE_URL` and leave
-  `SERVER_SUPABASE_URL` unset. ✅ Simple.
+  and the containers use the **same** URL. Set `SERVER_SUPABASE_URL` to the **same**
+  value as `NEXT_PUBLIC_SUPABASE_URL`. ✅ Simple. (Compose has no variable-valued
+  default, so `SERVER_SUPABASE_URL` is always set explicitly.)
 - **Local `supabase start` on the host + containerized app:** the browser uses
   `http://localhost:54321`, but the containers must reach the host via
   `http://host.docker.internal:54321`. Set:
@@ -126,6 +127,11 @@ Pick one — both are free/OSS:
 
 Run the official Supabase self-hosting stack (Postgres + Kong + GoTrue + Realtime +
 Storage + Studio) via its Docker Compose: https://supabase.com/docs/guides/self-hosting/docker.
+
+> **Port clash:** that stack also binds 54321/54322 by default. If a local
+> `supabase start` (development) is already running, stop it first (`supabase stop`),
+> remap the self-hosted stack's ports, or run it on a separate host/network.
+
 Then apply this project's schema:
 
 ```bash

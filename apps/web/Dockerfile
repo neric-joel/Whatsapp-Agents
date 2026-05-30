@@ -30,7 +30,8 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json ./apps/web/package.json
 COPY bridge/package.json ./bridge/package.json
 COPY packages/shared/package.json ./packages/shared/package.json
-RUN pnpm install --frozen-lockfile
+# Install only the web subtree (+ its workspace dep @agentroom/shared) — not bridge.
+RUN pnpm install --frozen-lockfile --filter web...
 
 # Source, then build the Next.js standalone server.
 COPY . .
@@ -56,6 +57,10 @@ ENV NODE_ENV=production \
 COPY --from=builder --chown=node:node /repo/apps/web/.next/standalone ./
 COPY --from=builder --chown=node:node /repo/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder --chown=node:node /repo/apps/web/public ./apps/web/public
+
+# Liveness: the existing /api/health route returns 200 once the server is up.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
+  CMD ["node", "-e", "require('http').get('http://localhost:3000/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
 
 USER node
 EXPOSE 3000

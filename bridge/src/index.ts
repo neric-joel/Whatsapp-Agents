@@ -97,8 +97,9 @@ async function main() {
   }, STALE_SWEEP_MS)
 
   // Graceful shutdown for `docker stop` (SIGTERM) / Ctrl-C (SIGINT): stop the loops
-  // so no new runs are claimed, then exit. Any in-flight run is re-claimed by a
-  // worker via stale-run recovery on the next startup.
+  // so no new runs are claimed, then exit. An in-flight run is NOT drained — on the
+  // next startup stale-run recovery marks it `failed` (it is not auto-retried), so a
+  // user can re-send. A multi-worker deploy keeps serving during one worker's restart.
   let shuttingDown = false
   const shutdown = (signal: NodeJS.Signals) => {
     if (shuttingDown) return

@@ -82,6 +82,9 @@ get() { printf '%s\n' "$STATUS_ENV" | sed -n "s/^$1=//p" | tr -d '"' | head -n1;
 ANON_KEY="$(get ANON_KEY)"; [ -z "$ANON_KEY" ] && ANON_KEY="$(get PUBLISHABLE_KEY)"
 SERVICE_KEY="$(get SERVICE_ROLE_KEY)"; [ -z "$SERVICE_KEY" ] && SERVICE_KEY="$(get SECRET_KEY)"
 API_URL="http://127.0.0.1:54321"
+if [ -z "$ANON_KEY" ] || [ -z "$SERVICE_KEY" ]; then
+  warn "could not read keys from 'supabase status -o env' — fill apps/web/.env.local + bridge/.env manually (run: supabase status)"
+fi
 
 # fill FILE KEY VALUE — set KEY=VALUE only if the current value is blank/placeholder.
 fill() {

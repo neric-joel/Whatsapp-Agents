@@ -13,9 +13,10 @@
 #   • NEXT_PUBLIC_SUPABASE_URL is baked into the browser bundle at BUILD time and
 #     must be reachable FROM THE BROWSER.
 #   • SERVER_SUPABASE_URL is what the web server + bridge use FROM INSIDE THE
-#     CONTAINER at runtime (defaults to NEXT_PUBLIC_SUPABASE_URL).
-#   For a production Supabase (a real https URL) they are identical — leave
-#   SERVER_SUPABASE_URL unset. For a local `supabase start` on your host, set
+#     CONTAINER at runtime. (Both are required — Compose does not support a
+#     variable-valued default, so set SERVER_SUPABASE_URL explicitly.)
+#   For a production Supabase (a real https URL) set SERVER_SUPABASE_URL to the SAME
+#   value as NEXT_PUBLIC_SUPABASE_URL. For a local `supabase start` on your host, set
 #   NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321 and
 #   SERVER_SUPABASE_URL=http://host.docker.internal:54321. See docs/SELF_HOSTING.md.
 
@@ -34,11 +35,12 @@ services:
       - '${WEB_PORT:-3000}:3000'
     environment:
       # Runtime: the server-side Supabase URL (route handlers / SSR / boot validation).
-      NEXT_PUBLIC_SUPABASE_URL: ${SERVER_SUPABASE_URL:-${NEXT_PUBLIC_SUPABASE_URL}}
+      NEXT_PUBLIC_SUPABASE_URL: ${SERVER_SUPABASE_URL:?set SERVER_SUPABASE_URL in .env (= NEXT_PUBLIC_SUPABASE_URL for a production Supabase)}
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?set SUPABASE_SERVICE_ROLE_KEY in .env}
       EXTRA_ALLOWED_ORIGINS: ${EXTRA_ALLOWED_ORIGINS:-}
+    # Liveness is provided by the image HEALTHCHECK (probes /api/health).
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     restart: unless-stopped
@@ -49,7 +51,7 @@ services:
       dockerfile: bridge/Dockerfile
     image: agentroom-bridge
     environment:
-      SUPABASE_URL: ${SERVER_SUPABASE_URL:-${NEXT_PUBLIC_SUPABASE_URL}}
+      SUPABASE_URL: ${SERVER_SUPABASE_URL:?set SERVER_SUPABASE_URL in .env (= NEXT_PUBLIC_SUPABASE_URL for a production Supabase)}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?set SUPABASE_SERVICE_ROLE_KEY in .env}
       BRIDGE_WORKER_ID: ${BRIDGE_WORKER_ID:-bridge-compose-1}
       BRIDGE_POLL_INTERVAL_MS: ${BRIDGE_POLL_INTERVAL_MS:-2000}
@@ -58,6 +60,7 @@ services:
       BRIDGE_STALE_RUN_TIMEOUT_MS: ${BRIDGE_STALE_RUN_TIMEOUT_MS:-60000}
     # NOTE: this image runs the MOCK adapter only. Real agent CLIs (claude/codex/
     # ruflo) are not present in the image — see the trust model in docs/SELF_HOSTING.md.
+    # Port-less worker: liveness is observable via agent_runs.heartbeat_at, not a port.
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     restart: unless-stopped

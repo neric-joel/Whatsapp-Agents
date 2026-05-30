@@ -22,6 +22,8 @@ test-results
 **/.env.local
 **/.env.*.local
 .env.docker
+**/.env.example
+.env.docker.example
 
 # Logs & local runner state
 **/*.log
