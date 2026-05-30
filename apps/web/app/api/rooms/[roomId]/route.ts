@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { apiError, apiSuccess } from '@/lib/api-error'
+import { internalError } from '@/lib/api-security'
 import { updateRoomArchiveSchema } from '@/lib/api-validation'
 import { requireRoomOwner } from '@/lib/permissions'
 import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
@@ -37,7 +38,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     .select()
     .single()
 
-  if (error || !data) return apiError('INTERNAL_ERROR', error?.message ?? 'Failed to update room', 500)
+  if (error || !data) return internalError('room update', error)
 
   return apiSuccess(data)
 }
@@ -51,7 +52,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
     .delete()
     .eq('id', params.roomId)
 
-  if (error) return apiError('INTERNAL_ERROR', error.message, 500)
+  if (error) return internalError('room delete', error)
 
   return apiSuccess({ deleted: true })
 }

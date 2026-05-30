@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { apiError, apiSuccess } from '@/lib/api-error'
+import { internalError } from '@/lib/api-security'
 import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
 import { requireRoomMember } from '@/lib/permissions'
 import {
@@ -30,7 +31,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
     .eq('room_id', roomId)
     .maybeSingle()
 
-  if (fetchErr) return apiError('INTERNAL_ERROR', fetchErr.message, 500)
+  if (fetchErr) return internalError('message delete fetch', fetchErr)
   if (!message) return apiError('NOT_FOUND', 'Message not found', 404)
   if (!canCurrentUserDeleteMessage(message, user.id)) {
     return apiError('FORBIDDEN', 'You can only delete your own messages', 403)
@@ -45,7 +46,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
     .single()
 
   if (updateErr || !deletedMessage) {
-    return apiError('INTERNAL_ERROR', updateErr?.message ?? 'Failed to delete message', 500)
+    return internalError('message delete update', updateErr)
   }
 
   return apiSuccess({ message: deletedMessage })

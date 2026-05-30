@@ -32,13 +32,25 @@ export const updateRoomAgentMemberSchema = z.object({
   reply_enabled: z.boolean().optional(),
 }).refine((d) => Object.keys(d).length > 0, 'At least one field required')
 
+/** Max upload size accepted by the signed-upload route (also capped by the bucket). */
+export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024 // 25 MB
+
+/** Allowlisted MIME types for uploads. Anything else is rejected. */
+export const ALLOWED_UPLOAD_MIME_TYPES = [
+  'image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml',
+  'application/pdf',
+  'text/plain', 'text/markdown', 'text/csv',
+  'application/json',
+  'application/zip',
+] as const
+
 export const signedUploadSchema = z.object({
-  filename: z.string().min(1).refine(
-    (s) => !s.includes('/') && !s.includes('\\'),
-    'filename must not contain path separators',
+  filename: z.string().min(1).max(255).refine(
+    (s) => !s.includes('/') && !s.includes('\\') && !s.includes('\0') && s !== '.' && s !== '..',
+    'filename must not contain path separators or traversal sequences',
   ),
-  mime_type: z.string().min(1),
-  size_bytes: z.number().int().positive(),
+  mime_type: z.enum(ALLOWED_UPLOAD_MIME_TYPES as unknown as [string, ...string[]]),
+  size_bytes: z.number().int().positive().max(MAX_UPLOAD_BYTES),
 })
 
 export const createPinSchema = z.object({

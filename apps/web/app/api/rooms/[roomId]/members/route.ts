@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { apiError, apiSuccess } from '@/lib/api-error'
+import { internalError } from '@/lib/api-security'
 import { addRoomAgentSchema } from '@/lib/api-validation'
 import { requireRoomMember } from '@/lib/permissions'
 import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
@@ -103,7 +104,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     .eq('member_type', 'agent')
     .order('joined_at')
 
-  if (error) return apiError('INTERNAL_ERROR', error.message, 500)
+  if (error) return internalError('room members list', error)
 
   const members = await addLatestRunStatus(
     auth.supabase,
@@ -146,7 +147,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   if (error) {
     if (error.code === '23505') return apiError('CONFLICT', 'Agent is already in the room', 409)
-    return apiError('INTERNAL_ERROR', error.message, 500)
+    return internalError('room members add agent', error)
   }
 
   const members = await addLatestRunStatus(

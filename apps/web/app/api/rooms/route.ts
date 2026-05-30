@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { apiError, apiSuccess } from '@/lib/api-error'
+import { internalError } from '@/lib/api-security'
 import { createRoomSchema } from '@/lib/api-validation'
 import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
 
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
 
-  if (roomErr || !room) return apiError('INTERNAL_ERROR', roomErr?.message ?? 'Failed to create room', 500)
+  if (roomErr || !room) return internalError('rooms create room', roomErr)
 
   // 4. Insert creator as owner member
   const { error: memberErr } = await supabase
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
       role: 'owner',
     })
 
-  if (memberErr) return apiError('INTERNAL_ERROR', memberErr.message, 500)
+  if (memberErr) return internalError('rooms insert member', memberErr)
 
   return apiSuccess(room, 201)
 }

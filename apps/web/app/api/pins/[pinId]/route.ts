@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { apiError, apiSuccess } from '@/lib/api-error'
+import { internalError } from '@/lib/api-security'
 import { updatePinSchema } from '@/lib/api-validation'
 import { requireRoomMember } from '@/lib/permissions'
 import { createSupabaseServerClient, createSupabaseServiceClient } from '@/lib/supabase/server'
@@ -38,7 +39,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     .eq('id', params.pinId)
     .select()
     .single()
-  if (error || !data) return apiError('INTERNAL_ERROR', error?.message ?? 'Failed to update pin', 500)
+  if (error || !data) return internalError('pins update', error)
 
   return apiSuccess(data)
 }

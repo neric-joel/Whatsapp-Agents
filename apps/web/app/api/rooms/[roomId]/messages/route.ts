@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { sendMessageSchema } from '@/lib/api-validation'
+import { assertSameOrigin, enforceRateLimit, internalError } from '@/lib/api-security'
 import { requireRoomMember, requireRoomOwner } from '@/lib/permissions'
 import { clearRoomChat } from '@/lib/room-chat-management'
 import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
@@ -19,9 +20,17 @@ type AgentMemberRow = {
 export async function POST(req: NextRequest, { params }: RouteParams) {
   const { roomId } = params
 
+  // 0. CSRF defense for cookie-authed mutations.
+  const csrf = assertSameOrigin(req)
+  if (csrf) return csrf
+
   // 1. Authenticate
   const { data: { user }, error: authErr } = await getAuthenticatedUser(req)
   if (authErr || !user) return apiError('UNAUTHORIZED', 'Unauthorized', 401)
+
+  // 1b. Rate limit: each message can fan out N subprocess runs, so throttle hard.
+  const limited = enforceRateLimit(`message:${user.id}:${roomId}`, 30, 60_000)
+  if (limited) return limited
 
   // 2. Verify room membership
   const supabase = createSupabaseServiceClient()
@@ -94,7 +103,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     .select()
     .single()
 
-  if (msgErr || !message) return apiError('INTERNAL_ERROR', msgErr?.message ?? 'Failed to insert message', 500)
+  if (msgErr || !message) return internalError('messages insert', msgErr)
 
   const rawFileIds = (data.metadata as { file_ids?: unknown } | undefined)?.file_ids
   const fileIds = Array.isArray(rawFileIds)
@@ -214,7 +223,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
     await clearRoomChat(supabase, roomId)
   } catch (e) {
     if (e instanceof Response) return e
-    return apiError('INTERNAL_ERROR', e instanceof Error ? e.message : 'Failed to clear chat', 500)
+    return internalError('messages clear chat', e)
   }
 
   return apiSuccess({ cleared: true })

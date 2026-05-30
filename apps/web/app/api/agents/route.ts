@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { apiError, apiSuccess } from '@/lib/api-error'
+import { internalError } from '@/lib/api-security'
 import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
 
 export async function GET(req: NextRequest) {
@@ -13,7 +14,7 @@ export async function GET(req: NextRequest) {
     .eq('is_active', true)
     .order('name', { ascending: true })
 
-  if (error) return apiError('INTERNAL_ERROR', error.message, 500)
+  if (error) return internalError('agents list', error)
 
   return apiSuccess(data ?? [])
 }

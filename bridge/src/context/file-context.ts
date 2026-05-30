@@ -63,10 +63,23 @@ export async function hydrateFilePreviews(
   return hydrated
 }
 
+/**
+ * Whether to send image attachments to OpenAI for text/OCR extraction.
+ *
+ * This egresses user-uploaded image bytes to a third party (OpenAI), so it is
+ * OFF by default and must be explicitly opted into: set
+ * ENABLE_IMAGE_TEXT_EXTRACTION=true AND provide OPENAI_API_KEY. Documented in
+ * bridge/.env.example.
+ */
+function imageExtractionEnabled(): boolean {
+  return process.env.ENABLE_IMAGE_TEXT_EXTRACTION === 'true' && Boolean(process.env.OPENAI_API_KEY)
+}
+
 async function extractAndPersistImageText(
   supabase: SupabaseClient,
   file: FilePreviewRow,
 ): Promise<string | null> {
+  if (!imageExtractionEnabled()) return null
   if (!file.mime_type.startsWith('image/')) return null
   if (file.size_bytes > MAX_IMAGE_BYTES) return null
 

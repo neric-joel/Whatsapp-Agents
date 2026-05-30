@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { apiError, apiSuccess } from '@/lib/api-error'
+import { internalError } from '@/lib/api-security'
 import { requireRoomMember } from '@/lib/permissions'
 import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
 
@@ -35,7 +36,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     .eq('id', messageId)
     .maybeSingle()
 
-  if (fetchErr) return apiError('INTERNAL_ERROR', fetchErr.message, 500)
+  if (fetchErr) return internalError('hallucination fetch message', fetchErr)
   if (!message) return apiError('NOT_FOUND', 'Message not found', 404)
 
   try {
@@ -60,7 +61,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     .update({ metadata: nextMetadata })
     .eq('id', messageId)
 
-  if (updateErr) return apiError('INTERNAL_ERROR', updateErr.message, 500)
+  if (updateErr) return internalError('hallucination update metadata', updateErr)
 
   if (!parsed.data.accepted) {
     const { error: systemErr } = await supabase.from('messages').insert({
@@ -72,7 +73,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       metadata: { hallucination_rejection_for: messageId },
     })
 
-    if (systemErr) return apiError('INTERNAL_ERROR', systemErr.message, 500)
+    if (systemErr) return internalError('hallucination insert system message', systemErr)
   }
 
   return apiSuccess({ updated: true })

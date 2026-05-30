@@ -1,4 +1,5 @@
 import { apiError, apiSuccess } from '@/lib/api-error'
+import { internalError } from '@/lib/api-security'
 import { requireRoomMember } from '@/lib/permissions'
 import { createSupabaseServerClient, createSupabaseServiceClient } from '@/lib/supabase/server'
 
@@ -34,7 +35,7 @@ export async function GET(_req: Request, { params }: RouteParams) {
   const { data: signedData, error: signedErr } = await supabase.storage
     .from('agentroom-files')
     .createSignedUrl(file.storage_path, 3600)
-  if (signedErr || !signedData) return apiError('INTERNAL_ERROR', signedErr?.message ?? 'Failed to create download URL', 500)
+  if (signedErr || !signedData) return internalError('signed-download create url', signedErr)
 
   return apiSuccess({ signed_url: signedData.signedUrl })
 }
