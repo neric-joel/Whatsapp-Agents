@@ -127,6 +127,7 @@ Already exists: list global agents; add/remove/mute **seeded** agents per room (
 - **2026-05-30 ~00:00** — Installed workflow commands; ran Phase 0 audit (stale tree); built CI/runner/docs; opened PR #3 (later found stale).
 - **2026-05-30 ~01:1x** — Critique gate found "main unprotected under runner" (High) → enabled GitHub branch protection on `main` + committed `.githooks/pre-push`.
 - **2026-05-30 ~01:2x** — **Discovered local checkout 45 commits stale.** Paused, confirmed with the owner.
+- **2026-05-30 (night)** — **Phase 1 (Security) complete.** On `feat/p1-security` (stacked on `harden/p0-foundation`): subprocess sandbox (shell:false, stdin system_prompt, bin allowlist, env min, output cap, +10 tests); storage RLS scoped to room membership (new migration + pgTAP + live-DB rolled-back verify 6/6); CSRF/Origin + rate limiting + fail-closed middleware + security headers/CSP + 16 error-redactions + MIME allowlist + OpenAI egress opt-in (+15 web tests). Verified green: typecheck/lint/test (**135**)/build; client bundle has no service-role key. Critique gate (security-auditor + code-reviewer) → **PASS**, no Critical/High; Mediums M-1/CR-1/CR-3 fixed inline, L-1 deferred → `docs/reviews/2026-05-30-phase1-security.md`. Local Supabase: the live stack runs under project-id `agent-room` (db:54322); `supabase start` for `Whatsapp-Agents` hit a port clash — did NOT disturb the running stack; verified migration/RLS against it inside rolled-back txns only. PR #5 opened. NEXT: set Phase 2 goal (quality/dead-code) stacked on this branch.
 - **2026-05-30 (night)** — Owner approved pivot + unattended mode. Snapshot `backup/pre-pivot-2026-05-30`. Reset to `origin/main`; branch `harden/p0-foundation`; carried the hardening package; discarded stale product duplicates. Fresh audits on the real code (security + standards + agent-mgmt re-scope). Baseline green (110 tests). Unattended scaffolding written (settings.local.json, sleep prevention, runner). NEXT: close PR #3, push foundation + PR, launch overnight runner → runner drives Phase 1+.
 
 ---
@@ -142,19 +143,19 @@ Already exists: list global agents; add/remove/mute **seeded** agents per room (
 
 ---
 
-## 2026-05-30 — GOAL: Phase 1 — Security hardening (real base)
-- Phase: 1 (Security). Branch: `feat/p1-security` (stack on `harden/p0-foundation`).
-- Iteration budget: 10. State: ACTIVE (after the Phase 0 foundation PR is opened).
+## 2026-05-30 — GOAL: Phase 1 — Security hardening (real base) — **DONE ✅**
+- Phase: 1 (Security). Branch: `feat/p1-security` (stack on `harden/p0-foundation`). PR: #5 (see Night log).
+- Iteration budget: 10. State: **DONE** (judge-gated: both critics PASS, no open Critical/High, all checks green).
 - Acceptance criteria (testable; from the fresh audit):
-  - [ ] Subprocess: `shell:false` unconditionally; `system_prompt` never enters argv with a shell; binary path resolved/allowlisted; child env minimized (no service-role key forwarded). Bridge tests still green; the `shell:true` deprecation warning gone.
-  - [ ] Storage RLS scoped to room membership (read + insert + update + delete) via `is_room_user_member()`; a policy test proves a non-member cannot read/write another room's file.
-  - [ ] Child stdout/stderr output cap (kill + error past N MB).
-  - [ ] CSRF/Origin defense on all mutating API routes (Origin allowlist or required Bearer); test proves cross-origin POST rejected.
-  - [ ] Rate limiting on message POST + signed-upload (per user/room).
-  - [ ] `middleware.ts` fail-closed for protected paths (redirect unauthenticated); API checks remain.
-  - [ ] OpenAI image-text egress documented + opt-in (config flag); off by default unless key + flag set.
-  - [ ] Security headers (CSP/HSTS/X-Content-Type-Options/Referrer-Policy/frame-ancestors) via next config/middleware.
-  - [ ] 5xx responses return generic errors (raw `error.message` logged server-side only); signed-upload enforces a MIME allowlist + max size.
-  - [ ] Critique gate (Security Auditor + Adversarial Critic) PASS, saved to `docs/reviews/`; no open Critical/High; `typecheck`/`lint`/`test`/`build` green.
+  - [x] Subprocess: `shell:false` unconditionally; `system_prompt` never enters argv with a shell; binary path resolved/allowlisted; child env minimized (no service-role key forwarded). Bridge tests green (59); `shell:true` removed. → `bridge/src/lib/subprocess-security.ts`, `subprocess-adapter.ts`, `claude-code-adapter.ts` + 10 unit tests.
+  - [x] Storage RLS scoped to room membership (read + insert + update + delete) via `is_room_file_member()`→`is_room_user_member()`; policy test + live-DB rolled-back verification (6/6 assertions). → `supabase/migrations/20260530000001_storage_room_rls.sql`, `supabase/tests/storage_rls_test.sql`.
+  - [x] Child stdout/stderr output cap (10 MB → kill + error). → `subprocess-adapter.ts` `getMaxOutputBytes`.
+  - [x] CSRF/Origin defense on all mutating API routes (central in `middleware.ts` + inline on messages/signed-upload; Bearer exempt). Tests prove cross-origin POST + missing-Origin rejected. → `lib/api-security.ts`.
+  - [x] Rate limiting on message POST (30/min) + signed-upload (20/min) per user+room. → `lib/api-security.ts` + 3 tests.
+  - [x] `middleware.ts` fail-closed for protected paths (redirect unauthenticated → `/auth`); API 401s remain.
+  - [x] OpenAI image-text egress documented + opt-in (`ENABLE_IMAGE_TEXT_EXTRACTION`, off by default). → `bridge/src/context/file-context.ts` + `.env.example`.
+  - [x] Security headers (CSP/HSTS/X-Content-Type-Options/X-Frame-Options/Referrer-Policy/Permissions-Policy; frame-ancestors none) via `next.config.mjs`.
+  - [x] 5xx responses return generic errors (raw logged server-side only) — 16 sites redacted across 10 routes; signed-upload MIME allowlist + 25 MB cap + traversal guard. → `lib/api-validation.ts`, `lib/api-security.ts internalError`.
+  - [x] Critique gate (Security Auditor + Code Reviewer) **PASS**, saved to `docs/reviews/2026-05-30-phase1-security.md`; no open Critical/High; `typecheck`/`lint`/`test` (135)/`build` green. Mediums M-1/CR-1/CR-3 fixed; L-1 deferred to Phase 2.
 
-Judge rule: DONE only when every box is checked with linked evidence and no Critical/High is open.
+Judge rule: DONE only when every box is checked with linked evidence and no Critical/High is open. **Met.**

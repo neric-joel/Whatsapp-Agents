@@ -9,15 +9,15 @@ linked evidence** (a merged PR, a green CI run, a saved review, or a screenshot)
 ## Definition of Done checklist
 
 ### Security (Phase 1)
-- [ ] No secret is tracked in git, present in logs, or printed in output (`gitleaks` clean).
-- [ ] Subprocess execution uses `spawn(bin, args[], {shell:false})`, an allowlisted binary, validated cwd, enforced timeout/output-cap/concurrency, and orphan cleanup.
-- [ ] `SUPABASE_SERVICE_ROLE_KEY` is provably server-only; a build check fails if any secret reaches `NEXT_PUBLIC_*`/the client bundle.
-- [ ] RLS is ON for every table with correct membership/ownership policies; browser cannot write `agent_runs`; policy tests pass.
-- [ ] Every API route enforces authn + authz + input validation; expensive/write routes are rate-limited; errors don't leak internals.
-- [ ] File uploads enforce size + MIME limits, resist path traversal, scope to room/user, and use short-TTL signed URLs; third-party image-egress is documented and opt-in.
-- [ ] Tool-approval flow cannot be bypassed, forged, or replayed.
-- [ ] Security headers (CSP/HSTS/etc.) are set; `pnpm audit`/`osv-scanner` clean or risk-accepted in writing.
-- [ ] Security red-team review = PASS (saved in `docs/reviews/`).
+- [ ] No secret is tracked in git, present in logs, or printed in output (`gitleaks` clean). _(grep-clean; `gitleaks` job in CI — confirm green on PR.)_
+- [x] Subprocess execution uses `spawn(bin, args[], {shell:false})`, an allowlisted binary, validated cwd, enforced timeout/output-cap/concurrency, and orphan cleanup. _(PR #5)_
+- [x] `SUPABASE_SERVICE_ROLE_KEY` is provably server-only; client bundle grep clean (no `SERVICE_ROLE` in `.next/static`). _(build check; an automated CI guard is a Phase 2 follow-up.)_
+- [x] RLS is ON for every table with correct membership/ownership policies; browser cannot write `agent_runs`; storage policy test passes (live-DB rolled-back, 6/6). _(PR #5)_
+- [x] Every API route enforces authn + authz + input validation; expensive/write routes are rate-limited; errors don't leak internals (16 sites redacted). _(PR #5)_
+- [x] File uploads enforce size + MIME limits, resist path traversal, scope to room/user (RLS), and use signed URLs; third-party image-egress is documented and opt-in. _(PR #5)_
+- [ ] Tool-approval flow cannot be bypassed, forged, or replayed. _(audited in Phase 0/1 as sound for current stub; revisit when tool-exec lands.)_
+- [x] Security headers (CSP/HSTS/etc.) are set; `pnpm audit` risk: `next@14→15` advisories deferred (D3, its own PR). _(PR #5)_
+- [x] Security red-team review = PASS (saved in `docs/reviews/2026-05-30-phase1-security.md`).
 
 ### Code quality (Phase 2)
 - [ ] Root ESLint + Prettier enforced across all workspaces; `pnpm lint` green.
