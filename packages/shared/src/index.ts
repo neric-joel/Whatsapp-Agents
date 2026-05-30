@@ -22,13 +22,15 @@ export function parseDiscussionRequest(content: string): DiscussionCommand | nul
   const command = parseDiscussionCommand(content)
   if (command) return command
 
-  // Match "@everyone <question ending in ?>". Avoid a polynomial-ReDoS regex
-  // (a greedy `[\s\S]*\?` overlapping a trailing `\s*$` backtracks quadratically):
-  // capture the rest linearly, then require a trailing "?" in code. `content` is
-  // already trimmed, so no trailing-whitespace handling is needed in the pattern.
-  const everyoneMatch = content.trim().match(/^@everyone\b\s+([\s\S]+)$/i)
-  if (!everyoneMatch) return null
-  const question = (everyoneMatch[1] ?? '').trim()
+  // "@everyone <question ending in ?>". Match ONLY the fixed prefix with a regex,
+  // then validate the remainder in plain code — no overlapping/adjacent quantifiers,
+  // so there is no polynomial-ReDoS backtracking (clears CodeQL js/polynomial-redos).
+  const trimmed = content.trim()
+  const prefix = /^@everyone\b/i.exec(trimmed)
+  if (!prefix) return null
+  const rest = trimmed.slice(prefix[0].length)
+  if (!/^\s/.test(rest)) return null // require whitespace after @everyone
+  const question = rest.trim()
   if (!question.endsWith('?')) return null
 
   return {
