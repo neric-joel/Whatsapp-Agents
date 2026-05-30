@@ -55,3 +55,8 @@ Prints the active goal parsed from `PROGRESS.md`, tool availability, and the
   Enable the hook once per clone: `git config core.hooksPath .githooks`. The runner
   opens PRs; it must never merge them (humans review + merge).
 - Logs: `docs/production-hardening/runner.log`. Living status: `PROGRESS.md`.
+  At-a-glance heartbeat: `docs/production-hardening/STATUS.md` — auto-written each cycle
+  (state, active goal, DoD progress, recent log tail); gitignored runtime state, safe to
+  read anytime without interrupting the runner.
+- Shell: launch with **Windows PowerShell** (`powershell.exe`) — the script is 5.1-clean
+  and the scheduled task uses `powershell.exe`. `pwsh` (PowerShell 7) is optional, not required.
