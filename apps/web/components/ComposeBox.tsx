@@ -35,6 +35,11 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch }: Props) {
   const room = rooms.find((r) => r.id === roomId)
 
   useEffect(() => {
+    setAttachedFile(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }, [roomId])
+
+  useEffect(() => {
     const supabase = createSupabaseBrowserClient()
     supabase
       .from('room_members')

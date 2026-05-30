@@ -87,40 +87,47 @@ export default function PinnedItemsPanel({ roomId }: Props) {
     setPins((prev) => prev.filter((pin) => pin.id !== pinId))
   }
 
-  if (error) return <div className="p-4 text-red-400 text-sm">Failed to load pins</div>
-  if (loading) return <div className="p-4 text-[#52525b] text-sm">Loading pins...</div>
-  if (pins.length === 0) return (
-    <div className="p-4 text-[#52525b] text-xs text-center">
-      Nothing pinned yet. Pin a message to save it here.
-    </div>
-  )
-
   return (
-    <div className="space-y-2 px-3 py-3">
-      {pins.map((pin) => (
-        <div key={pin.id} className="rounded-xl border border-[#27272a] bg-[#18181b] p-3">
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <span className="text-xs font-medium text-[#8b5cf6]">{pin.pin_type}</span>
-            <span className="text-[11px] text-[#52525b]">{formatDate(pin.created_at)}</span>
+    <section className="border-b border-[#27272a]">
+      <div className="border-b border-[#27272a] px-3 py-2 text-xs font-medium uppercase tracking-widest text-[#71717a]">
+        Pinned
+      </div>
+      <div className="space-y-2 p-3">
+        {error ? (
+          <div className="text-sm text-red-400">Failed to load pins</div>
+        ) : loading ? (
+          <div className="text-sm text-[#52525b]">Loading pins...</div>
+        ) : pins.length === 0 ? (
+          <div className="text-center text-xs text-[#52525b]">
+            Nothing pinned yet. Pin a message to save it here.
           </div>
-          {pin.title && <div className="truncate text-sm font-medium text-[#f4f4f5]">{pin.title}</div>}
-          {pin.content && (
-            <div
-              className="mt-1 overflow-hidden text-xs leading-5 text-[#a1a1aa]"
-              style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}
-            >
-              {pin.content}
+        ) : (
+          pins.map((pin) => (
+            <div key={pin.id} className="rounded-xl border border-[#27272a] bg-[#18181b] p-3">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="text-xs font-medium text-[#8b5cf6]">{pin.pin_type}</span>
+                <span className="text-[11px] text-[#52525b]">{formatDate(pin.created_at)}</span>
+              </div>
+              {pin.title && <div className="truncate text-sm font-medium text-[#f4f4f5]">{pin.title}</div>}
+              {pin.content && (
+                <div
+                  className="mt-1 overflow-hidden text-xs leading-5 text-[#a1a1aa]"
+                  style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}
+                >
+                  {pin.content}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => void unpin(pin.id)}
+                className="mt-2 text-xs text-[#52525b] transition-colors hover:text-[#f4f4f5]"
+              >
+                Unpin
+              </button>
             </div>
-          )}
-          <button
-            type="button"
-            onClick={() => void unpin(pin.id)}
-            className="mt-2 text-xs text-[#52525b] transition-colors hover:text-[#f4f4f5]"
-          >
-            Unpin
-          </button>
-        </div>
-      ))}
-    </div>
+          ))
+        )}
+      </div>
+    </section>
   )
 }

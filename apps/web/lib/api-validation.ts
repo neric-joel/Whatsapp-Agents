@@ -35,6 +35,10 @@ export const createPinSchema = z.object({
   visibility: z.enum(['primary', 'secondary']).optional(),
 })
 
+export const addRoomAgentSchema = z.object({
+  agent_id: z.string().uuid(),
+})
+
 export const updatePinSchema = z.object({
   is_active: z.boolean().optional(),
   sort_order: z.number().int().optional(),

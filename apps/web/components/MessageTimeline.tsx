@@ -91,11 +91,10 @@ export default function MessageTimeline({ roomId, refreshSignal, optimisticMessa
   }
 
   return (
-    <div className="flex-1 overflow-y-auto py-4">
+    <div className="flex flex-1 flex-col overflow-y-auto py-4">
       {allMessages.length === 0 && runs.length === 0 && !loading && (
         <div className="flex flex-col items-center justify-center flex-1 p-8 text-center">
-          <p className="text-[#52525b] text-sm">No messages yet</p>
-          <p className="text-[#3f3f46] text-xs mt-1">Say something to get the agents started.</p>
+          <p className="text-[#71717a] text-sm">No messages yet. Mention an agent to get started.</p>
         </div>
       )}
       {allMessages.map((msg) => {
