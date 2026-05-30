@@ -22,12 +22,18 @@ export function parseDiscussionRequest(content: string): DiscussionCommand | nul
   const command = parseDiscussionCommand(content)
   if (command) return command
 
-  const everyoneQuestion = content.trim().match(/^@everyone\b\s+([\s\S]*\?)\s*$/i)
-  if (!everyoneQuestion) return null
+  // Match "@everyone <question ending in ?>". Avoid a polynomial-ReDoS regex
+  // (a greedy `[\s\S]*\?` overlapping a trailing `\s*$` backtracks quadratically):
+  // capture the rest linearly, then require a trailing "?" in code. `content` is
+  // already trimmed, so no trailing-whitespace handling is needed in the pattern.
+  const everyoneMatch = content.trim().match(/^@everyone\b\s+([\s\S]+)$/i)
+  if (!everyoneMatch) return null
+  const question = (everyoneMatch[1] ?? '').trim()
+  if (!question.endsWith('?')) return null
 
   return {
     command: 'discuss',
-    prompt: (everyoneQuestion[1] ?? '').trim(),
+    prompt: question,
   }
 }
 
