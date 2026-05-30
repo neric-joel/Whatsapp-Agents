@@ -8,3 +8,14 @@ dist/
 supabase/.temp/
 agentroom_graph_*.html
 *.tsbuildinfo
+
+# stale git worktrees + generated/process output
+.worktrees/
+graphify-out/
+.claude/do-tasks/
+.claude/settings.local.json
+next-env.d.ts
+
+# hardening loop control (local-only)
+docs/production-hardening/DONE.flag
+docs/production-hardening/runner.log

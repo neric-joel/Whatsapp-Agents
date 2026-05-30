@@ -1,3 +1,5 @@
+project_id = "agentroom"
+
 [api]
 enabled = true
 port = 54321
@@ -42,8 +44,3 @@ enabled = true
 
 [analytics]
 enabled = false
-
-[functions]
-verify_jwt = true
-
-project_id = "agentroom"
