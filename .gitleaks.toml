@@ -1,0 +1,13 @@
+# gitleaks config. Default rules stay on; allowlist only fixtures/examples that
+# legitimately contain FAKE secrets (e.g. redact.test.ts uses a fake JWT to verify
+# the redaction function). Real-secret detection in app/source code is unaffected.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fake/placeholder secrets in tests + example envs (not real)."
+paths = [
+  '''.*\.test\.ts$''',
+  '''.*\.env\.example$''',
+  '''pnpm-lock\.yaml$''',
+]
