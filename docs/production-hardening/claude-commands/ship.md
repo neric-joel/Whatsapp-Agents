@@ -22,7 +22,14 @@ Finalize the current workstream into a small, reviewable Pull Request. Never pus
    `03_DEFINITION_OF_DONE.md` (what & why, changes, risk & rollback, verification
    evidence, screenshots for UI, `Closes #<issue>`). If `gh` is unavailable, push the
    branch and print a ready-to-paste PR title + body and tell me what to do.
-6. Report the PR URL (or the paste-ready block) and the next suggested `/goal`.
+6. **CI (required — local green is necessary but NOT sufficient):** after the PR is
+   opened or updated, confirm GitHub CI with `gh pr checks <n>` (e.g.
+   `gh pr checks <n> --watch`). The `audit` job is informational (allowed-red per
+   decision D3); ANY other red/failing required check is a failure — self-heal
+   (fix → re-verify locally → push) until those checks pass before the goal is DONE.
+7. Report the PR URL (or the paste-ready block), the CI check status, and the next
+   suggested `/goal`.
 
-A PR is not "done" until checks are green and a Critical/High-free critique is
-attached.
+A PR is not "done" until its **GitHub CI required checks are green** (`gh pr checks
+<n>`; the `audit` job may stay red per decision D3) and a Critical/High-free critique
+is attached. Local green alone is necessary but not sufficient.

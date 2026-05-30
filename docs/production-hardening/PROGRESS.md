@@ -26,7 +26,8 @@ Dates are absolute. **Base of record: `origin/main` (`f780235`).**
 - **Self-healing.** On ANY breakage (red typecheck/lint/test/build, failing stress test,
   CI failure, Critical/High critic finding): write a root-cause note here (symptom ·
   hypothesis · evidence), set a corrective `/goal` (`fix: …`), fix, re-verify until
-  green. A goal is DONE only with passing checks + evidence + zero open Critical/High.
+  green. A goal is DONE only with **GitHub CI required checks green** (`gh pr checks <n>`;
+  the `audit` job may stay red per D3) + local checks green + evidence + zero open Critical/High.
 - **gh.** Authenticated as `neric-joel`. Use it for issues + one PR per phase.
 - **Restart-safe.** `scripts/agent-runner.ps1` loops headless Claude (fresh state-load
   each iteration; redacts the gitignored `runner.log`; singleton mutex; sleeps ~5h on a
@@ -124,6 +125,7 @@ Already exists: list global agents; add/remove/mute **seeded** agents per room (
 ---
 
 ## Night log
+- **2026-05-30 (morning — CI-aware completion rule baked in, supervised session)** — Owner set a standing **CI-AWARE completion rule**: local green is necessary but NOT sufficient; after `/ship` opens/updates a PR, confirm GitHub CI with `gh pr checks <n>` — the `audit` job is informational (allowed-red per D3); ANY other red required check is a self-heal failure before a goal is DONE. Baked into `.claude/commands/ship.md` (+ package copy) as a new **CI (required)** step + strengthened "PR is done" line, and `.claude/commands/loop.md` (+ copy) as a CI-aware note in VERIFY + a CI-confirm in JUDGE→DONE. The runner prompt (`scripts/agent-runner.ps1`) was already updated by the owner — committed here. **Adjacent drift caught by a 3-lens verify workflow + fixed:** `.claude/commands/loop.md` lacked the COMPLETION-IS-OBJECTIVE guardrail and `.claude/commands/goal.md` lacked the PROJECT-completion paragraph that their package copies already had — re-synced; **all three command-file pairs now byte-identical (sha256)**. Operating-policy line tightened ("passing checks" → "GitHub CI required checks green; audit may stay red per D3"). **Verified the critic's HIGH "`--watch` doesn't exist" finding was a FALSE POSITIVE** — `gh pr checks --watch` is valid in gh 2.93.0 (also `--fail-fast`/`--required`/`--interval`); wording kept. NEXT (owner plan): **pause for owner to merge PRs #4→#8 bottom-up**, then rebase the stack onto `main`; resume Phase 5 (Docker/compose/devcontainer/SELF_HOSTING) → 6 → 7 → 8; `/brainstorm` phases 9–11 for approval before building; queue Phase 4 live sign-offs (Lighthouse/axe/screenshots) for the seeded app.
 - **2026-05-30 (morning — takeover + CI fix, supervised session)** — Owner asked to complete/test/keep-ready. The overnight runner had reached Phase 5 (Phases 0–4 DONE, PRs #4–#8) but **CI was RED on every PR** — it verifies locally on Node 24 and never watched GitHub CI. Stopped the runner cleanly (the apparent "respawn survivors" were my own kill-command shell self-matching `agent-runner.ps1` in its filter text). **Root-caused + fixed CI → green:** (1) `verify` failed because `packageManager pnpm@11.0.8` requires Node ≥22.13 but CI used Node 20 (`ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite`) → bumped ci.yml/security.yml/.nvmrc to **Node 22** on all 6 branches; (2) `secret-scan` failed on a **false-positive** fake JWT in `apps/web/lib/__tests__/redact.test.ts:12` (redaction-test fixture) → added `.gitleaks.toml` allowlisting test fixtures + examples. Verified PR #4: `verify`+`secret-scan`+`codeql` **PASS** (`audit` informational-red per D3). Committed in-flight Phase 5 env-validation. Local cumulative branch green: typecheck/lint/**164 tests** (66 bridge + 98 web)/build.
 - **2026-05-30 ~00:00** — Installed workflow commands; ran Phase 0 audit (stale tree); built CI/runner/docs; opened PR #3 (later found stale).
 - **2026-05-30 ~01:1x** — Critique gate found "main unprotected under runner" (High) → enabled GitHub branch protection on `main` + committed `.githooks/pre-push`.
@@ -149,6 +151,7 @@ Already exists: list global agents; add/remove/mute **seeded** agents per room (
 - **Runner caveats:** uses `--dangerously-skip-permissions` (unattended); `runner.log` is gitignored + redaction-filtered but is local plaintext — treat as sensitive. The Startup-folder launcher (`%APPDATA%\…\Startup\agentroom-harden.cmd`) auto-resumes at logon (mutex prevents double-run); remove it to fully disable.
 - **`scripts/register-task.ps1`** (full logon+5h scheduled task) needs ONE elevated run — optional (Startup launcher + the running loop already cover continuity).
 - **Decisions recorded:** D1 pivot to origin/main; D2 gh now authed; D3 defer next@15; D4 runner = owner's spec prompt + safety wrappers (mutex/redaction).
+- **[deferred — LOW, optional]** `01_HARDENING_PLAN.md` Phase 0 "Verify: CI is green on the Phase 0 PR" still uses local-only phrasing; could be tightened to "GitHub CI required checks green (audit may stay red per D3)" for consistency with the now-explicit CI-aware rule. Phase 0 is narrow + the rule is enforced downstream in `/ship`+`/loop`, so left as-is.
 
 ---
 

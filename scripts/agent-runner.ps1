@@ -22,6 +22,7 @@ $Log       = Join-Path $HardenDir 'runner.log'
 $DoneFlag  = Join-Path $HardenDir 'DONE.flag'
 $Progress  = Join-Path $HardenDir 'PROGRESS.md'
 $Dod       = Join-Path $HardenDir '03_DEFINITION_OF_DONE.md'
+$Status    = Join-Path $HardenDir 'STATUS.md'
 $SleepOnLimitSec = 5 * 60 * 60   # one Claude usage window
 $BackoffSec = 30
 
@@ -70,6 +71,37 @@ function Test-HardeningComplete {
   return ((Get-UncheckedCount) -eq 0 -and (Test-HasV1Tag))
 }
 
+# Human-readable heartbeat: glance at STATUS.md anytime to see what the runner is
+# doing — without interrupting it. Wrapped so a status-write error never breaks the loop.
+function Get-CheckedCount {
+  if (-not (Test-Path $Dod)) { return 0 }
+  return (Select-String -Path $Dod -Pattern '^\s*-\s*\[[xX]\]').Count
+}
+function Write-Status([string]$state, [string]$now) {
+  try {
+    $checked = Get-CheckedCount; $unchecked = Get-UncheckedCount; $total = $checked + $unchecked
+    $tail = (Get-Content $Log -Tail 6 -ErrorAction SilentlyContinue) -join "`r`n"
+    $body = @"
+AgentRoom runner - live status (safe to read anytime; do not edit)
+Updated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+
+State        : $state
+Active goal  : $(Get-ActiveGoal)
+DoD progress : $checked / $total boxes checked ($unchecked left); v1 tag: $(Test-HasV1Tag)
+Now          : $now
+
+This runner never waits on you. Anything it cannot SAFELY auto-decide (irreversible /
+destructive / costly / legal) is NOT performed and NOT blocked on - it is appended to
+PROGRESS.md under "## For morning review". Read that section to see what (if anything)
+needs you. Everything else it decides, logs, and continues.
+
+Recent activity (runner.log tail):
+$tail
+"@
+    Set-Content -Path $Status -Value $body -Encoding UTF8
+  } catch { Write-Log ('Write-Status failed: {0}' -f $_.Exception.Message) }
+}
+
 # Honor DONE.flag ONLY if truly complete; otherwise it is stale -> delete, log, continue.
 function Confirm-Done {
   if (-not (Test-Path $DoneFlag)) { return $false }
@@ -85,6 +117,8 @@ function Confirm-Done {
 
 $Prompt = @'
 Load state from docs/production-hardening/PROGRESS.md, CLAUDE.md and git. Continue the hardening loop: run the ACTIVE /goal in PROGRESS.md to DONE, then immediately set the next /goal per 01_HARDENING_PLAN.md + 04_HERMES_CAPABILITIES.md and keep going. Never stop to ask; on a blocker take the safe reversible path or log it under "## For morning review" and continue. Feature branches + PRs only; never touch main; no secrets. Self-heal on any failure: write a root-cause note, set a corrective "fix:" goal, fix, re-verify green.
+
+CI-AWARE (required): local green is necessary but NOT sufficient. After /ship opens or updates a PR, confirm GitHub CI with `gh pr checks <n>` (e.g. `gh pr checks <n> --watch`). The `audit` job is informational (allowed-red per decision D3); ANY other red/failing required check is a failure you must self-heal before the goal can be judged DONE. A goal is not DONE while its PR's required checks are red.
 
 COMPLETION IS OBJECTIVE. Do NOT create docs/production-hardening/DONE.flag unless BOTH are true RIGHT NOW: (1) 03_DEFINITION_OF_DONE.md has ZERO unchecked "- [ ]" boxes, and (2) `git tag` shows a v1 tag. Finishing one goal or phase is NOT completion — set the next goal and continue. Never create DONE.flag to signal that a cycle or phase finished. If in doubt, do NOT create it.
 '@
@@ -116,6 +150,7 @@ try {
   Write-Log '==== AgentRoomHarden runner starting ===='
   while (-not (Confirm-Done)) {
     Write-Log ('Launching headless Claude Code cycle... (active: {0}; {1} DoD box(es) left)' -f (Get-ActiveGoal), (Get-UncheckedCount))
+    Write-Status 'RUNNING' 'Launched a headless build cycle on the active goal.'
     # --dangerously-skip-permissions: unattended operation cannot stop for a prompt.
     # main stays protected by CLAUDE.md + branch/PR discipline; secrets are never committed.
     & claude -p $Prompt --dangerously-skip-permissions --model opus 2>&1 |
@@ -126,11 +161,13 @@ try {
     $tail = (Get-Content $Log -Tail 60 -ErrorAction SilentlyContinue) -join "`n"
     if ($tail -match '(?i)(usage limit|rate limit|limit reached|resets? at|too many requests|\b429\b|quota exceeded)') {
       Write-Log ('Usage/rate limit detected - sleeping {0}s until the window resets.' -f $SleepOnLimitSec)
+      Write-Status 'SLEEPING (usage limit)' ('Hit a usage limit; sleeping ~{0}h, then auto-resuming.' -f [int]($SleepOnLimitSec / 3600))
       Start-Sleep -Seconds $SleepOnLimitSec
     } else {
       Write-Log ('Backoff {0}s, then continue.' -f $BackoffSec)
       Start-Sleep -Seconds $BackoffSec
     }
   }
+  Write-Status 'FINISHED' 'Hardening verified complete (0 unchecked DoD boxes + v1 tag). Runner stopped.'
   Write-Log '==== runner finished (hardening verified complete: 0 unchecked DoD boxes + v1 tag) ===='
 } finally { try { [void]$mutex.ReleaseMutex() } catch {}; $mutex.Dispose() }
