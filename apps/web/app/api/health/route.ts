@@ -1,5 +1,5 @@
-import { ok } from '@/lib/api'
+import { apiSuccess } from '@/lib/api-error'
 
 export async function GET() {
-  return ok({ service: 'agentroom-web' })
+  return apiSuccess({ service: 'agentroom-web' })
 }
