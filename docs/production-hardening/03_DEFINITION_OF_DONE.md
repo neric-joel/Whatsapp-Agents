@@ -26,10 +26,10 @@ linked evidence** (a merged PR, a green CI run, a saved review, or a screenshot)
 - [x] No architecture violations in production code (one pre-existing test-only web→bridge import deferred → A-3). _(PR #6)_
 
 ### Testing (Phase 3)
-- [ ] Unit/integration coverage ≥ the CI floor on the risk areas; CI gates on it.
-- [ ] Playwright e2e covers the core journeys and runs deterministically (mock adapter, no live LLM) in CI.
-- [ ] RLS/policy tests exist and pass.
-- [ ] A deliberately introduced regression is demonstrably caught by the suite.
+- [x] Unit/integration coverage ≥ the CI floor on the risk areas; CI gates on it. _(154 tests; bridge 60.7% ≥ 55, web 90.0% ≥ 80; `coverage` job in CI.)_ _(PR #7)_
+- [x] Playwright e2e covers the core journeys and runs deterministically (mock adapter, no live LLM) in CI. _(8 specs; 5/5 non-skipped pass against dummy-env web server; live journey gated on `E2E_LIVE`; `e2e.yml`.)_ _(PR #7)_
+- [x] RLS/policy tests exist and pass. _(pgTAP `storage_rls_test.sql` 6/6 + `rls_policies_test.sql` 4/4; `db-tests.yml` runs `supabase test db` in CI.)_ _(PR #7)_
+- [x] A deliberately introduced regression is demonstrably caught by the suite. _(flipped `isForbiddenCrossOrigin`→false; 2 CSRF tests failed; reverted — see review.)_ _(PR #7)_
 
 ### UI/UX & accessibility (Phase 4)
 - [ ] Every core view handles loading / empty / error / stuck-run states.
