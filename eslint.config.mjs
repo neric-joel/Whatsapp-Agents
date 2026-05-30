@@ -62,16 +62,11 @@ export default tseslint.config(
           ignoreRestSiblings: true,
         },
       ],
-      'no-unused-vars': [
-        'warn',
-        {
-          argsIgnorePattern: '^_',
-          caughtErrorsIgnorePattern: '^_',
-          destructuredArrayIgnorePattern: '^_',
-          varsIgnorePattern: '^_',
-          ignoreRestSiblings: true,
-        },
-      ],
+      // Turn off the core rule in favour of @typescript-eslint/no-unused-vars
+      // (per typescript-eslint guidance). The core rule isn't type-aware and
+      // false-flags parameter names inside function *type* signatures
+      // (e.g. `onCancel?: (runId: string) => void`), which are documentation.
+      'no-unused-vars': 'off',
       '@typescript-eslint/no-require-imports': 'warn',
       'no-empty': 'warn',
       'no-constant-condition': 'warn',

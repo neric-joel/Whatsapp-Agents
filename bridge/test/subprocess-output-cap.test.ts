@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { SubprocessAdapter } from '../src/adapters/subprocess-adapter.js'
 import type { AgentEvent, ContextPacketV1 } from '@agentroom/shared'
+
+import { SubprocessAdapter } from '../src/adapters/subprocess-adapter.js'
 
 const packet: ContextPacketV1 = {
   schema_version: 1,

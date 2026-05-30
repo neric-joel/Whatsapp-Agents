@@ -56,7 +56,7 @@ interface Props {
 
 function LoadingSkeleton() {
   return (
-    <div className="space-y-5 px-5 py-6">
+    <div className="space-y-5 px-5 py-6" role="status" aria-label="Loading messages">
       {[0, 1, 2, 3].map((index) => (
         <div key={index} className="flex animate-pulse items-start gap-3">
           <div className="h-8 w-8 rounded-full bg-gray-200" />
@@ -235,10 +235,20 @@ export default function MessageTimeline({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[var(--surface)]" data-testid="message-timeline">
+    <div
+      className="flex-1 overflow-y-auto bg-[var(--surface)]"
+      data-testid="message-timeline"
+      role="log"
+      aria-label="Message timeline"
+      aria-live="polite"
+      aria-relevant="additions"
+    >
       <div className="min-h-full py-4">
         {allMessages.length === 0 && runs.length === 0 && !loading && (
-          <div className="flex min-h-full items-center justify-center p-8 text-center">
+          <div
+            className="flex min-h-full items-center justify-center p-8 text-center"
+            role="status"
+          >
             <div>
               <p className="text-sm text-[var(--muted)]">No messages yet</p>
               <p className="mt-1 text-xs text-[var(--muted)]">

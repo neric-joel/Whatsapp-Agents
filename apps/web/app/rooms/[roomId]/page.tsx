@@ -27,7 +27,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
 
   return (
     <div className="flex min-h-0 flex-1">
-      <div className="flex min-w-0 flex-1 flex-col">
+      <main className="flex min-w-0 flex-1 flex-col">
         <RoomHeader roomId={roomId} />
         <MessageTimeline
           roomId={roomId}
@@ -42,8 +42,11 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
           replyingTo={replyingTo}
           onCancelReply={() => setReplyingTo(null)}
         />
-      </div>
-      <aside className="hidden w-72 flex-shrink-0 border-l border-[var(--border)] bg-[var(--right-panel)] lg:block">
+      </main>
+      <aside
+        className="hidden w-72 flex-shrink-0 border-l border-[var(--border)] bg-[var(--right-panel)] lg:block"
+        aria-label="Pinned items"
+      >
         <div className="border-b border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm font-medium text-[var(--text)]">
           Pinned
         </div>

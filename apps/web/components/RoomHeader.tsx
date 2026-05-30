@@ -319,7 +319,9 @@ export default function RoomHeader({ roomId }: Props) {
           </div>
 
           {agentError && (
-            <p className="border-t border-gray-200 px-3 py-2 text-xs text-red-600">{agentError}</p>
+            <p role="alert" className="border-t border-gray-200 px-3 py-2 text-xs text-red-600">
+              {agentError}
+            </p>
           )}
 
           <div className="flex items-center gap-2 border-t border-gray-200 p-3">
@@ -327,6 +329,7 @@ export default function RoomHeader({ roomId }: Props) {
               value={selectedAgentId}
               onChange={(event) => setSelectedAgentId(event.target.value)}
               disabled={availableAgents.length === 0 || busyMemberId === '__add__'}
+              aria-label="Select an agent to add to the room"
               className="min-w-0 flex-1 rounded-md border border-gray-300 bg-white px-2 py-2 text-sm text-gray-900 outline-none disabled:opacity-50"
             >
               {availableAgents.length === 0 ? (

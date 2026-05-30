@@ -28,14 +28,13 @@ export default function FormattedMessageContent({ content }: { content: string }
             if (isBlock) {
               return <code className={className}>{children}</code>
             }
-            return (
-              <code className="rounded bg-black/10 px-1 py-0.5 font-mono text-[0.92em]">
-                {children}
-              </code>
-            )
+            // Inline code: background/contrast handled theme-aware in globals.css
+            // (.message-markdown :not(pre) > code) so it stays legible on all themes.
+            return <code className="font-mono">{children}</code>
           },
           pre: ({ children }) => (
-            <pre className="mb-3 max-h-72 overflow-auto rounded-md border border-current/10 bg-white/65 p-3 text-xs leading-5 last:mb-0">
+            // Background + border are theme-aware via globals.css (.message-markdown pre).
+            <pre className="mb-3 max-h-72 overflow-auto rounded-md p-3 text-xs leading-5 last:mb-0">
               {children}
             </pre>
           ),

@@ -105,11 +105,21 @@ export default function PinnedItemsPanel({ roomId }: Props) {
     setPins((prev) => prev.filter((pin) => pin.id !== pinId))
   }
 
-  if (error) return <div className="p-4 text-red-600 text-sm">Failed to load pins</div>
-  if (loading) return <div className="p-4 text-[var(--muted)] text-sm">Loading pins...</div>
+  if (error)
+    return (
+      <div role="alert" className="p-4 text-red-600 text-sm">
+        Failed to load pins
+      </div>
+    )
+  if (loading)
+    return (
+      <div role="status" className="p-4 text-[var(--muted)] text-sm">
+        Loading pins...
+      </div>
+    )
   if (pins.length === 0)
     return (
-      <div className="p-4 text-[var(--muted)] text-xs text-center">
+      <div role="status" className="p-4 text-[var(--muted)] text-xs text-center">
         Nothing pinned yet. Pin a message to save it here.
       </div>
     )

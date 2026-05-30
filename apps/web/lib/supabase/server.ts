@@ -19,7 +19,10 @@ export function createSupabaseServerClient() {
             cookiesToSet.forEach(({ name, value, options }) =>
               cookieStore.set(name, value, options),
             )
-          } catch {}
+          } catch {
+            // setAll is called from a Server Component where the cookie store
+            // is read-only; safe to ignore since middleware refreshes sessions.
+          }
         },
       },
     },

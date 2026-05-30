@@ -73,15 +73,20 @@ export default function AgentRunCard({ run, onRetry, onCancel }: AgentRunCardPro
               {statusLabel[status]}
             </span>
           </div>
-          <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+          <div
+            className="mt-1 flex items-center gap-2 text-xs text-[var(--muted)]"
+            role="status"
+            aria-live="polite"
+          >
             {isThinking ? (
               <>
                 <span>
+                  {agents?.name ?? 'Agent'}{' '}
                   {status === 'queued'
-                    ? 'Waiting to respond'
+                    ? 'is waiting to respond'
                     : status === 'claimed'
-                      ? 'Starting'
-                      : 'Thinking'}
+                      ? 'is starting'
+                      : 'is thinking'}
                 </span>
                 <span className="flex gap-1" aria-hidden="true">
                   {[0, 1, 2].map((i) => (

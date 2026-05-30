@@ -5,7 +5,6 @@ import { recoverStaleRuns } from './lib/stale-runs.js'
 import { createServiceClient } from './lib/supabase.js'
 import { processRun } from './workers/run-worker.js'
 
-const WORKER_ID = process.env.BRIDGE_WORKER_ID ?? 'bridge-local-1'
 const POLL_MS = +(process.env.BRIDGE_POLL_INTERVAL_MS ?? 2000)
 const MAX_CONC = +(process.env.BRIDGE_MAX_CONCURRENT_RUNS ?? 3)
 const HEARTBEAT_MS = +(process.env.BRIDGE_HEARTBEAT_INTERVAL_MS ?? 5000)

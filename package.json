@@ -20,11 +20,13 @@
     "e2e:list": "playwright test --list"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.3",
     "@eslint/js": "^10.0.1",
     "@next/eslint-plugin-next": "^16.2.6",
     "@playwright/test": "^1.60.0",
     "@supabase/supabase-js": "^2.105.3",
     "@types/node": "^20.11.0",
+    "axe-core": "^4.11.4",
     "dotenv": "^16.6.1",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",

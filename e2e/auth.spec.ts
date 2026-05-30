@@ -37,11 +37,12 @@ test.describe('Auth redirect', () => {
     // Heading
     await expect(page.getByRole('heading', { name: 'AgentRoom' })).toBeVisible()
 
-    // Tab buttons (Sign In is selected by default). exact:true disambiguates the
-    // "Sign In" tab from the "Sign in" submit button (getByRole is case-insensitive).
-    const signInTab = page.getByRole('button', { name: 'Sign In', exact: true })
+    // Mode tabs use role="tab" (a11y), which disambiguates them from the
+    // "Sign in" submit button. Sign In is selected by default.
+    const signInTab = page.getByRole('tab', { name: 'Sign In' })
     await expect(signInTab).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Sign Up', exact: true })).toBeVisible()
+    await expect(signInTab).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('tab', { name: 'Sign Up' })).toBeVisible()
 
     // Email field — identified by label "Email" or placeholder
     const emailInput = page.getByLabel('Email')
@@ -60,7 +61,7 @@ test.describe('Auth redirect', () => {
   test('switching to Sign Up tab updates the submit button label', async ({ page }) => {
     await page.goto('/auth')
 
-    await page.getByRole('button', { name: 'Sign Up', exact: true }).click()
+    await page.getByRole('tab', { name: 'Sign Up' }).click()
 
     // Submit button (type=submit) changes to "Create account"
     await expect(page.locator('button[type="submit"]')).toHaveText('Create account')

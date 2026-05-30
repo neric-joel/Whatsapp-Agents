@@ -332,16 +332,22 @@ export default function LeftSidebar() {
   }
 
   return (
-    <aside className="w-[260px] flex-shrink-0 h-full bg-[var(--sidebar)] flex flex-col border-r border-[var(--border)]">
+    <aside
+      className="w-[260px] flex-shrink-0 h-full bg-[var(--sidebar)] flex flex-col border-r border-[var(--border)]"
+      aria-label="Rooms"
+    >
       <div className="p-4 pb-2">
         <span className="text-base font-bold text-[var(--text)]">AgentRoom</span>
       </div>
       <div className="px-4 py-2 text-[11px] font-medium uppercase tracking-widest text-[var(--muted)]">
         ROOMS
       </div>
-      <nav className="flex-1 overflow-y-auto">
+      <nav className="flex-1 overflow-y-auto" aria-label="Room list">
         {activeRooms.length === 0 && (
-          <div className="flex flex-col items-center justify-center flex-1 p-6 text-center">
+          <div
+            className="flex flex-col items-center justify-center flex-1 p-6 text-center"
+            role="status"
+          >
             <p className="mb-3 text-sm text-[var(--muted)]">
               {rooms.length === 0 ? 'No rooms yet' : 'No active rooms'}
             </p>
@@ -400,12 +406,22 @@ export default function LeftSidebar() {
       </div>
 
       {isCreateOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 px-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 px-4"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') closeCreateModal()
+          }}
+        >
           <form
             onSubmit={handleCreateRoom}
             className="w-full max-w-sm rounded-lg bg-white p-5 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="create-room-title"
           >
-            <h2 className="text-lg font-semibold text-zinc-950">New room</h2>
+            <h2 id="create-room-title" className="text-lg font-semibold text-zinc-950">
+              New room
+            </h2>
             <label className="mt-4 block text-sm font-medium text-zinc-700" htmlFor="room-name">
               Room name
             </label>
@@ -418,7 +434,11 @@ export default function LeftSidebar() {
               placeholder="Planning"
               disabled={isCreating}
             />
-            {createError && <p className="mt-3 text-sm text-red-600">{createError}</p>}
+            {createError && (
+              <p role="alert" className="mt-3 text-sm text-red-600">
+                {createError}
+              </p>
+            )}
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"

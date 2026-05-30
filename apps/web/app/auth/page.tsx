@@ -51,9 +51,17 @@ export default function AuthPage() {
         </div>
 
         <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)] shadow-xl">
-          <div className="flex border-b border-[var(--border)] bg-[var(--surface)]">
+          <div
+            className="flex border-b border-[var(--border)] bg-[var(--surface)]"
+            role="tablist"
+            aria-label="Authentication mode"
+          >
             <button
               type="button"
+              role="tab"
+              id="tab-signin"
+              aria-selected={mode === 'signin'}
+              aria-controls="auth-form"
               onClick={() => {
                 setMode('signin')
                 setError(null)
@@ -68,6 +76,10 @@ export default function AuthPage() {
             </button>
             <button
               type="button"
+              role="tab"
+              id="tab-signup"
+              aria-selected={mode === 'signup'}
+              aria-controls="auth-form"
               onClick={() => {
                 setMode('signup')
                 setError(null)
@@ -82,7 +94,13 @@ export default function AuthPage() {
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <form
+            onSubmit={handleSubmit}
+            className="p-6 space-y-4"
+            id="auth-form"
+            role="tabpanel"
+            aria-labelledby={mode === 'signin' ? 'tab-signin' : 'tab-signup'}
+          >
             <div>
               <label
                 htmlFor="email"
@@ -124,7 +142,11 @@ export default function AuthPage() {
             </div>
 
             {error && (
-              <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+              <p
+                role="alert"
+                aria-live="assertive"
+                className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600"
+              >
                 {error}
               </p>
             )}

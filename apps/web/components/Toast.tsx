@@ -23,7 +23,9 @@ function Toast({ toast, onDismiss }: ToastProps) {
   return (
     <div
       className={`animate-[toast-life_4000ms_ease-in-out_forwards] rounded-md border-l-4 ${toneClass[toast.type]} bg-white px-4 py-3 text-sm text-gray-900 shadow-lg transition-opacity`}
-      role="status"
+      role={toast.type === 'error' ? 'alert' : 'status'}
+      aria-live={toast.type === 'error' ? 'assertive' : 'polite'}
+      aria-atomic="true"
     >
       <div className="flex min-w-64 max-w-sm items-start gap-3">
         <p className="flex-1 leading-5">{toast.message}</p>
