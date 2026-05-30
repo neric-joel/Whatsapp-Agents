@@ -146,6 +146,21 @@ Already exists: list global agents; add/remove/mute **seeded** agents per room (
 
 ---
 
+## 2026-05-30 — GOAL: Phase 3 — Automated testing & verification — **ACTIVE**
+- Phase: 3 (Testing). Branch: `harden/p3-tests` (stack on `harden/p2-quality`).
+- Iteration budget: 10. State: ACTIVE.
+- Acceptance criteria (testable; from plan + DoD):
+  - [ ] Coverage tooling wired (web vitest `--coverage`, bridge node coverage) with a realistic CI floor that gates; floor documented.
+  - [ ] New unit/integration tests close real gaps in risk areas (mention parsing, loop guards, discussion orchestration, adapter prompt construction, stale-run recovery, hallucination, API validation/authz, cancellation, pins, formatting).
+  - [ ] RLS/policy tests expanded beyond storage (messages/agent_runs write-deny, room membership) — deterministic; verified against local DB (rolled-back).
+  - [ ] Playwright e2e scaffolded for core journeys with the mock adapter (sign-in→room→message→reply, @mention, /discuss, cancel); deterministic; CI job added. (Execution gated in CI; note if it can't run locally unattended.)
+  - [ ] A deliberately introduced regression is demonstrably caught by the suite (prove, then revert) — documented in the review.
+  - [ ] Critique gate (QA/Verification: meaningful tests, not coverage theater) PASS → `docs/reviews/`; all checks green; no Critical/High.
+
+Judge rule: DONE only when every box is checked with linked evidence and no Critical/High is open.
+
+---
+
 ## 2026-05-30 — GOAL: Phase 2 — Code quality, type-safety & dead-code — **DONE ✅**
 - Phase: 2 (Quality). Branch: `harden/p2-quality` (stack on `feat/p1-security`). PR: #6 (see Night log).
 - Iteration budget: 10. State: **DONE** (judge-gated: both critics PASS, no Critical/High, all checks green).
