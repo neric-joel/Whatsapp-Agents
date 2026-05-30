@@ -13,7 +13,8 @@
  *   - Email input:    <input id="email" type="email" placeholder="you@example.com">
  *   - Password input: <input id="password" type="password" placeholder="Password">
  *   - Submit button:  <button type="submit"> "Sign in" | "Create account"
- *   - Mode tabs:      <button type="button"> "Sign In" | "Sign Up"
+ *   - Mode tabs:      role="tab" "Sign In" | "Sign Up" (WAI-ARIA tablist,
+ *                     roving tabindex + Left/Right arrow navigation)
  */
 
 import { expect, test } from '@playwright/test'
@@ -69,6 +70,25 @@ test.describe('Auth redirect', () => {
     // The password field autocomplete attribute changes to new-password in signup mode.
     // This validates the mode state is actually toggled.
     await expect(page.getByLabel('Password')).toHaveAttribute('autocomplete', 'new-password')
+  })
+
+  test('tablist supports arrow-key navigation (WAI-ARIA tabs)', async ({ page }) => {
+    await page.goto('/auth')
+
+    const signIn = page.getByRole('tab', { name: 'Sign In' })
+    const signUp = page.getByRole('tab', { name: 'Sign Up' })
+
+    // Focus the active tab, then ArrowRight should select + focus Sign Up.
+    await signIn.focus()
+    await page.keyboard.press('ArrowRight')
+    await expect(signUp).toHaveAttribute('aria-selected', 'true')
+    await expect(signUp).toBeFocused()
+    await expect(page.locator('button[type="submit"]')).toHaveText('Create account')
+
+    // ArrowLeft returns to Sign In.
+    await page.keyboard.press('ArrowLeft')
+    await expect(signIn).toHaveAttribute('aria-selected', 'true')
+    await expect(signIn).toBeFocused()
   })
 
   test('submitting empty form does not navigate away from /auth', async ({ page }) => {

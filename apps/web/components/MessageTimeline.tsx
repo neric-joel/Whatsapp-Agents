@@ -56,7 +56,12 @@ interface Props {
 
 function LoadingSkeleton() {
   return (
-    <div className="space-y-5 px-5 py-6" role="status" aria-label="Loading messages">
+    <div
+      className="space-y-5 px-5 py-6"
+      role="status"
+      aria-live="polite"
+      aria-label="Loading messages"
+    >
       {[0, 1, 2, 3].map((index) => (
         <div key={index} className="flex animate-pulse items-start gap-3">
           <div className="h-8 w-8 rounded-full bg-gray-200" />
@@ -85,7 +90,12 @@ export default function MessageTimeline({
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    // Honour prefers-reduced-motion: ScrollIntoViewOptions.behavior overrides
+    // the CSS scroll-behavior, so we must branch in JS (not only in CSS).
+    const reduceMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    bottomRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' })
   }, [messages, optimisticMessages])
 
   useEffect(() => {
@@ -245,10 +255,9 @@ export default function MessageTimeline({
     >
       <div className="min-h-full py-4">
         {allMessages.length === 0 && runs.length === 0 && !loading && (
-          <div
-            className="flex min-h-full items-center justify-center p-8 text-center"
-            role="status"
-          >
+          // No role="status" here: this lives inside the role="log" live region,
+          // so a separate status region would double-announce.
+          <div className="flex min-h-full items-center justify-center p-8 text-center">
             <div>
               <p className="text-sm text-[var(--muted)]">No messages yet</p>
               <p className="mt-1 text-xs text-[var(--muted)]">

@@ -73,11 +73,12 @@ export default function AgentRunCard({ run, onRetry, onCancel }: AgentRunCardPro
               {statusLabel[status]}
             </span>
           </div>
-          <div
-            className="mt-1 flex items-center gap-2 text-xs text-[var(--muted)]"
-            role="status"
-            aria-live="polite"
-          >
+          {/*
+            No nested live region here: this card is rendered inside the
+            MessageTimeline role="log" (aria-live), which announces the card when
+            it appears. A nested role="status"/aria-live would double-announce.
+          */}
+          <div className="mt-1 flex items-center gap-2 text-xs text-[var(--muted)]">
             {isThinking ? (
               <>
                 <span>

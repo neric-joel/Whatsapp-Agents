@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { FormEvent, useState } from 'react'
+import { FormEvent, useRef, useState } from 'react'
 
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
@@ -14,6 +14,27 @@ export default function AuthPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const signinTabRef = useRef<HTMLButtonElement>(null)
+  const signupTabRef = useRef<HTMLButtonElement>(null)
+
+  function selectMode(next: Mode) {
+    setMode(next)
+    setError(null)
+  }
+
+  // WAI-ARIA tabs pattern: Left/Right/Home/End move between tabs and move focus
+  // (roving tabindex). The form below is the tabpanel.
+  function handleTabKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'ArrowRight' || e.key === 'End') {
+      e.preventDefault()
+      selectMode('signup')
+      signupTabRef.current?.focus()
+    } else if (e.key === 'ArrowLeft' || e.key === 'Home') {
+      e.preventDefault()
+      selectMode('signin')
+      signinTabRef.current?.focus()
+    }
+  }
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -57,15 +78,15 @@ export default function AuthPage() {
             aria-label="Authentication mode"
           >
             <button
+              ref={signinTabRef}
               type="button"
               role="tab"
               id="tab-signin"
               aria-selected={mode === 'signin'}
               aria-controls="auth-form"
-              onClick={() => {
-                setMode('signin')
-                setError(null)
-              }}
+              tabIndex={mode === 'signin' ? 0 : -1}
+              onClick={() => selectMode('signin')}
+              onKeyDown={handleTabKeyDown}
               className={`flex-1 py-3 text-sm font-medium transition-colors ${
                 mode === 'signin'
                   ? 'bg-[var(--accent)] text-[var(--accent-text)]'
@@ -75,15 +96,15 @@ export default function AuthPage() {
               Sign In
             </button>
             <button
+              ref={signupTabRef}
               type="button"
               role="tab"
               id="tab-signup"
               aria-selected={mode === 'signup'}
               aria-controls="auth-form"
-              onClick={() => {
-                setMode('signup')
-                setError(null)
-              }}
+              tabIndex={mode === 'signup' ? 0 : -1}
+              onClick={() => selectMode('signup')}
+              onKeyDown={handleTabKeyDown}
               className={`flex-1 py-3 text-sm font-medium transition-colors ${
                 mode === 'signup'
                   ? 'bg-[var(--accent)] text-[var(--accent-text)]'
@@ -145,7 +166,7 @@ export default function AuthPage() {
               <p
                 role="alert"
                 aria-live="assertive"
-                className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600"
+                className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
               >
                 {error}
               </p>

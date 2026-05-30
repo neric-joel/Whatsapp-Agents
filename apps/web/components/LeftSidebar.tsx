@@ -2,7 +2,7 @@
 import type { Room } from '@agentroom/shared'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { FormEvent, MouseEvent, useMemo, useState } from 'react'
+import { FormEvent, MouseEvent, useMemo, useRef, useState } from 'react'
 
 import { useAuth } from '@/hooks/useAuth'
 import { useRooms } from '@/hooks/useRooms'
@@ -111,6 +111,9 @@ export default function LeftSidebar() {
   const [busyRoomId, setBusyRoomId] = useState<string | null>(null)
   const [showArchived, setShowArchived] = useState(false)
   const [openRoomMenuId, setOpenRoomMenuId] = useState<string | null>(null)
+  const dialogRef = useRef<HTMLFormElement>(null)
+  // Element focused before the modal opened, so we can restore focus on close.
+  const createTriggerRef = useRef<HTMLElement | null>(null)
 
   const { activeRooms, archivedRooms } = useMemo(
     () => ({
@@ -121,6 +124,8 @@ export default function LeftSidebar() {
   )
 
   function openCreateModal() {
+    createTriggerRef.current =
+      typeof document !== 'undefined' ? (document.activeElement as HTMLElement) : null
     setRoomName('')
     setCreateError(null)
     setIsCreateOpen(true)
@@ -131,6 +136,28 @@ export default function LeftSidebar() {
     setIsCreateOpen(false)
     setRoomName('')
     setCreateError(null)
+    // Return focus to whatever opened the dialog (WAI-ARIA dialog pattern).
+    createTriggerRef.current?.focus?.()
+  }
+
+  // Focus trap: keep Tab / Shift+Tab cycling within the open dialog.
+  function trapDialogFocus(e: React.KeyboardEvent) {
+    if (e.key !== 'Tab' || !dialogRef.current) return
+    const focusables = dialogRef.current.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    )
+    const enabled = Array.from(focusables).filter((el) => !el.hasAttribute('disabled'))
+    if (enabled.length === 0) return
+    const first = enabled[0]!
+    const last = enabled[enabled.length - 1]!
+    const active = document.activeElement
+    if (e.shiftKey && active === first) {
+      e.preventDefault()
+      last.focus()
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault()
+      first.focus()
+    }
   }
 
   async function handleCreateRoom(event: FormEvent<HTMLFormElement>) {
@@ -362,7 +389,10 @@ export default function LeftSidebar() {
         )}
         <div className="space-y-1">{activeRooms.map(renderRoom)}</div>
         {roomActionError && (
-          <p className="mx-4 mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+          <p
+            role="alert"
+            className="mx-4 mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
+          >
             {roomActionError}
           </p>
         )}
@@ -408,11 +438,17 @@ export default function LeftSidebar() {
       {isCreateOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 px-4"
+          onMouseDown={(event) => {
+            // Click on the backdrop (not the dialog) dismisses.
+            if (event.target === event.currentTarget) closeCreateModal()
+          }}
           onKeyDown={(event) => {
             if (event.key === 'Escape') closeCreateModal()
+            else trapDialogFocus(event)
           }}
         >
           <form
+            ref={dialogRef}
             onSubmit={handleCreateRoom}
             className="w-full max-w-sm rounded-lg bg-white p-5 shadow-2xl"
             role="dialog"
@@ -435,7 +471,7 @@ export default function LeftSidebar() {
               disabled={isCreating}
             />
             {createError && (
-              <p role="alert" className="mt-3 text-sm text-red-600">
+              <p role="alert" className="mt-3 text-sm text-red-700">
                 {createError}
               </p>
             )}
