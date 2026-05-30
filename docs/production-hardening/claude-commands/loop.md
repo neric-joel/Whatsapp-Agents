@@ -41,6 +41,10 @@ Read first (treat as binding): `docs/production-hardening/01_HARDENING_PLAN.md`,
 - Never weaken auth, RLS, the tool-approval flow, subprocess validation, or memory
   injection scanning to make a check pass.
 - Never fabricate evidence or mark a criterion done with failing checks.
+- COMPLETION IS OBJECTIVE. The project is finished — and `docs/production-hardening/DONE.flag`
+  may be created — ONLY when `03_DEFINITION_OF_DONE.md` has zero unchecked `- [ ]` boxes
+  AND `git tag` shows `v1.0`. Finishing one goal/phase just means set the next `/goal`;
+  NEVER create DONE.flag to signal that a cycle or phase finished.
 - If a choice is irreversible/expensive and genuinely ambiguous, pause and ask me ONE
   precise question; otherwise pick the justified default, record it, and proceed.
 - Respect `/goal pause`. Stop when the iteration budget is reached and report status.

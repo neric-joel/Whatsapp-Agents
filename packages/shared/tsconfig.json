@@ -3,9 +3,7 @@
   "compilerOptions": {
     "moduleResolution": "NodeNext",
     "module": "NodeNext",
-    "target": "ES2022",
-    "declaration": true,
-    "outDir": "dist"
+    "target": "ES2022"
   },
   "include": ["src"]
 }

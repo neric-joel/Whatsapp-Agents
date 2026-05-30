@@ -45,3 +45,8 @@ Argument: `$ARGUMENTS`
 
 The judge rule the loop will use: a goal is DONE only when every acceptance criterion
 is checked **with linked evidence** and no Critical/High review finding is open.
+
+PROJECT completion is separate and stricter than a goal being DONE: the whole effort
+is finished — and `docs/production-hardening/DONE.flag` may be created — ONLY when every
+box in `03_DEFINITION_OF_DONE.md` is checked AND `v1.0` is tagged. A finished goal or
+phase is never, by itself, project completion.

@@ -1,3 +1,5 @@
+import { join } from 'node:path'
+
 import js from '@eslint/js'
 import next from '@next/eslint-plugin-next'
 import prettier from 'eslint-config-prettier'
@@ -5,6 +7,10 @@ import react from 'eslint-plugin-react-hooks'
 import simpleImportSort from 'eslint-plugin-simple-import-sort'
 import globals from 'globals'
 import tseslint from 'typescript-eslint'
+
+// Resolve the web app dir relative to this config so the lint config is
+// portable across machines/CI (no hardcoded absolute path).
+const webAppDir = join(import.meta.dirname, 'apps/web/app')
 
 export default tseslint.config(
   // Global ignores
@@ -117,11 +123,8 @@ export default tseslint.config(
       'react-hooks/exhaustive-deps': 'warn',
       'react-hooks/set-state-in-effect': 'warn',
 
-      // Next.js specific: Configure path for link checking
-      '@next/next/no-html-link-for-pages': [
-        'warn',
-        "D:\\What's app Agents\\Whatsapp-Agents\\apps\\web\\app",
-      ],
+      // Next.js specific: Configure path for link checking (portable)
+      '@next/next/no-html-link-for-pages': ['warn', webAppDir],
 
       // Warn on custom fonts (not error) - this is expected in App Router
       '@next/next/no-page-custom-font': 'warn',

@@ -1,4 +1,4 @@
-type AgentProvider = 'claude_code' | 'codex_cli' | 'ruflo' | 'mock'
+import type { AgentProvider } from '@agentroom/shared'
 
 interface ProviderStyle {
   bubble: string
