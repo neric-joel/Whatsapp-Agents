@@ -1,0 +1,38 @@
+# Keep the Docker build context small and free of secrets / build artifacts.
+# The build needs: root manifests + lockfile + pnpm-workspace.yaml, apps/web,
+# bridge, packages/shared source. Everything below is excluded.
+
+# Dependencies & build output (reinstalled / rebuilt inside the image)
+**/node_modules
+**/.next
+**/dist
+**/*.tsbuildinfo
+.turbo
+
+# VCS & CI artifacts
+.git
+.github
+**/coverage
+**/.nyc_output
+playwright-report
+test-results
+
+# Secrets & local env (NEVER copy real env into an image)
+**/.env
+**/.env.local
+**/.env.*.local
+.env.docker
+
+# Logs & local runner state
+**/*.log
+docs/production-hardening/runner.log
+docs/production-hardening/STATUS.md
+docs/production-hardening/DONE.flag
+
+# Local/dev-only tooling not needed in the image
+.devcontainer
+.worktrees
+graphify-out
+supabase/.temp
+*.lnk
+agentroom_graph_*.html

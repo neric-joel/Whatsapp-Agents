@@ -6,6 +6,7 @@
     }
   },
   "ignoreBinaries": ["supabase"],
+  "ignoreDependencies": ["axe-core"],
   "playwright": {
     "config": ["playwright.config.ts"]
   }

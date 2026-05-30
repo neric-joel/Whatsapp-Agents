@@ -67,13 +67,16 @@ The browser never writes directly to `agent_runs`. User actions go through the N
 
 ## Prerequisites
 
-- Node.js 20+
-- pnpm
+- Node.js 22.13+ (see `.nvmrc`)
+- pnpm 11+ (`npm install -g pnpm@11.0.8` or `corepack enable`)
 - Docker Desktop
 - Supabase CLI
 - Claude CLI, if using Claude agents
 - Codex CLI, if using Codex agents
 - Ruflo CLI, if using Ruflo agents
+
+> **One-command local setup** (macOS / Linux / WSL): `make bootstrap`.
+> **Docker / containers / self-hosting:** see [`docs/SELF_HOSTING.md`](docs/SELF_HOSTING.md).
 
 ## Environment Setup
 

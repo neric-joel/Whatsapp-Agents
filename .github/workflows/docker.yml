@@ -1,0 +1,49 @@
+name: Docker build
+
+# Proves the production web + bridge images build from the repo root context
+# (pnpm monorepo + raw-TS @agentroom/shared). No push — build verification only.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: false
+          load: false
+          # Dummy build-time public env (inlined into the client bundle + CSP). NOT secrets.
+          build-args: |
+            NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321
+            NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=ci-dummy-publishable-key
+            NEXT_PUBLIC_APP_URL=http://localhost:3000
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build bridge image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: bridge/Dockerfile
+          push: false
+          load: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

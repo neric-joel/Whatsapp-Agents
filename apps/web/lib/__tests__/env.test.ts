@@ -31,8 +31,8 @@ describe('validateServerEnv', () => {
 
   it('guides the operator who used the deprecated ANON_KEY name', () => {
     const { NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: _omit, ...rest } = VALID
-    expect(() =>
-      validateServerEnv({ ...rest, NEXT_PUBLIC_SUPABASE_ANON_KEY: 'legacy' }),
-    ).toThrow(/PUBLISHABLE_KEY/)
+    expect(() => validateServerEnv({ ...rest, NEXT_PUBLIC_SUPABASE_ANON_KEY: 'legacy' })).toThrow(
+      /PUBLISHABLE_KEY/,
+    )
   })
 })

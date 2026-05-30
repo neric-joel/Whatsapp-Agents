@@ -44,6 +44,11 @@ const securityHeaders = [
 ]
 
 const nextConfig = {
+  // Emit a self-contained server (.next/standalone) for a small production image.
+  output: 'standalone',
+  // @agentroom/shared ships raw TypeScript (no build step), so transpile it
+  // explicitly — this makes the production build deterministic in Docker/CI.
+  transpilePackages: ['@agentroom/shared'],
   eslint: {
     ignoreDuringBuilds: true,
   },

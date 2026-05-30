@@ -78,23 +78,39 @@ async function main() {
     stale_sweep_ms: STALE_SWEEP_MS,
   })
   await recoverStaleRunsOnce('stale: recovered on startup')
-  setInterval(() => {
+  const pollTimer = setInterval(() => {
     pollOnce().catch((err) =>
       log('error', 'poll.error', { error: err instanceof Error ? err.message : String(err) }),
     )
   }, POLL_MS)
-  setInterval(() => {
+  const heartbeatTimer = setInterval(() => {
     sendHeartbeat().catch((err) =>
       log('error', 'heartbeat.error', { error: err instanceof Error ? err.message : String(err) }),
     )
   }, HEARTBEAT_MS)
-  setInterval(() => {
+  const staleTimer = setInterval(() => {
     recoverStaleRunsOnce('stale: recovered by periodic sweep').catch((err) =>
       log('error', 'stale.recovery.error', {
         error: err instanceof Error ? err.message : String(err),
       }),
     )
   }, STALE_SWEEP_MS)
+
+  // Graceful shutdown for `docker stop` (SIGTERM) / Ctrl-C (SIGINT): stop the loops
+  // so no new runs are claimed, then exit. Any in-flight run is re-claimed by a
+  // worker via stale-run recovery on the next startup.
+  let shuttingDown = false
+  const shutdown = (signal: NodeJS.Signals) => {
+    if (shuttingDown) return
+    shuttingDown = true
+    log('info', 'bridge.shutdown', { signal, active_runs: activeRuns.size })
+    clearInterval(pollTimer)
+    clearInterval(heartbeatTimer)
+    clearInterval(staleTimer)
+    setTimeout(() => process.exit(0), 100).unref()
+  }
+  process.on('SIGTERM', () => shutdown('SIGTERM'))
+  process.on('SIGINT', () => shutdown('SIGINT'))
 }
 
 main().catch((err) => {

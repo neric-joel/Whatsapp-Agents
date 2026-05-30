@@ -34,7 +34,7 @@ const serverEnvSchema = z
     }
   })
 
-export type ServerEnv = z.infer<typeof serverEnvSchema>
+type ServerEnv = z.infer<typeof serverEnvSchema>
 
 /** Validate a raw env record (defaults to `process.env`). Throws on failure. */
 export function validateServerEnv(
@@ -42,7 +42,9 @@ export function validateServerEnv(
 ): ServerEnv {
   const result = serverEnvSchema.safeParse(raw)
   if (!result.success) {
-    const lines = result.error.issues.map((i) => `  - ${i.path.join('.') || '(root)'}: ${i.message}`)
+    const lines = result.error.issues.map(
+      (i) => `  - ${i.path.join('.') || '(root)'}: ${i.message}`,
+    )
     throw new Error(
       `Invalid web environment — fix apps/web/.env.local (see apps/web/.env.example):\n${lines.join('\n')}`,
     )

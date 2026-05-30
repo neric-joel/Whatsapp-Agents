@@ -28,15 +28,15 @@ const bridgeEnvSchema = z.object({
   BRIDGE_STALE_RUN_TIMEOUT_MS: intFromEnv(60000, 1000),
 })
 
-export type BridgeEnv = z.infer<typeof bridgeEnvSchema>
+type BridgeEnv = z.infer<typeof bridgeEnvSchema>
 
 /** Validate a raw env record (defaults to `process.env`). Throws on failure. */
-export function loadBridgeEnv(
-  raw: Record<string, string | undefined> = process.env,
-): BridgeEnv {
+export function loadBridgeEnv(raw: Record<string, string | undefined> = process.env): BridgeEnv {
   const result = bridgeEnvSchema.safeParse(raw)
   if (!result.success) {
-    const lines = result.error.issues.map((i) => `  - ${i.path.join('.') || '(root)'}: ${i.message}`)
+    const lines = result.error.issues.map(
+      (i) => `  - ${i.path.join('.') || '(root)'}: ${i.message}`,
+    )
     throw new Error(
       `Invalid Bridge environment — fix bridge/.env (see bridge/.env.example):\n${lines.join('\n')}`,
     )
