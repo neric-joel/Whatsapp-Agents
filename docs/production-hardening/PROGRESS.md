@@ -150,6 +150,22 @@ Already exists: list global agents; add/remove/mute **seeded** agents per room (
 
 ---
 
+## 2026-05-30 — GOAL: Phase 5 — Developer experience, containerization & onboarding — **ACTIVE**
+- Phase: 5 (DX/Docker). Branch: `harden/p5-dx-docker-onboarding` (stack on `harden/p4-ux-a11y`).
+- Iteration budget: 12. State: ACTIVE.
+- Acceptance criteria (testable; from plan + DoD + Hermes Workstream A):
+  - [ ] Production multi-stage `Dockerfile`s for web + bridge (non-root, minimal base) + `.dockerignore`; images build successfully (verify `docker build`).
+  - [ ] `docker-compose.yml` brings up web + bridge (+ local Supabase path documented); one-command local run.
+  - [ ] `.devcontainer/` gives contributors a ready toolchain (Node 20 + pnpm + Supabase CLI).
+  - [ ] Env validation at boot in BOTH web + bridge (zod): fail-fast naming the missing/invalid var; `.env.example` authoritative + in sync. Unit tests prove rejection of a missing var. Must NOT break existing CRITICAL naming rule (`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, never `ANON_KEY`).
+  - [ ] Cross-platform one-command bootstrap (keep Windows launchers; add POSIX `make`/`sh`) with prerequisite checks + helpful errors.
+  - [ ] `docs/SELF_HOSTING.md`: local-Docker default, self-hosted production compose, required keys, where the bridge runs, and the subprocess trust model (bridge runs CLIs on the host — security implications explicit). No paid plan anywhere; any hosted free-tier demoted to optional appendix with pause behavior noted.
+  - [ ] Critique gate (DX & Docs Reviewer — follow steps literally on a clean tree) PASS → `docs/reviews/`; all checks green (typecheck/lint/test/build); no Critical/High.
+
+Judge rule: DONE only when every box is checked with linked evidence and no Critical/High is open.
+
+---
+
 ## 2026-05-30 — GOAL: Phase 4 — UI/UX excellence & accessibility — **IMPL DONE · PR #8 · live-app sign-off pending (morning)**
 - Phase: 4 (UI/UX & a11y). Branch: `harden/p4-ux-a11y` (stack on `harden/p3-tests`). PR: #8.
 - Iteration budget: 12. State: implementation + critique complete and PR'd; 3 sub-items gated on a live authenticated app + Lighthouse (logged under *For morning review*).
