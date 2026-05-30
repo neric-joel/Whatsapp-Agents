@@ -31,8 +31,10 @@ New-Item docs/production-hardening/DONE.flag -ItemType File   # graceful: finish
 schtasks /End /TN AgentRoomHarden                              # stop a running instance now
 schtasks /Change /TN AgentRoomHarden /DISABLE                 # stop auto-relaunch
 schtasks /Delete /TN AgentRoomHarden /F                       # remove entirely
+Remove-Item "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\agentroom-harden.cmd"  # remove logon launcher
 ```
-`DONE.flag` and `runner.log` are gitignored (local control only).
+`DONE.flag` and `runner.log` are gitignored (local control only). To fully stop
+auto-resume you must BOTH stop/disable the task AND remove the Startup-folder launcher.
 
 ## Verify resume (dry run)
 ```powershell
@@ -45,4 +47,11 @@ Prints the active goal parsed from `PROGRESS.md`, tool availability, and the
 - If `gh` reports "not logged into any GitHub hosts", run `gh auth login` once. The
   runner refreshes PATH on each start, so a freshly-installed/authed `gh` is picked up.
   Until then, PRs are pushed as branches with paste-ready bodies (`GITHUB_ISSUES.md`).
+- Secret hygiene: the runner pipes Claude output through `RedactSecrets` (mirrors
+  `bridge/src/lib/redact.ts`) before writing `runner.log`, and the log is gitignored.
+  Still treat `runner.log` as sensitive local plaintext.
+- `main` protection: enforced by GitHub branch protection (server-side) AND a local
+  `.githooks/pre-push` hook — both hold even under `--dangerously-skip-permissions`.
+  Enable the hook once per clone: `git config core.hooksPath .githooks`. The runner
+  opens PRs; it must never merge them (humans review + merge).
 - Logs: `docs/production-hardening/runner.log`. Living status: `PROGRESS.md`.

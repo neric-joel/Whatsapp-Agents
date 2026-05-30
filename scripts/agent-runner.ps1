@@ -30,6 +30,19 @@ function Write-Log([string]$msg) {
   $line | Tee-Object -FilePath $Log -Append
 }
 
+# Mask secret-shaped tokens before they reach runner.log (mirrors bridge/src/lib/redact.ts).
+# Defends against an agent echoing env/keys into stdout under --dangerously-skip-permissions.
+function RedactSecrets([string]$s) {
+  if ([string]::IsNullOrEmpty($s)) { return $s }
+  $s = [regex]::Replace($s, 'sk-[A-Za-z0-9]{20,}', '[REDACTED]')
+  $s = [regex]::Replace($s, 'eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}', '[REDACTED-JWT]')
+  $s = [regex]::Replace($s, '(?i)(password|passwd|secret|token|api[_-]?key)\s*[:=]\s*\S+', '$1=[REDACTED]')
+  $s = [regex]::Replace($s, 'SUPABASE_SERVICE_ROLE_KEY\s*=\s*\S+', 'SUPABASE_SERVICE_ROLE_KEY=[REDACTED]')
+  $s = [regex]::Replace($s, '(gh[posru]_|github_pat_)[A-Za-z0-9_]{20,}', '[REDACTED-GH]')
+  $s = [regex]::Replace($s, 'AKIA[0-9A-Z]{16}', '[REDACTED-AWS]')
+  return $s
+}
+
 function Get-ActiveGoal {
   if (-not (Test-Path $Progress)) { return '(PROGRESS.md missing)' }
   $g = Select-String -Path $Progress -Pattern '^##\s+\d{4}-\d{2}-\d{2}.+GOAL:' | Select-Object -Last 1
@@ -54,8 +67,9 @@ if ($DryRun) {
   return
 }
 
-# Singleton: stop the Startup launcher, the scheduled task, and the 5h re-trigger
-# from running concurrent copies in this session.
+# Singleton (Local\ = this logon session): dedupes the Startup launcher, a manual run,
+# and re-entry within one session; the scheduled task's IgnoreNew covers its own
+# triggers. Not machine-wide — two simultaneous interactive logons would each get one.
 $mutex = New-Object System.Threading.Mutex($false, 'Local\AgentRoomHardenRunner')
 if (-not $mutex.WaitOne(0)) { Write-Log 'Another runner instance is already active - exiting.'; return }
 try {
@@ -64,7 +78,8 @@ while (-not (Test-Path $DoneFlag)) {
   Write-Log 'Launching headless Claude Code cycle...'
   # --dangerously-skip-permissions: unattended operation cannot stop for a prompt.
   # main stays protected by CLAUDE.md + branch/PR discipline; secrets are never committed.
-  & claude --model opus --continue -p $Prompt --dangerously-skip-permissions 2>&1 | Tee-Object -FilePath $Log -Append
+  & claude --model opus --continue -p $Prompt --dangerously-skip-permissions 2>&1 |
+    ForEach-Object { RedactSecrets ([string]$_) } | Tee-Object -FilePath $Log -Append
   $code = $LASTEXITCODE
   if (Test-Path $DoneFlag) { Write-Log 'DONE.flag present - stopping.'; break }
   $tail = (Get-Content $Log -Tail 60 -ErrorAction SilentlyContinue) -join "`n"

@@ -1,0 +1,14 @@
+#!/bin/sh
+# AgentRoom: feature branches + PRs only. Block direct pushes to main.
+# Defense-in-depth that holds even under `claude --dangerously-skip-permissions`
+# (git runs hooks regardless of Claude's permission mode).
+# Enable once per clone:  git config core.hooksPath .githooks
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/main)
+      echo "pre-push: direct push to 'main' is blocked — open a PR from a feature branch." >&2
+      exit 1
+      ;;
+  esac
+done
+exit 0

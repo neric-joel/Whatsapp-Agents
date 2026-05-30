@@ -155,4 +155,19 @@ Full reports: `docs/reviews/phase-0-security-seed.md`, `…-deadcode.md`,
 Judge rule: DONE only when every box above is checked with linked evidence (CI run,
 diff, `git worktree list` output, review reports) and no Critical/High is open.
 
-Next: human runs `/loop` to execute Phase 0 (or `/goal status` / `/goal pause`).
+---
+
+## 2026-05-30 — Phase 0 `/loop` iteration 1
+
+- **Plan:** branch `harden/p0-baseline-hygiene-ci`; remove stale worktrees/branches; capture the green feature wave; gitignore; CI + security workflows; eslint/editorconfig/nvmrc; restart-safe runner; critique gate.
+- **Implemented:** 6 commits — `feat(rooms)`, `fix(api) health`, `chore(hygiene)`, `ci`, docs/runner (launcher folded in), and `security(p0)` (this fix commit). Worktrees + 7 `do/*` branches removed; `origin/do/0509-6csl` pruned (`git worktree list` = main only).
+- **Verify:** `typecheck` / `lint` / `test` (14) / `--filter web build` all green locally (lint has 1 non-blocking `<img>` warning → Phase 4). `pnpm audit`: 18 vulns (mostly `next@14` → decision D3, tracked).
+- **Critique (mandatory gate):** Adversarial Critic + Code-Quality Auditor + Security secret-scan (reused `code-reviewer` + `security-auditor` assets). Reports: `docs/reviews/phase-0-critique-{adversarial,quality,security}.md`. **Secret scan CLEAN** (full-repo grep; no committed secret).
+- **Findings integrated:**
+  - **[High] `main` unprotected under the runner** (`--dangerously-skip-permissions` bypasses `settings.json`). **FIXED** → GitHub branch protection on `main` (`enforce_admins:true`, PR required, force-push + deletion blocked) **+** committed `.githooks/pre-push` + `git config core.hooksPath .githooks` (git-level, survives the flag).
+  - **[Medium] `runner.log` secret capture** → FIXED (`RedactSecrets` filter on the runner tee, mirrors `bridge/src/lib/redact.ts`).
+  - **[Medium] no `.gitattributes` (EOL churn)** → FIXED (LF default; CRLF for `*.ps1/*.cmd`).
+  - **[Low] RUNNER.md Stop missing Startup-launcher removal** → FIXED.
+  - **Deferred (tracked, not Critical/High):** bridge/shared real ESLint → **Phase 2** (today `lint` aliases `tsc`); `Local\` mutex scope (accepted for a single-user box); `.claude/commands` vs `docs/claude-commands` duplication (by design — docs = source); `config.toml` `[functions]` removal (accepted — no edge functions).
+- **Environment notes:** Docker up; local Supabase stack running (`supabase_*_agent-room`, postgres 15.8.1). `gh` authenticated (`neric-joel`). Branch protection live on `main`.
+- **Heartbeat:** Phase 0 implementation + critique fixes complete and green locally. Remaining for DONE: push branch, open PR, observe CI green, then check the final DoD boxes → set Phase 1 goal. Continuing without pause.
