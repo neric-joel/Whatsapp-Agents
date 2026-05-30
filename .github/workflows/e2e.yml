@@ -13,6 +13,7 @@ name: E2E Tests
 #   Tier 1 — always runs (no backend needed):
 #     auth.spec.ts  — unauthenticated redirect + form-rendering tests
 #     chat.spec.ts  — "sign-in form interaction" describe block (error-path only)
+#     a11y.spec.ts  — axe-core WCAG scan of /auth (fails on serious/critical)
 #
 #   Tier 2 — requires E2E_LIVE=1 + a seeded Supabase + bridge (NOT enabled here):
 #     chat.spec.ts  — "chat journey" describe block
