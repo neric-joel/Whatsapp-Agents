@@ -1,15 +1,21 @@
 import { NextRequest } from 'next/server'
+
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { internalError } from '@/lib/api-security'
 import { updatePinSchema } from '@/lib/api-validation'
 import { requireRoomMember } from '@/lib/permissions'
 import { createSupabaseServerClient, createSupabaseServiceClient } from '@/lib/supabase/server'
 
-interface RouteParams { params: { pinId: string } }
+interface RouteParams {
+  params: { pinId: string }
+}
 
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
   const supabaseUser = createSupabaseServerClient()
-  const { data: { user }, error: authErr } = await supabaseUser.auth.getUser()
+  const {
+    data: { user },
+    error: authErr,
+  } = await supabaseUser.auth.getUser()
   if (authErr || !user) return apiError('UNAUTHORIZED', 'Unauthorized', 401)
 
   const supabase = createSupabaseServiceClient()

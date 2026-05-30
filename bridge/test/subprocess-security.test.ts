@@ -1,29 +1,58 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import type { ContextPacketV1 } from '@agentroom/shared'
+
+import { ClaudeCodeAdapter } from '../src/adapters/claude-code-adapter.js'
 import {
   BinaryNotFoundError,
   buildChildEnv,
   resolveBinaryPath,
   resolveSpawnTarget,
 } from '../src/lib/subprocess-security.js'
-import { ClaudeCodeAdapter } from '../src/adapters/claude-code-adapter.js'
-import type { ContextPacketV1 } from '@agentroom/shared'
 
 class TestClaudeCodeAdapter extends ClaudeCodeAdapter {
-  args(packet: ContextPacketV1) { return this.buildArgs(packet) }
-  stdin(packet: ContextPacketV1) { return this.buildStdin(packet) }
+  args(packet: ContextPacketV1) {
+    return this.buildArgs(packet)
+  }
+  stdin(packet: ContextPacketV1) {
+    return this.buildStdin(packet)
+  }
 }
 
 function packetWith(systemPrompt: string | null): ContextPacketV1 {
   return {
     schema_version: 1,
     run_id: 'run-1',
-    room: { id: 'room-1', name: 'Demo', reply_mode: 'everyone', max_agent_rounds: 3, discussion_mode: 'independent' },
-    agent: { id: 'agent-1', name: 'Claude Thinker', slug: 'claude-thinker', system_prompt: systemPrompt, provider: 'claude_code' },
-    trigger_message: { id: 'msg-2', content: 'Answer this now', sender_type: 'user', created_at: '2026-05-16T00:01:00.000Z' },
+    room: {
+      id: 'room-1',
+      name: 'Demo',
+      reply_mode: 'everyone',
+      max_agent_rounds: 3,
+      discussion_mode: 'independent',
+    },
+    agent: {
+      id: 'agent-1',
+      name: 'Claude Thinker',
+      slug: 'claude-thinker',
+      system_prompt: systemPrompt,
+      provider: 'claude_code',
+    },
+    trigger_message: {
+      id: 'msg-2',
+      content: 'Answer this now',
+      sender_type: 'user',
+      created_at: '2026-05-16T00:01:00.000Z',
+    },
     recent_messages: [
-      { id: 'msg-2', content: 'Answer this now', sender_type: 'user', sender_agent_id: null, created_at: '2026-05-16T00:01:00.000Z', metadata: {} },
+      {
+        id: 'msg-2',
+        content: 'Answer this now',
+        sender_type: 'user',
+        sender_agent_id: null,
+        created_at: '2026-05-16T00:01:00.000Z',
+        metadata: {},
+      },
     ],
     round_index: 1,
     discussion_mode: 'independent',
@@ -102,9 +131,22 @@ test('resolveSpawnTarget spawns a plain binary directly', () => {
 })
 
 test('resolveSpawnTarget routes a Windows .cmd shim through cmd.exe with static args', () => {
-  const t = resolveSpawnTarget('C:\\bin\\claude.cmd', ['--print', '--output-format', 'json'], 'win32', { COMSPEC: 'C:\\Windows\\System32\\cmd.exe' })
+  const t = resolveSpawnTarget(
+    'C:\\bin\\claude.cmd',
+    ['--print', '--output-format', 'json'],
+    'win32',
+    { COMSPEC: 'C:\\Windows\\System32\\cmd.exe' },
+  )
   assert.equal(t.command, 'C:\\Windows\\System32\\cmd.exe')
-  assert.deepEqual(t.args, ['/d', '/s', '/c', 'C:\\bin\\claude.cmd', '--print', '--output-format', 'json'])
+  assert.deepEqual(t.args, [
+    '/d',
+    '/s',
+    '/c',
+    'C:\\bin\\claude.cmd',
+    '--print',
+    '--output-format',
+    'json',
+  ])
 })
 
 // --- argv injection regression ---

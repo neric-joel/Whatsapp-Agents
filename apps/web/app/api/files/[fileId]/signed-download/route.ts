@@ -3,7 +3,9 @@ import { internalError } from '@/lib/api-security'
 import { requireRoomMember } from '@/lib/permissions'
 import { createSupabaseServerClient, createSupabaseServiceClient } from '@/lib/supabase/server'
 
-interface RouteParams { params: { fileId: string } }
+interface RouteParams {
+  params: { fileId: string }
+}
 
 interface FileRow {
   id: string
@@ -14,7 +16,10 @@ interface FileRow {
 
 export async function GET(_req: Request, { params }: RouteParams) {
   const supabaseUser = createSupabaseServerClient()
-  const { data: { user }, error: authErr } = await supabaseUser.auth.getUser()
+  const {
+    data: { user },
+    error: authErr,
+  } = await supabaseUser.auth.getUser()
   if (authErr || !user) return apiError('UNAUTHORIZED', 'Unauthorized', 401)
 
   const supabase = createSupabaseServiceClient()

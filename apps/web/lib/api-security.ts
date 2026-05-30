@@ -1,5 +1,5 @@
-import { apiError } from './api-error'
 import { getBearerToken } from './api-auth'
+import { apiError } from './api-error'
 
 /**
  * Origins allowed to make state-changing requests. Derived from NEXT_PUBLIC_APP_URL
@@ -9,12 +9,20 @@ export function allowedOrigins(): string[] {
   const list = new Set<string>()
   const appUrl = process.env.NEXT_PUBLIC_APP_URL
   if (appUrl) {
-    try { list.add(new URL(appUrl).origin) } catch { /* ignore malformed */ }
+    try {
+      list.add(new URL(appUrl).origin)
+    } catch {
+      /* ignore malformed */
+    }
   }
   for (const extra of (process.env.EXTRA_ALLOWED_ORIGINS ?? '').split(',')) {
     const trimmed = extra.trim()
     if (!trimmed) continue
-    try { list.add(new URL(trimmed).origin) } catch { /* ignore malformed */ }
+    try {
+      list.add(new URL(trimmed).origin)
+    } catch {
+      /* ignore malformed */
+    }
   }
   return [...list]
 }
@@ -50,7 +58,11 @@ export function isForbiddenCrossOrigin(req: {
 }
 
 function safeOrigin(url: string): string | null {
-  try { return new URL(url).origin } catch { return null }
+  try {
+    return new URL(url).origin
+  } catch {
+    return null
+  }
 }
 
 /** Route-handler guard: returns a 403 response if the request is cross-origin. */
@@ -69,12 +81,24 @@ export function assertSameOrigin(req: { method: string; headers: Headers; url?: 
 // docs/SELF_HOSTING.md. State is per-process and resets on restart.
 // ---------------------------------------------------------------------------
 
-interface Bucket { count: number; resetAt: number }
+interface Bucket {
+  count: number
+  resetAt: number
+}
 const buckets = new Map<string, Bucket>()
 
-export interface RateLimitResult { ok: boolean; retryAfterMs: number; remaining: number }
+export interface RateLimitResult {
+  ok: boolean
+  retryAfterMs: number
+  remaining: number
+}
 
-export function checkRateLimit(key: string, limit: number, windowMs: number, now = Date.now()): RateLimitResult {
+export function checkRateLimit(
+  key: string,
+  limit: number,
+  windowMs: number,
+  now = Date.now(),
+): RateLimitResult {
   const bucket = buckets.get(key)
   if (!bucket || now >= bucket.resetAt) {
     buckets.set(key, { count: 1, resetAt: now + windowMs })
@@ -92,11 +116,15 @@ export function enforceRateLimit(key: string, limit: number, windowMs: number) {
   const result = checkRateLimit(key, limit, windowMs)
   if (result.ok) return null
   const retryAfter = Math.ceil(result.retryAfterMs / 1000)
-  return apiError('RATE_LIMITED', `Rate limit exceeded. Retry in ${retryAfter}s.`, 429, { retry_after_seconds: retryAfter })
+  return apiError('RATE_LIMITED', `Rate limit exceeded. Retry in ${retryAfter}s.`, 429, {
+    retry_after_seconds: retryAfter,
+  })
 }
 
 /** Test-only: clear all rate-limit buckets. */
-export function __resetRateLimits() { buckets.clear() }
+export function __resetRateLimits() {
+  buckets.clear()
+}
 
 // ---------------------------------------------------------------------------
 // Error redaction: log the real error server-side, return a generic message.

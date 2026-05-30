@@ -16,5 +16,8 @@ test('does not detect tentative reasoning as a conclusion', () => {
 })
 
 test('does not detect plain agent reply text as a conclusion', () => {
-  assert.equal(conclusionDetected('The next step is to compare the options and continue the discussion.'), false)
+  assert.equal(
+    conclusionDetected('The next step is to compare the options and continue the discussion.'),
+    false,
+  )
 })

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+
 import { parseMentions } from './mention-parser.js'
 
 type DiscussionMode = 'independent' | 'tag_turns'
@@ -69,10 +70,14 @@ export async function maybeScheduleAgentMentionFollowUps({
     .eq('reply_enabled', true)
     .eq('muted', false)
 
-  const members = ((rawMembers ?? []) as unknown as AgentMemberRow[])
-    .filter((member) => member.agents?.is_active)
+  const members = ((rawMembers ?? []) as unknown as AgentMemberRow[]).filter(
+    (member) => member.agents?.is_active,
+  )
 
-  const mentions = parseMentions(replyContent, members.map((member) => member.agents))
+  const mentions = parseMentions(
+    replyContent,
+    members.map((member) => member.agents),
+  )
   const explicitTargetIds = mentions
     .filter((mention) => mention.type === 'agent' && mention.agent_id)
     .map((mention) => mention.agent_id as string)
@@ -86,20 +91,24 @@ export async function maybeScheduleAgentMentionFollowUps({
     .eq('trigger_msg_id', sourceMessageId)
     .eq('round_index', nextRoundIndex)
 
-  const existingAgentIds = new Set((existingRuns ?? []).map((run) => (run as { agent_id: string }).agent_id))
+  const existingAgentIds = new Set(
+    (existingRuns ?? []).map((run) => (run as { agent_id: string }).agent_id),
+  )
   const newTargetIds = targetIds.filter((agentId) => !existingAgentIds.has(agentId))
   if (newTargetIds.length === 0) return []
 
-  await supabase.from('agent_runs').insert(newTargetIds.map((agentId) => ({
-    room_id: roomId,
-    agent_id: agentId,
-    trigger_msg_id: sourceMessageId,
-    status: 'queued',
-    round_index: nextRoundIndex,
-    discussion_mode: 'tag_turns',
-    deliberation_depth: nextDepth,
-    deliberation_root_id: deliberationRootId,
-  })))
+  await supabase.from('agent_runs').insert(
+    newTargetIds.map((agentId) => ({
+      room_id: roomId,
+      agent_id: agentId,
+      trigger_msg_id: sourceMessageId,
+      status: 'queued',
+      round_index: nextRoundIndex,
+      discussion_mode: 'tag_turns',
+      deliberation_depth: nextDepth,
+      deliberation_root_id: deliberationRootId,
+    })),
+  )
 
   return newTargetIds
 }

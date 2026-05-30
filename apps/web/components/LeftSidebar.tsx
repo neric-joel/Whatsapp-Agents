@@ -1,20 +1,30 @@
 'use client'
-import { FormEvent, MouseEvent, useMemo, useState } from 'react'
+import type { Room } from '@agentroom/shared'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useRooms } from '@/hooks/useRooms'
-import { useAuth } from '@/hooks/useAuth'
-import { notifyChatCleared } from '@/lib/chat-events'
-import type { Room } from '@agentroom/shared'
+import { FormEvent, MouseEvent, useMemo, useState } from 'react'
 
-type ApiResponse<T> =
-  | { ok: true; data: T }
-  | { ok: false; error: { message?: string } | string }
+import { useAuth } from '@/hooks/useAuth'
+import { useRooms } from '@/hooks/useRooms'
+import { notifyChatCleared } from '@/lib/chat-events'
+
+type ApiResponse<T> = { ok: true; data: T } | { ok: false; error: { message?: string } | string }
 
 function ArchiveIcon() {
   return (
-    <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.7">
-      <path d="M4 6.5h12M5.5 6.5v8h9v-8M7 4h6l1 2.5H6L7 4Z" strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+    >
+      <path
+        d="M4 6.5h12M5.5 6.5v8h9v-8M7 4h6l1 2.5H6L7 4Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
       <path d="M8 10h4" strokeLinecap="round" />
     </svg>
   )
@@ -22,8 +32,19 @@ function ArchiveIcon() {
 
 function TrashIcon() {
   return (
-    <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.7">
-      <path d="M4.5 6h11M8 6V4.5h4V6m-6 0 .5 9.5h7L14 6" strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+    >
+      <path
+        d="M4.5 6h11M8 6V4.5h4V6m-6 0 .5 9.5h7L14 6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
       <path d="M8.5 9v4M11.5 9v4" strokeLinecap="round" />
     </svg>
   )
@@ -31,7 +52,14 @@ function TrashIcon() {
 
 function ClearChatIcon() {
   return (
-    <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.7">
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+    >
       <path d="M4.5 5.5h11v7h-6l-3.5 3v-3H4.5v-7Z" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M7 8h6M7 10.5h3.5" strokeLinecap="round" />
     </svg>
@@ -50,7 +78,14 @@ function MoreIcon() {
 
 function ChevronIcon({ open }: { open: boolean }) {
   return (
-    <svg aria-hidden="true" viewBox="0 0 20 20" className={`h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" strokeWidth="1.8">
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      className={`h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
       <path d="M8 5l5 5-5 5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
@@ -58,7 +93,9 @@ function ChevronIcon({ open }: { open: boolean }) {
 
 function getApiErrorMessage(response: ApiResponse<unknown>) {
   if (response.ok) return null
-  return typeof response.error === 'string' ? response.error : response.error.message ?? 'Request failed'
+  return typeof response.error === 'string'
+    ? response.error
+    : (response.error.message ?? 'Request failed')
 }
 
 export default function LeftSidebar() {
@@ -75,10 +112,13 @@ export default function LeftSidebar() {
   const [showArchived, setShowArchived] = useState(false)
   const [openRoomMenuId, setOpenRoomMenuId] = useState<string | null>(null)
 
-  const { activeRooms, archivedRooms } = useMemo(() => ({
-    activeRooms: rooms.filter((room) => !room.is_archived),
-    archivedRooms: rooms.filter((room) => room.is_archived),
-  }), [rooms])
+  const { activeRooms, archivedRooms } = useMemo(
+    () => ({
+      activeRooms: rooms.filter((room) => !room.is_archived),
+      archivedRooms: rooms.filter((room) => room.is_archived),
+    }),
+    [rooms],
+  )
 
   function openCreateModal() {
     setRoomName('')
@@ -109,9 +149,13 @@ export default function LeftSidebar() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
       })
-      const payload = await res.json().catch(() => null) as ApiResponse<Room> | null
+      const payload = (await res.json().catch(() => null)) as ApiResponse<Room> | null
       if (!res.ok || !payload?.ok) {
-        setCreateError(payload ? getApiErrorMessage(payload) ?? 'Failed to create room' : 'Failed to create room')
+        setCreateError(
+          payload
+            ? (getApiErrorMessage(payload) ?? 'Failed to create room')
+            : 'Failed to create room',
+        )
         return
       }
 
@@ -137,9 +181,13 @@ export default function LeftSidebar() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_archived: !room.is_archived }),
       })
-      const payload = await res.json().catch(() => null) as ApiResponse<Room> | null
+      const payload = (await res.json().catch(() => null)) as ApiResponse<Room> | null
       if (!res.ok || !payload?.ok) {
-        setRoomActionError(payload ? getApiErrorMessage(payload) ?? 'Failed to update room' : 'Failed to update room')
+        setRoomActionError(
+          payload
+            ? (getApiErrorMessage(payload) ?? 'Failed to update room')
+            : 'Failed to update room',
+        )
         return
       }
       await refreshRooms()
@@ -160,9 +208,15 @@ export default function LeftSidebar() {
     setRoomActionError(null)
     try {
       const res = await fetch(`/api/rooms/${room.id}`, { method: 'DELETE' })
-      const payload = await res.json().catch(() => null) as ApiResponse<{ deleted: boolean }> | null
+      const payload = (await res.json().catch(() => null)) as ApiResponse<{
+        deleted: boolean
+      }> | null
       if (!res.ok || !payload?.ok) {
-        setRoomActionError(payload ? getApiErrorMessage(payload) ?? 'Failed to delete room' : 'Failed to delete room')
+        setRoomActionError(
+          payload
+            ? (getApiErrorMessage(payload) ?? 'Failed to delete room')
+            : 'Failed to delete room',
+        )
         return
       }
       await refreshRooms()
@@ -184,9 +238,15 @@ export default function LeftSidebar() {
     setRoomActionError(null)
     try {
       const res = await fetch(`/api/rooms/${room.id}/messages`, { method: 'DELETE' })
-      const payload = await res.json().catch(() => null) as ApiResponse<{ cleared: boolean }> | null
+      const payload = (await res.json().catch(() => null)) as ApiResponse<{
+        cleared: boolean
+      }> | null
       if (!res.ok || !payload?.ok) {
-        setRoomActionError(payload ? getApiErrorMessage(payload) ?? 'Failed to clear chat' : 'Failed to clear chat')
+        setRoomActionError(
+          payload
+            ? (getApiErrorMessage(payload) ?? 'Failed to clear chat')
+            : 'Failed to clear chat',
+        )
         return
       }
       await refreshRooms()
@@ -225,7 +285,7 @@ export default function LeftSidebar() {
             onClick={(event) => {
               event.preventDefault()
               event.stopPropagation()
-              setOpenRoomMenuId((current) => current === room.id ? null : room.id)
+              setOpenRoomMenuId((current) => (current === room.id ? null : room.id))
             }}
             disabled={isBusy}
             title="Room actions"
@@ -294,9 +354,7 @@ export default function LeftSidebar() {
             </button>
           </div>
         )}
-        <div className="space-y-1">
-          {activeRooms.map(renderRoom)}
-        </div>
+        <div className="space-y-1">{activeRooms.map(renderRoom)}</div>
         {roomActionError && (
           <p className="mx-4 mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
             {roomActionError}
@@ -313,11 +371,7 @@ export default function LeftSidebar() {
               <ChevronIcon open={showArchived} />
               Archived
             </button>
-            {showArchived && (
-              <div className="space-y-1">
-                {archivedRooms.map(renderRoom)}
-              </div>
-            )}
+            {showArchived && <div className="space-y-1">{archivedRooms.map(renderRoom)}</div>}
           </div>
         )}
       </nav>
@@ -331,7 +385,9 @@ export default function LeftSidebar() {
         </button>
         {user && (
           <div className="flex items-center gap-2 px-4 py-2 border-t border-[var(--border)]">
-            <span className="flex-1 truncate text-xs text-[var(--muted)]" title={user.email}>{user.email}</span>
+            <span className="flex-1 truncate text-xs text-[var(--muted)]" title={user.email}>
+              {user.email}
+            </span>
             <button
               type="button"
               onClick={() => void signOut()}
@@ -345,7 +401,10 @@ export default function LeftSidebar() {
 
       {isCreateOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 px-4">
-          <form onSubmit={handleCreateRoom} className="w-full max-w-sm rounded-lg bg-white p-5 shadow-2xl">
+          <form
+            onSubmit={handleCreateRoom}
+            className="w-full max-w-sm rounded-lg bg-white p-5 shadow-2xl"
+          >
             <h2 className="text-lg font-semibold text-zinc-950">New room</h2>
             <label className="mt-4 block text-sm font-medium text-zinc-700" htmlFor="room-name">
               Room name

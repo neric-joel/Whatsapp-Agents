@@ -1,16 +1,23 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { useMessages } from '@/hooks/useMessages'
+
 import { useAgentRuns } from '@/hooks/useAgentRuns'
+import { useMessages } from '@/hooks/useMessages'
 import { useToolCalls } from '@/hooks/useToolCalls'
+import {
+  applyPinnedItemChange,
+  buildPinsByMessageId,
+  type PinMessageRow,
+  removePinnedItemById,
+} from '@/lib/pins'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
-import MessageBubble from './MessageBubble'
-import AgentRunCard from './AgentRunCard'
-import ToolCallCard from './ToolCallCard'
-import FileAttachmentCard from './FileAttachmentCard'
 import { buildTimelineEvents } from '@/lib/timeline-events'
-import { applyPinnedItemChange, buildPinsByMessageId, removePinnedItemById, type PinMessageRow } from '@/lib/pins'
+
+import AgentRunCard from './AgentRunCard'
+import FileAttachmentCard from './FileAttachmentCard'
+import MessageBubble from './MessageBubble'
+import ToolCallCard from './ToolCallCard'
 
 export interface OptimisticMessage {
   id: string
@@ -63,7 +70,12 @@ function LoadingSkeleton() {
   )
 }
 
-export default function MessageTimeline({ roomId, refreshSignal, optimisticMessages = [], onReply }: Props) {
+export default function MessageTimeline({
+  roomId,
+  refreshSignal,
+  optimisticMessages = [],
+  onReply,
+}: Props) {
   const { messages, loading, refetch } = useMessages(roomId, refreshSignal)
   const { runs, refetch: refetchRuns } = useAgentRuns(roomId, refreshSignal)
   const toolCalls = useToolCalls(roomId, refreshSignal)
@@ -110,7 +122,11 @@ export default function MessageTimeline({ roomId, refreshSignal, optimisticMessa
 
     fetch(`/api/rooms/${roomId}/pins`)
       .then(async (res) => {
-        const json = await res.json() as { ok: boolean; data?: PinnedItemRow[]; error?: { message?: string } }
+        const json = (await res.json()) as {
+          ok: boolean
+          data?: PinnedItemRow[]
+          error?: { message?: string }
+        }
         if (!res.ok || !json.ok) throw new Error(json.error?.message ?? 'Failed to load pins')
         return json.data ?? []
       })
@@ -121,31 +137,40 @@ export default function MessageTimeline({ roomId, refreshSignal, optimisticMessa
         if (mounted) setPinsByMessageId({})
       })
 
-    return () => { mounted = false }
+    return () => {
+      mounted = false
+    }
   }, [roomId])
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient()
-    const sub = supabase.channel(`timeline-pins:${roomId}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'pinned_items',
-        filter: `room_id=eq.${roomId}`,
-      }, (payload) => {
-        if (payload.eventType === 'DELETE') {
-          const oldPin = payload.old as { id?: string }
-          const deletedPinId = oldPin.id
-          if (deletedPinId) setPinsByMessageId((prev) => removePinnedItemById(prev, deletedPinId))
-          return
-        }
+    const sub = supabase
+      .channel(`timeline-pins:${roomId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'pinned_items',
+          filter: `room_id=eq.${roomId}`,
+        },
+        (payload) => {
+          if (payload.eventType === 'DELETE') {
+            const oldPin = payload.old as { id?: string }
+            const deletedPinId = oldPin.id
+            if (deletedPinId) setPinsByMessageId((prev) => removePinnedItemById(prev, deletedPinId))
+            return
+          }
 
-        const pin = payload.new as PinnedItemRow
-        setPinsByMessageId((prev) => applyPinnedItemChange(prev, pin))
-      })
+          const pin = payload.new as PinnedItemRow
+          setPinsByMessageId((prev) => applyPinnedItemChange(prev, pin))
+        },
+      )
       .subscribe()
 
-    return () => { void sub.unsubscribe() }
+    return () => {
+      void sub.unsubscribe()
+    }
   }, [roomId])
 
   if (loading) {
@@ -181,7 +206,10 @@ export default function MessageTimeline({ roomId, refreshSignal, optimisticMessa
         visibility: 'primary',
       }),
     })
-    const json = await res.json().catch(() => null) as { ok?: boolean; data?: PinnedItemRow } | null
+    const json = (await res.json().catch(() => null)) as {
+      ok?: boolean
+      data?: PinnedItemRow
+    } | null
     if (!res.ok || !json?.ok || !json.data) throw new Error('Failed to pin message')
     const pin = json.data
     setPinsByMessageId((prev) => applyPinnedItemChange(prev, pin))
@@ -213,18 +241,30 @@ export default function MessageTimeline({ roomId, refreshSignal, optimisticMessa
           <div className="flex min-h-full items-center justify-center p-8 text-center">
             <div>
               <p className="text-sm text-[var(--muted)]">No messages yet</p>
-              <p className="mt-1 text-xs text-[var(--muted)]">Say something to get the agents started.</p>
+              <p className="mt-1 text-xs text-[var(--muted)]">
+                Say something to get the agents started.
+              </p>
             </div>
           </div>
         )}
         {timelineEvents.map((event) => {
           if (event.type === 'run') {
-            return <AgentRunCard key={event.id} run={event.run} onCancel={(runId) => { void handleCancelRun(runId) }} />
+            return (
+              <AgentRunCard
+                key={event.id}
+                run={event.run}
+                onCancel={(runId) => {
+                  void handleCancelRun(runId)
+                }}
+              />
+            )
           }
 
           const msg = event.message
           const ids = (msg.metadata as { file_ids?: unknown }).file_ids
-          const fileIds = Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []
+          const fileIds = Array.isArray(ids)
+            ? ids.filter((id): id is string => typeof id === 'string')
+            : []
           return (
             <MessageBubble
               key={event.id}
@@ -238,9 +278,11 @@ export default function MessageTimeline({ roomId, refreshSignal, optimisticMessa
               onDeleted={refetch}
               onHallucinationDismiss={refetch}
             >
-              {fileIds.map((fileId) => (
-                filesMap[fileId] ? <FileAttachmentCard key={fileId} file={filesMap[fileId]} /> : null
-              ))}
+              {fileIds.map((fileId) =>
+                filesMap[fileId] ? (
+                  <FileAttachmentCard key={fileId} file={filesMap[fileId]} />
+                ) : null,
+              )}
             </MessageBubble>
           )
         })}

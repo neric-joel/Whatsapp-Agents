@@ -1,7 +1,8 @@
 'use client'
 
-import { FormEvent, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { FormEvent, useState } from 'react'
+
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 type Mode = 'signin' | 'signup'
@@ -24,10 +25,16 @@ export default function AuthPage() {
     try {
       if (mode === 'signup') {
         const { error: err } = await supabase.auth.signUp({ email, password })
-        if (err) { setError(err.message); return }
+        if (err) {
+          setError(err.message)
+          return
+        }
       } else {
         const { error: err } = await supabase.auth.signInWithPassword({ email, password })
-        if (err) { setError(err.message); return }
+        if (err) {
+          setError(err.message)
+          return
+        }
       }
       router.push('/')
     } finally {
@@ -47,7 +54,10 @@ export default function AuthPage() {
           <div className="flex border-b border-[var(--border)] bg-[var(--surface)]">
             <button
               type="button"
-              onClick={() => { setMode('signin'); setError(null) }}
+              onClick={() => {
+                setMode('signin')
+                setError(null)
+              }}
               className={`flex-1 py-3 text-sm font-medium transition-colors ${
                 mode === 'signin'
                   ? 'bg-[var(--accent)] text-[var(--accent-text)]'
@@ -58,7 +68,10 @@ export default function AuthPage() {
             </button>
             <button
               type="button"
-              onClick={() => { setMode('signup'); setError(null) }}
+              onClick={() => {
+                setMode('signup')
+                setError(null)
+              }}
               className={`flex-1 py-3 text-sm font-medium transition-colors ${
                 mode === 'signup'
                   ? 'bg-[var(--accent)] text-[var(--accent-text)]'
@@ -71,7 +84,10 @@ export default function AuthPage() {
 
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
             <div>
-              <label htmlFor="email" className="block text-xs font-medium text-[var(--muted)] mb-1.5">
+              <label
+                htmlFor="email"
+                className="block text-xs font-medium text-[var(--muted)] mb-1.5"
+              >
                 Email
               </label>
               <input
@@ -88,7 +104,10 @@ export default function AuthPage() {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-xs font-medium text-[var(--muted)] mb-1.5">
+              <label
+                htmlFor="password"
+                className="block text-xs font-medium text-[var(--muted)] mb-1.5"
+              >
                 Password
               </label>
               <input
@@ -115,7 +134,13 @@ export default function AuthPage() {
               disabled={loading}
               className="w-full rounded-md bg-[var(--accent)] py-2.5 text-sm font-semibold text-[var(--accent-text)] transition-colors hover:bg-[var(--accent-strong)] disabled:opacity-50"
             >
-              {loading ? (mode === 'signup' ? 'Creating account...' : 'Signing in...') : (mode === 'signup' ? 'Create account' : 'Sign in')}
+              {loading
+                ? mode === 'signup'
+                  ? 'Creating account...'
+                  : 'Signing in...'
+                : mode === 'signup'
+                  ? 'Create account'
+                  : 'Sign in'}
             </button>
           </form>
         </div>

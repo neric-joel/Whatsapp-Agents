@@ -1,6 +1,7 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
-import { NextResponse } from 'next/server'
+import { type CookieOptions, createServerClient } from '@supabase/ssr'
 import type { NextRequest } from 'next/server'
+import { NextResponse } from 'next/server'
+
 import { isForbiddenCrossOrigin } from '@/lib/api-security'
 
 export async function middleware(request: NextRequest) {
@@ -30,14 +31,16 @@ export async function middleware(request: NextRequest) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
           response = NextResponse.next({ request: { headers: request.headers } })
           cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options ?? {})
+            response.cookies.set(name, value, options ?? {}),
           )
         },
       },
-    }
+    },
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
   // 2. Fail-closed: send unauthenticated page requests to the login page.
   //    API routes enforce their own 401s, so we don't redirect those.

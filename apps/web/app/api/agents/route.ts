@@ -1,10 +1,14 @@
 import { NextRequest } from 'next/server'
+
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { internalError } from '@/lib/api-security'
 import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
 
 export async function GET(req: NextRequest) {
-  const { data: { user }, error: authErr } = await getAuthenticatedUser(req)
+  const {
+    data: { user },
+    error: authErr,
+  } = await getAuthenticatedUser(req)
   if (authErr || !user) return apiError('UNAUTHORIZED', 'Unauthorized', 401)
 
   const supabase = createSupabaseServiceClient()

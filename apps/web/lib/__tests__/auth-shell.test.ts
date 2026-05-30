@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+
 import { getAuthShellState } from '../auth-shell'
 
 describe('getAuthShellState', () => {
@@ -17,7 +18,9 @@ describe('getAuthShellState', () => {
   })
 
   it('hides protected content and redirects signed-out visitors to auth', () => {
-    expect(getAuthShellState({ pathname: '/rooms/room-1', loading: false, hasUser: false })).toEqual({
+    expect(
+      getAuthShellState({ pathname: '/rooms/room-1', loading: false, hasUser: false }),
+    ).toEqual({
       render: 'none',
       redirectTo: '/auth',
     })

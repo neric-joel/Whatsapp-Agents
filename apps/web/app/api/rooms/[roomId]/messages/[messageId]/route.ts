@@ -1,12 +1,10 @@
 import { NextRequest } from 'next/server'
+
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { internalError } from '@/lib/api-security'
-import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
+import { canCurrentUserDeleteMessage, createDeletedMessagePatch } from '@/lib/message-management'
 import { requireRoomMember } from '@/lib/permissions'
-import {
-  canCurrentUserDeleteMessage,
-  createDeletedMessagePatch,
-} from '@/lib/message-management'
+import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
 
 interface RouteParams {
   params: { roomId: string; messageId: string }
@@ -14,7 +12,10 @@ interface RouteParams {
 
 export async function DELETE(req: NextRequest, { params }: RouteParams) {
   const { roomId, messageId } = params
-  const { data: { user }, error: authErr } = await getAuthenticatedUser(req)
+  const {
+    data: { user },
+    error: authErr,
+  } = await getAuthenticatedUser(req)
   if (authErr || !user) return apiError('UNAUTHORIZED', 'Unauthorized', 401)
 
   const supabase = createSupabaseServiceClient()

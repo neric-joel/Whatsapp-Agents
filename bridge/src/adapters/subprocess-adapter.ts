@@ -1,7 +1,14 @@
 import { spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
+
 import type { AgentAdapter, AgentEvent, AgentResponseV1, ContextPacketV1 } from '@agentroom/shared'
-import { BinaryNotFoundError, buildChildEnv, resolveBinaryPath, resolveSpawnTarget } from '../lib/subprocess-security.js'
+
+import {
+  BinaryNotFoundError,
+  buildChildEnv,
+  resolveBinaryPath,
+  resolveSpawnTarget,
+} from '../lib/subprocess-security.js'
 
 export abstract class SubprocessAdapter implements AgentAdapter {
   abstract readonly name: string
@@ -9,9 +16,13 @@ export abstract class SubprocessAdapter implements AgentAdapter {
   protected abstract resolveCommand(): string
   protected abstract buildArgs(packet: ContextPacketV1): string[]
   protected abstract envVarName(): string
-  protected getTimeoutMs(): number { return 120_000 }
+  protected getTimeoutMs(): number {
+    return 120_000
+  }
   /** Max combined stdout+stderr bytes before the child is killed (DoS/OOM guard). */
-  protected getMaxOutputBytes(): number { return 10 * 1024 * 1024 }
+  protected getMaxOutputBytes(): number {
+    return 10 * 1024 * 1024
+  }
 
   protected buildStdin(packet: ContextPacketV1): string {
     return JSON.stringify(packet)
@@ -20,11 +31,17 @@ export abstract class SubprocessAdapter implements AgentAdapter {
   protected parseStdoutLine(line: string): AgentEvent | null {
     try {
       const obj = JSON.parse(line) as Record<string, unknown>
-      if (obj.schema_version === 1 && typeof obj.run_id === 'string' && typeof obj.content === 'string') {
+      if (
+        obj.schema_version === 1 &&
+        typeof obj.run_id === 'string' &&
+        typeof obj.content === 'string'
+      ) {
         const response = obj as unknown as AgentResponseV1
         return { type: 'final_response', run_id: response.run_id, response }
       }
-    } catch { /* not valid JSON */ }
+    } catch {
+      /* not valid JSON */
+    }
 
     return null
   }
@@ -41,7 +58,8 @@ export abstract class SubprocessAdapter implements AgentAdapter {
     } catch (err) {
       if (err instanceof BinaryNotFoundError) {
         yield {
-          type: 'error', run_id: packet.run_id,
+          type: 'error',
+          run_id: packet.run_id,
           message: `Adapter '${this.name}' binary not found. Set ${this.envVarName()} env var.`,
         }
         return
@@ -56,9 +74,13 @@ export abstract class SubprocessAdapter implements AgentAdapter {
     let spawnError: Error | null = null
 
     let exitResolve!: () => void
-    const exitPromise = new Promise<void>((r) => { exitResolve = r })
+    const exitPromise = new Promise<void>((r) => {
+      exitResolve = r
+    })
     let forceExitResolve!: () => void
-    const forceExitPromise = new Promise<void>((r) => { forceExitResolve = r })
+    const forceExitPromise = new Promise<void>((r) => {
+      forceExitResolve = r
+    })
 
     const child = spawn(target.command, target.args, {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -79,7 +101,9 @@ export abstract class SubprocessAdapter implements AgentAdapter {
       child.kill('SIGTERM')
       killTimer = setTimeout(() => {
         this.forceKillProcessTree(child.pid)
-        forceExitTimer = setTimeout(() => { forceExitResolve() }, 1_000)
+        forceExitTimer = setTimeout(() => {
+          forceExitResolve()
+        }, 1_000)
       }, 2_000)
     }
 
@@ -98,7 +122,9 @@ export abstract class SubprocessAdapter implements AgentAdapter {
     child.stderr!.on('data', countBytes)
 
     // Swallow stdin errors (EPIPE when child fails to start)
-    child.stdin!.on('error', () => { /* intentional noop */ })
+    child.stdin!.on('error', () => {
+      /* intentional noop */
+    })
     child.stdin!.write(this.buildStdin(packet), 'utf8', () => child.stdin!.end())
 
     createInterface({ input: child.stdout! }).on('line', (line) => {
@@ -109,16 +135,26 @@ export abstract class SubprocessAdapter implements AgentAdapter {
     createInterface({ input: child.stderr! }).on('line', (line) => stderrLines.push(line))
 
     // exitResolve is called only from these two events — ensures we wait for actual process close
-    child.on('close', (code) => { exitCode = code; exitResolve() })
-    child.on('error', (err) => { spawnError = err; exitResolve() })
+    child.on('close', (code) => {
+      exitCode = code
+      exitResolve()
+    })
+    child.on('error', (err) => {
+      spawnError = err
+      exitResolve()
+    })
 
     signal.addEventListener('abort', kill, { once: true })
 
     let timedOut = false
     const timeoutMs = this.getTimeoutMs()
-    const timeoutHandle = timeoutMs > 0
-      ? setTimeout(() => { timedOut = true; kill() }, timeoutMs)
-      : null
+    const timeoutHandle =
+      timeoutMs > 0
+        ? setTimeout(() => {
+            timedOut = true
+            kill()
+          }, timeoutMs)
+        : null
 
     // Wait for process exit, but do not let a killed subprocess keep the run alive forever.
     await Promise.race([exitPromise, forceExitPromise])
@@ -129,17 +165,19 @@ export abstract class SubprocessAdapter implements AgentAdapter {
     signal.removeEventListener('abort', kill)
 
     if (spawnError) {
-      const e = spawnError as (Error & { code?: string })
-      const msg = e.code === 'ENOENT'
-        ? `Adapter '${this.name}' binary not found. Set ${this.envVarName()} env var.`
-        : e.message
+      const e = spawnError as Error & { code?: string }
+      const msg =
+        e.code === 'ENOENT'
+          ? `Adapter '${this.name}' binary not found. Set ${this.envVarName()} env var.`
+          : e.message
       yield { type: 'error', run_id: packet.run_id, message: msg }
       return
     }
 
     if (outputExceeded) {
       yield {
-        type: 'error', run_id: packet.run_id,
+        type: 'error',
+        run_id: packet.run_id,
         message: `Adapter '${this.name}' exceeded the ${maxOutputBytes}-byte output limit and was terminated.`,
       }
       return
@@ -151,7 +189,11 @@ export abstract class SubprocessAdapter implements AgentAdapter {
     }
 
     if (timedOut) {
-      yield { type: 'error', run_id: packet.run_id, message: `Adapter '${this.name}' timed out after ${timeoutMs}ms.` }
+      yield {
+        type: 'error',
+        run_id: packet.run_id,
+        message: `Adapter '${this.name}' timed out after ${timeoutMs}ms.`,
+      }
       return
     }
 
@@ -172,7 +214,8 @@ export abstract class SubprocessAdapter implements AgentAdapter {
       const stderr = stderrLines.join('\n').trim()
       const detail = stderr || rawOutput || '(no output)'
       yield {
-        type: 'error', run_id: packet.run_id,
+        type: 'error',
+        run_id: packet.run_id,
         message: `Process exited with code ${exitCode}. Output: ${detail}`,
       }
       return
@@ -181,14 +224,16 @@ export abstract class SubprocessAdapter implements AgentAdapter {
     if (!finalResponseSeen && visibleMessages.length > 0) {
       const content = visibleMessages.join('\n')
       yield {
-        type: 'final_response', run_id: packet.run_id,
+        type: 'final_response',
+        run_id: packet.run_id,
         response: { schema_version: 1, run_id: packet.run_id, content, content_type: 'text' },
       }
     } else if (!finalResponseSeen) {
       const content = rawOutput || '(no output)'
       yield { type: 'visible_message', run_id: packet.run_id, content }
       yield {
-        type: 'final_response', run_id: packet.run_id,
+        type: 'final_response',
+        run_id: packet.run_id,
         response: { schema_version: 1, run_id: packet.run_id, content, content_type: 'text' },
       }
     }
@@ -220,14 +265,20 @@ export abstract class SubprocessAdapter implements AgentAdapter {
         stdio: 'ignore',
         windowsHide: true,
       })
-      killer.on('error', () => { /* best effort */ })
+      killer.on('error', () => {
+        /* best effort */
+      })
       return
     }
 
     try {
       process.kill(pid, 'SIGKILL')
     } catch {
-      try { process.kill(pid, 'SIGTERM') } catch { /* best effort */ }
+      try {
+        process.kill(pid, 'SIGTERM')
+      } catch {
+        /* best effort */
+      }
     }
   }
 }

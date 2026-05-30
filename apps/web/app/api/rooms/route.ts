@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server'
+
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { internalError } from '@/lib/api-security'
 import { createRoomSchema } from '@/lib/api-validation'
@@ -6,7 +7,10 @@ import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabas
 
 export async function POST(req: NextRequest) {
   // 1. Authenticate
-  const { data: { user }, error: authErr } = await getAuthenticatedUser(req)
+  const {
+    data: { user },
+    error: authErr,
+  } = await getAuthenticatedUser(req)
   if (authErr || !user) return apiError('UNAUTHORIZED', 'Unauthorized', 401)
 
   // 2. Parse body
@@ -18,7 +22,9 @@ export async function POST(req: NextRequest) {
   const data = parseResult.data
   const name = data.name.trim()
   if (!name) {
-    return apiError('VALIDATION_ERROR', 'Invalid request body', 400, { fieldErrors: { name: ['name is required'] } })
+    return apiError('VALIDATION_ERROR', 'Invalid request body', 400, {
+      fieldErrors: { name: ['name is required'] },
+    })
   }
 
   const supabase = createSupabaseServiceClient()
@@ -29,7 +35,7 @@ export async function POST(req: NextRequest) {
     .insert({
       name,
       room_type: data.room_type ?? 'group',
-      reply_mode: data.reply_mode === 'all' ? 'everyone' : data.reply_mode ?? 'everyone',
+      reply_mode: data.reply_mode === 'all' ? 'everyone' : (data.reply_mode ?? 'everyone'),
       discussion_mode: data.discussion_mode ?? 'independent',
       visibility: data.visibility ?? 'private',
       created_by_user_id: user.id,
@@ -40,14 +46,12 @@ export async function POST(req: NextRequest) {
   if (roomErr || !room) return internalError('rooms create room', roomErr)
 
   // 4. Insert creator as owner member
-  const { error: memberErr } = await supabase
-    .from('room_members')
-    .insert({
-      room_id: room.id,
-      member_type: 'user',
-      user_id: user.id,
-      role: 'owner',
-    })
+  const { error: memberErr } = await supabase.from('room_members').insert({
+    room_id: room.id,
+    member_type: 'user',
+    user_id: user.id,
+    role: 'owner',
+  })
 
   if (memberErr) return internalError('rooms insert member', memberErr)
 

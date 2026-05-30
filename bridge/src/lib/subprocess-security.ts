@@ -23,19 +23,46 @@ export class BinaryNotFoundError extends Error {
 }
 
 /** Env var names that must NEVER reach a child process. */
-const SECRET_ENV_PATTERN = /(SUPABASE|SERVICE_ROLE|SECRET|PASSWORD|PRIVATE_KEY|^BRIDGE_|_TOKEN$|^TOKEN$)/i
+const SECRET_ENV_PATTERN =
+  /(SUPABASE|SERVICE_ROLE|SECRET|PASSWORD|PRIVATE_KEY|^BRIDGE_|_TOKEN$|^TOKEN$)/i
 
 /** Base, non-secret environment a CLI needs to run on Windows/POSIX. */
 const BASE_ENV_KEYS = [
-  'PATH', 'Path', 'PATHEXT', 'SystemRoot', 'SYSTEMROOT', 'windir', 'COMSPEC',
-  'TEMP', 'TMP', 'TMPDIR', 'HOME', 'HOMEPATH', 'HOMEDRIVE', 'USERPROFILE', 'USERNAME',
-  'APPDATA', 'LOCALAPPDATA', 'PROGRAMDATA', 'PROGRAMFILES', 'PROGRAMFILES(X86)',
-  'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'XDG_DATA_HOME',
-  'LANG', 'LC_ALL', 'LC_CTYPE', 'TZ', 'TERM', 'NODE_EXTRA_CA_CERTS', 'SHELL',
+  'PATH',
+  'Path',
+  'PATHEXT',
+  'SystemRoot',
+  'SYSTEMROOT',
+  'windir',
+  'COMSPEC',
+  'TEMP',
+  'TMP',
+  'TMPDIR',
+  'HOME',
+  'HOMEPATH',
+  'HOMEDRIVE',
+  'USERPROFILE',
+  'USERNAME',
+  'APPDATA',
+  'LOCALAPPDATA',
+  'PROGRAMDATA',
+  'PROGRAMFILES',
+  'PROGRAMFILES(X86)',
+  'XDG_CONFIG_HOME',
+  'XDG_CACHE_HOME',
+  'XDG_DATA_HOME',
+  'LANG',
+  'LC_ALL',
+  'LC_CTYPE',
+  'TZ',
+  'TERM',
+  'NODE_EXTRA_CA_CERTS',
+  'SHELL',
 ]
 
 /** Provider auth the agent CLIs legitimately read from the environment. */
-const PROVIDER_ENV_PATTERN = /^(ANTHROPIC_|CLAUDE_CODE_|OPENAI_|CODEX_|RUFLO_|AWS_|AZURE_|GOOGLE_|GEMINI_|VERTEX_)/i
+const PROVIDER_ENV_PATTERN =
+  /^(ANTHROPIC_|CLAUDE_CODE_|OPENAI_|CODEX_|RUFLO_|AWS_|AZURE_|GOOGLE_|GEMINI_|VERTEX_)/i
 
 /**
  * Build a minimal, allowlisted environment for a child agent CLI. Secrets are
@@ -67,7 +94,10 @@ export function buildChildEnv(source: NodeJS.ProcessEnv = process.env): NodeJS.P
  *
  * Throws {@link BinaryNotFoundError} if it cannot be resolved.
  */
-export function resolveBinaryPath(command: string, source: NodeJS.ProcessEnv = process.env): string {
+export function resolveBinaryPath(
+  command: string,
+  source: NodeJS.ProcessEnv = process.env,
+): string {
   const isFile = (p: string): boolean => {
     try {
       return existsSync(p) && statSync(p).isFile()
@@ -83,9 +113,13 @@ export function resolveBinaryPath(command: string, source: NodeJS.ProcessEnv = p
 
   const pathVar = source['PATH'] ?? source['Path'] ?? ''
   const dirs = pathVar.split(delimiter).filter(Boolean)
-  const exts = process.platform === 'win32'
-    ? (source['PATHEXT'] ?? '.COM;.EXE;.BAT;.CMD').split(';').map((e) => e.trim()).filter(Boolean)
-    : ['']
+  const exts =
+    process.platform === 'win32'
+      ? (source['PATHEXT'] ?? '.COM;.EXE;.BAT;.CMD')
+          .split(';')
+          .map((e) => e.trim())
+          .filter(Boolean)
+      : ['']
 
   for (const dir of dirs) {
     for (const ext of exts) {

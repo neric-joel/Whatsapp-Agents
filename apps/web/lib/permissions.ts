@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+
 import { apiError } from './api-error'
 
 export async function getRoomMembership(

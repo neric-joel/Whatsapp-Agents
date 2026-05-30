@@ -1,7 +1,8 @@
 'use client'
 
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
-import { ToastViewport, type ToastItem, type ToastType } from '@/components/Toast'
+import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react'
+
+import { type ToastItem, type ToastType, ToastViewport } from '@/components/Toast'
 
 interface ToastContextValue {
   showToast: (message: string, type: ToastType) => void
@@ -23,11 +24,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setToasts((current) => current.filter((toast) => toast.id !== id))
   }, [])
 
-  const showToast = useCallback((message: string, type: ToastType) => {
-    const id = createToastId()
-    setToasts((current) => [...current, { id, message, type }])
-    window.setTimeout(() => dismissToast(id), 4000)
-  }, [dismissToast])
+  const showToast = useCallback(
+    (message: string, type: ToastType) => {
+      const id = createToastId()
+      setToasts((current) => [...current, { id, message, type }])
+      window.setTimeout(() => dismissToast(id), 4000)
+    },
+    [dismissToast],
+  )
 
   const value = useMemo(() => ({ showToast }), [showToast])
 

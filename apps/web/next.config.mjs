@@ -44,6 +44,9 @@ const securityHeaders = [
 ]
 
 const nextConfig = {
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }]
   },

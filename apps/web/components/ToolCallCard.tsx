@@ -61,13 +61,15 @@ export default function ToolCallCard({ toolCall, onApprove, onDeny }: ToolCallCa
       {toolCall.status === 'succeeded' && (
         <div className="text-green-700">
           <div className="mb-1">Succeeded</div>
-          {toolCall.output && <pre className="whitespace-pre-wrap text-xs text-gray-700">{preview(toolCall.output, 3)}</pre>}
+          {toolCall.output && (
+            <pre className="whitespace-pre-wrap text-xs text-gray-700">
+              {preview(toolCall.output, 3)}
+            </pre>
+          )}
         </div>
       )}
 
-      {toolCall.status === 'denied' && (
-        <div className="text-red-600">Denied</div>
-      )}
+      {toolCall.status === 'denied' && <div className="text-red-600">Denied</div>}
 
       {toolCall.status === 'failed' && (
         <div className="text-red-600">

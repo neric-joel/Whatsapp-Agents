@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+
 import {
   __resetRateLimits,
   allowedOrigins,
@@ -7,14 +8,22 @@ import {
   isForbiddenCrossOrigin,
 } from '../api-security'
 
-function req(method: string, headers: Record<string, string>, url = 'https://app.example.com/api/x') {
+function req(
+  method: string,
+  headers: Record<string, string>,
+  url = 'https://app.example.com/api/x',
+) {
   return { method, headers: new Headers(headers), url }
 }
 
 describe('isForbiddenCrossOrigin', () => {
   const prev = process.env.NEXT_PUBLIC_APP_URL
-  beforeEach(() => { process.env.NEXT_PUBLIC_APP_URL = 'https://app.example.com' })
-  afterEach(() => { process.env.NEXT_PUBLIC_APP_URL = prev })
+  beforeEach(() => {
+    process.env.NEXT_PUBLIC_APP_URL = 'https://app.example.com'
+  })
+  afterEach(() => {
+    process.env.NEXT_PUBLIC_APP_URL = prev
+  })
 
   it('ignores safe (non-mutating) methods', () => {
     expect(isForbiddenCrossOrigin(req('GET', { origin: 'https://evil.example.com' }))).toBe(false)
@@ -33,7 +42,11 @@ describe('isForbiddenCrossOrigin', () => {
   })
 
   it('exempts Bearer-authenticated requests (not CSRF-prone)', () => {
-    expect(isForbiddenCrossOrigin(req('POST', { authorization: 'Bearer abc.def', origin: 'https://evil.example.com' }))).toBe(false)
+    expect(
+      isForbiddenCrossOrigin(
+        req('POST', { authorization: 'Bearer abc.def', origin: 'https://evil.example.com' }),
+      ),
+    ).toBe(false)
   })
 
   it('honors EXTRA_ALLOWED_ORIGINS', () => {

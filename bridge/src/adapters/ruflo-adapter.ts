@@ -1,5 +1,6 @@
-import { SubprocessAdapter } from './subprocess-adapter.js'
 import type { ContextPacketV1 } from '@agentroom/shared'
+
+import { SubprocessAdapter } from './subprocess-adapter.js'
 
 export class RuFloAdapter extends SubprocessAdapter {
   readonly name = 'ruflo'
@@ -12,5 +13,7 @@ export class RuFloAdapter extends SubprocessAdapter {
     return []
   }
 
-  protected envVarName(): string { return 'RUFLO_BIN' }
+  protected envVarName(): string {
+    return 'RUFLO_BIN'
+  }
 }

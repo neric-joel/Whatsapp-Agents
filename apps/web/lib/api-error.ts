@@ -15,7 +15,10 @@ export function apiError(
   status: number,
   details?: unknown,
 ): NextResponse {
-  return NextResponse.json({ ok: false, error: { code, message, ...(details !== undefined ? { details } : {}) } }, { status })
+  return NextResponse.json(
+    { ok: false, error: { code, message, ...(details !== undefined ? { details } : {}) } },
+    { status },
+  )
 }
 
 export function apiSuccess<T>(data: T, status = 200): NextResponse {

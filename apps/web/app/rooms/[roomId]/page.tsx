@@ -1,11 +1,12 @@
 'use client'
-import { useState, useCallback, useEffect } from 'react'
-import RoomHeader from '@/components/RoomHeader'
-import MessageTimeline from '@/components/MessageTimeline'
+import { useCallback, useEffect, useState } from 'react'
+
 import ComposeBox from '@/components/ComposeBox'
-import PinnedItemsPanel from '@/components/PinnedItemsPanel'
-import { subscribeToChatCleared } from '@/lib/chat-events'
 import type { OptimisticMessage, ReplyingMessage } from '@/components/MessageTimeline'
+import MessageTimeline from '@/components/MessageTimeline'
+import PinnedItemsPanel from '@/components/PinnedItemsPanel'
+import RoomHeader from '@/components/RoomHeader'
+import { subscribeToChatCleared } from '@/lib/chat-events'
 
 export default function RoomPage({ params }: { params: { roomId: string } }) {
   const { roomId } = params

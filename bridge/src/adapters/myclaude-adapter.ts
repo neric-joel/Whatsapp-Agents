@@ -1,5 +1,6 @@
-import { SubprocessAdapter } from './subprocess-adapter.js'
 import type { ContextPacketV1 } from '@agentroom/shared'
+
+import { SubprocessAdapter } from './subprocess-adapter.js'
 
 export class MyClaudeAdapter extends SubprocessAdapter {
   readonly name = 'myclaude'
@@ -12,5 +13,7 @@ export class MyClaudeAdapter extends SubprocessAdapter {
     return []
   }
 
-  protected envVarName(): string { return 'MYCLAUDE_BIN' }
+  protected envVarName(): string {
+    return 'MYCLAUDE_BIN'
+  }
 }

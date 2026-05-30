@@ -10,7 +10,8 @@ const REDACT_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
   { pattern: /sk-[a-zA-Z0-9]{20,}/g, replacement: '[REDACTED]' },
   { pattern: /eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/g, replacement: '[REDACTED]' },
   {
-    pattern: /(?:password|passwd|secret|token|api[_-]?key)\s*[:=]\s*(?!\[REDACTED(?::[a-z]+)?\])\S+/gi,
+    pattern:
+      /(?:password|passwd|secret|token|api[_-]?key)\s*[:=]\s*(?!\[REDACTED(?::[a-z]+)?\])\S+/gi,
     replacement: '[REDACTED]',
   },
   { pattern: /SUPABASE_SERVICE_ROLE_KEY\s*=\s*\S+/g, replacement: '[REDACTED]' },

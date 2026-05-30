@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
+
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { internalError } from '@/lib/api-security'
 import { requireRoomMember } from '@/lib/permissions'
@@ -20,7 +21,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
   const { messageId } = params
 
-  const { data: { user }, error: authErr } = await getAuthenticatedUser(req)
+  const {
+    data: { user },
+    error: authErr,
+  } = await getAuthenticatedUser(req)
   if (authErr || !user) return apiError('UNAUTHORIZED', 'Unauthorized', 401)
 
   const body = await req.json().catch(() => null)

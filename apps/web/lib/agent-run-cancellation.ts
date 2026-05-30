@@ -13,4 +13,3 @@ export function buildCancelledRunPatch(cancelledAt = new Date().toISOString()) {
     completed_at: cancelledAt,
   }
 }
-

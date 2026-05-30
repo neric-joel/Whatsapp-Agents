@@ -13,10 +13,10 @@ export type TimelineEvent<TMessage extends TimelineMessageLike, TRun extends Tim
   | { type: 'message'; id: string; message: TMessage }
   | { type: 'run'; id: string; run: TRun }
 
-export function buildTimelineEvents<TMessage extends TimelineMessageLike, TRun extends TimelineRunLike>(
-  messages: TMessage[],
-  runs: TRun[]
-): Array<TimelineEvent<TMessage, TRun>> {
+export function buildTimelineEvents<
+  TMessage extends TimelineMessageLike,
+  TRun extends TimelineRunLike,
+>(messages: TMessage[], runs: TRun[]): Array<TimelineEvent<TMessage, TRun>> {
   const messageById = new Map(messages.map((message) => [message.id, message]))
   const decoratedMessages = messages.map((message, index) => ({
     type: 'message' as const,
@@ -41,9 +41,10 @@ export function buildTimelineEvents<TMessage extends TimelineMessageLike, TRun e
 
   return [...decoratedMessages, ...decoratedRuns]
     .sort((a, b) => a.sortTime - b.sortTime || a.rank - b.rank || a.tie - b.tie)
-    .map((event) => event.type === 'message'
-      ? { type: 'message', id: event.id, message: event.message }
-      : { type: 'run', id: event.id, run: event.run }
+    .map((event) =>
+      event.type === 'message'
+        ? { type: 'message', id: event.id, message: event.message }
+        : { type: 'run', id: event.id, run: event.run },
     )
 }
 

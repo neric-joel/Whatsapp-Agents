@@ -1,6 +1,7 @@
 'use client'
-import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useEffect } from 'react'
+
 import { useRooms } from '@/hooks/useRooms'
 
 export default function Page() {

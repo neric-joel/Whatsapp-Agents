@@ -20,4 +20,3 @@ describe('agent run cancellation', () => {
     })
   })
 })
-

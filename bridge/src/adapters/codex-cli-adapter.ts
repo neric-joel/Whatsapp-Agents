@@ -1,6 +1,7 @@
-import { SubprocessAdapter } from './subprocess-adapter.js'
-import { formatFilesForPrompt } from '../context/file-context.js'
 import type { AgentEvent, ContextPacketV1, SenderType } from '@agentroom/shared'
+
+import { formatFilesForPrompt } from '../context/file-context.js'
+import { SubprocessAdapter } from './subprocess-adapter.js'
 
 export class CodexCliAdapter extends SubprocessAdapter {
   readonly name = 'codex-cli'
@@ -13,7 +14,9 @@ export class CodexCliAdapter extends SubprocessAdapter {
     return ['exec', '--json', '-']
   }
 
-  protected envVarName(): string { return 'CODEX_BIN' }
+  protected envVarName(): string {
+    return 'CODEX_BIN'
+  }
 
   protected buildStdin(packet: ContextPacketV1): string {
     const triggerMessage = packet.trigger_message
@@ -27,7 +30,9 @@ export class CodexCliAdapter extends SubprocessAdapter {
     ]
 
     if (history) {
-      sections.push(`Relevant recent context only. Use it as background, but prioritize the current message if there is any conflict:\n${history}`)
+      sections.push(
+        `Relevant recent context only. Use it as background, but prioritize the current message if there is any conflict:\n${history}`,
+      )
     }
 
     const fileContext = formatFilesForPrompt(packet.files)

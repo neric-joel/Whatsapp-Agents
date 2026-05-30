@@ -1,11 +1,14 @@
 import { NextRequest } from 'next/server'
+
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { internalError } from '@/lib/api-security'
 import { addRoomAgentSchema } from '@/lib/api-validation'
 import { requireRoomMember } from '@/lib/permissions'
 import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
 
-interface RouteParams { params: { roomId: string } }
+interface RouteParams {
+  params: { roomId: string }
+}
 
 type AgentRow = {
   id: string
@@ -45,7 +48,10 @@ const memberSelect = `
 `
 
 async function requireAuthenticatedRoomMember(req: NextRequest, roomId: string) {
-  const { data: { user }, error: authErr } = await getAuthenticatedUser(req)
+  const {
+    data: { user },
+    error: authErr,
+  } = await getAuthenticatedUser(req)
   if (authErr || !user) return { error: apiError('UNAUTHORIZED', 'Unauthorized', 401) }
 
   const supabase = createSupabaseServiceClient()
@@ -74,7 +80,7 @@ async function addLatestRunStatus(
     .order('created_at', { ascending: false })
 
   const latestStatusByAgent = new Map<string, string>()
-  for (const run of ((data ?? []) as AgentRunStatusRow[])) {
+  for (const run of (data ?? []) as AgentRunStatusRow[]) {
     if (!latestStatusByAgent.has(run.agent_id)) latestStatusByAgent.set(run.agent_id, run.status)
   }
 
@@ -150,11 +156,9 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     return internalError('room members add agent', error)
   }
 
-  const members = await addLatestRunStatus(
-    auth.supabase,
-    params.roomId,
-    [data as unknown as RoomAgentMemberRow],
-  )
+  const members = await addLatestRunStatus(auth.supabase, params.roomId, [
+    data as unknown as RoomAgentMemberRow,
+  ])
 
   return apiSuccess(members[0], 201)
 }

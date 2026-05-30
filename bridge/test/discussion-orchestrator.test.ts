@@ -30,19 +30,22 @@ test('discussion phase 1 asks for teammate contribution rather than final solo s
 })
 
 test('reads valid discussion metadata only', () => {
-  assert.deepEqual(readDiscussionMetadata({
-    discussion: {
+  assert.deepEqual(
+    readDiscussionMetadata({
+      discussion: {
+        enabled: true,
+        phase: 'individual',
+        original_message_id: 'message-1',
+        original_prompt: 'math problem',
+      },
+    }),
+    {
       enabled: true,
       phase: 'individual',
       original_message_id: 'message-1',
       original_prompt: 'math problem',
     },
-  }), {
-    enabled: true,
-    phase: 'individual',
-    original_message_id: 'message-1',
-    original_prompt: 'math problem',
-  })
+  )
 
   assert.equal(readDiscussionMetadata({ discussion: { enabled: true, phase: 'unknown' } }), null)
 })
@@ -51,11 +54,23 @@ test('selects Codex as the consensus agent when available', () => {
   const members = [
     {
       agent_id: 'claude',
-      agents: { id: 'claude', name: 'Claude', slug: 'claude_thinker', provider: 'claude_code', is_active: true },
+      agents: {
+        id: 'claude',
+        name: 'Claude',
+        slug: 'claude_thinker',
+        provider: 'claude_code',
+        is_active: true,
+      },
     },
     {
       agent_id: 'codex',
-      agents: { id: 'codex', name: 'Codex', slug: 'codex_builder', provider: 'codex_cli', is_active: true },
+      agents: {
+        id: 'codex',
+        name: 'Codex',
+        slug: 'codex_builder',
+        provider: 'codex_cli',
+        is_active: true,
+      },
     },
   ]
 

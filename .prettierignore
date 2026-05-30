@@ -1,0 +1,10 @@
+node_modules/
+.next/
+dist/
+build/
+pnpm-lock.yaml
+*.md
+supabase/.temp/
+.worktrees/
+*.diff
+.turbo/

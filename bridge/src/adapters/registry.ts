@@ -1,7 +1,8 @@
 import type { AgentAdapter } from '@agentroom/shared'
-import { MockAgentAdapter } from './mock-agent-adapter.js'
+
 import { ClaudeCodeAdapter } from './claude-code-adapter.js'
 import { CodexCliAdapter } from './codex-cli-adapter.js'
+import { MockAgentAdapter } from './mock-agent-adapter.js'
 import { MyClaudeAdapter } from './myclaude-adapter.js'
 import { RuFloAdapter } from './ruflo-adapter.js'
 

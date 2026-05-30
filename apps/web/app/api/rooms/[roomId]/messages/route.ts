@@ -1,16 +1,23 @@
+import {
+  buildDiscussionPhasePrompt,
+  type DiscussionMode,
+  parseDiscussionRequest,
+} from '@agentroom/shared'
 import { NextRequest } from 'next/server'
+
+import { buildInitialAgentRunRows } from '@/lib/agent-runs'
+import { selectTargetAgents } from '@/lib/agent-targeting'
 import { apiError, apiSuccess } from '@/lib/api-error'
-import { sendMessageSchema } from '@/lib/api-validation'
 import { assertSameOrigin, enforceRateLimit, internalError } from '@/lib/api-security'
+import { sendMessageSchema } from '@/lib/api-validation'
+import { parseMentions } from '@/lib/mention-parser'
 import { requireRoomMember, requireRoomOwner } from '@/lib/permissions'
 import { clearRoomChat } from '@/lib/room-chat-management'
 import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
-import { parseMentions } from '@/lib/mention-parser'
-import { buildInitialAgentRunRows } from '@/lib/agent-runs'
-import { selectTargetAgents } from '@/lib/agent-targeting'
-import { buildDiscussionPhasePrompt, parseDiscussionRequest, type DiscussionMode } from '@agentroom/shared'
 
-interface RouteParams { params: { roomId: string } }
+interface RouteParams {
+  params: { roomId: string }
+}
 
 type AgentMemberRow = {
   agent_id: string
@@ -25,7 +32,10 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   if (csrf) return csrf
 
   // 1. Authenticate
-  const { data: { user }, error: authErr } = await getAuthenticatedUser(req)
+  const {
+    data: { user },
+    error: authErr,
+  } = await getAuthenticatedUser(req)
   if (authErr || !user) return apiError('UNAUTHORIZED', 'Unauthorized', 401)
 
   // 1b. Rate limit: each message can fan out N subprocess runs, so throttle hard.
@@ -53,10 +63,16 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     ? buildDiscussionPhasePrompt('individual', discussionRequest.prompt)
     : rawContent
   if (!content) {
-    return apiError('VALIDATION_ERROR', 'Invalid request body', 400, { fieldErrors: { content: ['content is required'] } })
+    return apiError('VALIDATION_ERROR', 'Invalid request body', 400, {
+      fieldErrors: { content: ['content is required'] },
+    })
   }
   if (discussionRequest && !discussionRequest.prompt) {
-    return apiError('VALIDATION_ERROR', 'Use /discuss followed by the problem you want agents to solve together.', 400)
+    return apiError(
+      'VALIDATION_ERROR',
+      'Use /discuss followed by the problem you want agents to solve together.',
+      400,
+    )
   }
 
   const roundIndex = data.round_index ?? 0
@@ -65,7 +81,9 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   // 4. Fetch room for reply_mode and loop guard limits
   const { data: room } = await supabase
     .from('rooms')
-    .select('id, reply_mode, max_agent_rounds, max_agent_hops, allow_agent_to_agent, discussion_mode')
+    .select(
+      'id, reply_mode, max_agent_rounds, max_agent_hops, allow_agent_to_agent, discussion_mode',
+    )
     .eq('id', roomId)
     .single()
 
@@ -130,10 +148,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   }
 
   // 6. Update room.last_message_at
-  await supabase
-    .from('rooms')
-    .update({ last_message_at: message.created_at })
-    .eq('id', roomId)
+  await supabase.from('rooms').update({ last_message_at: message.created_at }).eq('id', roomId)
 
   const insertSystemMessage = (content: string) =>
     supabase.from('messages').insert({
@@ -149,7 +164,8 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   // 7. Loop guard
   const maxRounds = (room as { max_agent_rounds: number }).max_agent_rounds
   const maxHops = (room as { max_agent_hops: number }).max_agent_hops
-  const discussionMode = ((room as { discussion_mode?: DiscussionMode }).discussion_mode ?? 'independent')
+  const discussionMode =
+    (room as { discussion_mode?: DiscussionMode }).discussion_mode ?? 'independent'
 
   if (roundIndex >= maxRounds) {
     await insertSystemMessage(`Loop guard: agent discussion stopped after ${maxRounds} rounds.`)
@@ -171,11 +187,14 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     .eq('muted', false)
 
   const allActive = ((rawMembers ?? []) as unknown as AgentMemberRow[]).filter(
-    (m) => m.agents?.is_active
+    (m) => m.agents?.is_active,
   )
 
   // 9. Mention-based routing
-  const mentions = parseMentions(rawContent, allActive.map((m) => m.agents))
+  const mentions = parseMentions(
+    rawContent,
+    allActive.map((m) => m.agents),
+  )
   const replyMode = (room as { reply_mode: string }).reply_mode
 
   const { targetAgents, systemMessage } = selectTargetAgents({
@@ -201,10 +220,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       discussionMode: runDiscussionMode,
     })
 
-    const { data: insertedRuns } = await supabase
-      .from('agent_runs')
-      .insert(runs)
-      .select()
+    const { data: insertedRuns } = await supabase.from('agent_runs').insert(runs).select()
 
     if (insertedRuns) agentRuns.push(...insertedRuns)
   }
@@ -214,7 +230,10 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(req: NextRequest, { params }: RouteParams) {
   const { roomId } = params
-  const { data: { user }, error: authErr } = await getAuthenticatedUser(req)
+  const {
+    data: { user },
+    error: authErr,
+  } = await getAuthenticatedUser(req)
   if (authErr || !user) return apiError('UNAUTHORIZED', 'Unauthorized', 401)
 
   const supabase = createSupabaseServiceClient()

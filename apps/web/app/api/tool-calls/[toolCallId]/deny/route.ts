@@ -2,11 +2,16 @@ import { apiError, apiSuccess } from '@/lib/api-error'
 import { requireRoomMember } from '@/lib/permissions'
 import { createSupabaseServerClient, createSupabaseServiceClient } from '@/lib/supabase/server'
 
-interface RouteParams { params: { toolCallId: string } }
+interface RouteParams {
+  params: { toolCallId: string }
+}
 
 export async function POST(_req: Request, { params }: RouteParams) {
   const supabaseUser = createSupabaseServerClient()
-  const { data: { user }, error: authErr } = await supabaseUser.auth.getUser()
+  const {
+    data: { user },
+    error: authErr,
+  } = await supabaseUser.auth.getUser()
   if (authErr || !user) return apiError('UNAUTHORIZED', 'Unauthorized', 401)
 
   const supabase = createSupabaseServiceClient()
@@ -30,7 +35,8 @@ export async function POST(_req: Request, { params }: RouteParams) {
     .eq('status', 'waiting_approval')
     .select()
     .single()
-  if (error || !data) return apiError('CONFLICT', error?.message ?? 'Tool call is not waiting for approval', 400)
+  if (error || !data)
+    return apiError('CONFLICT', error?.message ?? 'Tool call is not waiting for approval', 400)
 
   return apiSuccess(data)
 }

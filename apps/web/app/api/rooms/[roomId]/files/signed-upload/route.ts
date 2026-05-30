@@ -1,11 +1,14 @@
 import { NextRequest } from 'next/server'
+
 import { apiError, apiSuccess } from '@/lib/api-error'
-import { signedUploadSchema } from '@/lib/api-validation'
 import { assertSameOrigin, enforceRateLimit, internalError } from '@/lib/api-security'
+import { signedUploadSchema } from '@/lib/api-validation'
 import { requireRoomMember } from '@/lib/permissions'
 import { createSupabaseServerClient, createSupabaseServiceClient } from '@/lib/supabase/server'
 
-interface RouteParams { params: { roomId: string } }
+interface RouteParams {
+  params: { roomId: string }
+}
 
 export async function POST(req: NextRequest, { params }: RouteParams) {
   const { roomId } = params
@@ -13,7 +16,10 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   if (csrf) return csrf
 
   const supabaseUser = createSupabaseServerClient()
-  const { data: { user }, error: authErr } = await supabaseUser.auth.getUser()
+  const {
+    data: { user },
+    error: authErr,
+  } = await supabaseUser.auth.getUser()
   if (authErr || !user) return apiError('UNAUTHORIZED', 'Unauthorized', 401)
 
   // Rate limit uploads per user+room (signed URLs are cheap but unbounded otherwise).
@@ -38,7 +44,8 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   const { data: signedData, error: signedErr } = await supabase.storage
     .from('agentroom-files')
     .createSignedUploadUrl(objectPath)
-  if (signedErr || !signedData) return internalError('signed-upload createSignedUploadUrl', signedErr)
+  if (signedErr || !signedData)
+    return internalError('signed-upload createSignedUploadUrl', signedErr)
 
   const { data: file, error: fileErr } = await supabase
     .from('files')

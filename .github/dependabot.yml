@@ -2,10 +2,10 @@ version: 2
 updates:
   - package-ecosystem: npm
     directories:
-      - "/"
-      - "/apps/web"
-      - "/bridge"
-      - "/packages/shared"
+      - '/'
+      - '/apps/web'
+      - '/bridge'
+      - '/packages/shared'
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
@@ -13,6 +13,6 @@ updates:
       dev-dependencies:
         dependency-type: development
   - package-ecosystem: github-actions
-    directory: "/"
+    directory: '/'
     schedule:
       interval: weekly

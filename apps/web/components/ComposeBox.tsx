@@ -1,9 +1,19 @@
 'use client'
-import { useState, useEffect, useRef, useMemo, KeyboardEvent, ChangeEvent, ClipboardEvent } from 'react'
+import {
+  ChangeEvent,
+  ClipboardEvent,
+  KeyboardEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
+
 import { useRooms } from '@/hooks/useRooms'
-import { createSupabaseBrowserClient } from '@/lib/supabase/client'
-import { getImageFilesFromClipboardItems } from '@/lib/pasted-files'
 import { ALLOWED_UPLOAD_MIME_TYPES, MAX_UPLOAD_BYTES } from '@/lib/api-validation'
+import { getImageFilesFromClipboardItems } from '@/lib/pasted-files'
+import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+
 import type { OptimisticMessage } from './MessageTimeline'
 
 const ACCEPTED_UPLOAD_TYPES = ALLOWED_UPLOAD_MIME_TYPES.join(',')
@@ -29,7 +39,13 @@ interface SlimAgent {
 
 const EVERYONE: SlimAgent = { id: '__everyone__', slug: 'everyone', name: 'Everyone' }
 
-export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo, onCancelReply }: Props) {
+export default function ComposeBox({
+  roomId,
+  onOptimistic,
+  onRefetch,
+  replyingTo,
+  onCancelReply,
+}: Props) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
@@ -78,10 +94,7 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
     if (mentionQuery === null) return []
     const q = mentionQuery.toLowerCase()
     const filtered = roomAgents.filter((a) => a.slug.toLowerCase().startsWith(q))
-    return [
-      ...('everyone'.startsWith(q) ? [EVERYONE] : []),
-      ...filtered,
-    ]
+    return [...('everyone'.startsWith(q) ? [EVERYONE] : []), ...filtered]
   }, [mentionQuery, roomAgents])
 
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
@@ -112,7 +125,9 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
     setFileError(null)
     // Client-side guard mirroring the server allowlist for a clear message.
     if (!(ALLOWED_UPLOAD_MIME_TYPES as readonly string[]).includes(file.type)) {
-      setFileError(`File type not supported${file.type ? ` (${file.type})` : ''}. Allowed: images, PDF, text, CSV, JSON, zip.`)
+      setFileError(
+        `File type not supported${file.type ? ` (${file.type})` : ''}. Allowed: images, PDF, text, CSV, JSON, zip.`,
+      )
       return
     }
     if (file.size > MAX_UPLOAD_BYTES) {
@@ -130,7 +145,7 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
           size_bytes: file.size,
         }),
       })
-      const json = await res.json().catch(() => ({})) as {
+      const json = (await res.json().catch(() => ({}))) as {
         ok?: boolean
         data?: { signed_url: string; file_id: string }
         error?: { message?: string }
@@ -168,7 +183,13 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
     const [file] = getImageFilesFromClipboardItems(e.clipboardData?.items ?? null)
     if (!file || uploading || sending) return
     e.preventDefault()
-    void uploadAttachment(file.name ? file : new File([file], `pasted-screenshot-${Date.now()}.png`, { type: file.type || 'image/png' }))
+    void uploadAttachment(
+      file.name
+        ? file
+        : new File([file], `pasted-screenshot-${Date.now()}.png`, {
+            type: file.type || 'image/png',
+          }),
+    )
   }
 
   async function submit() {
@@ -183,7 +204,7 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
         body: JSON.stringify({ content, metadata, reply_to_id: replyingTo?.id }),
       })
       if (!res.ok) {
-        const json = await res.json().catch(() => ({})) as { error?: { message?: string } }
+        const json = (await res.json().catch(() => ({}))) as { error?: { message?: string } }
         setSendError(json.error?.message ?? 'Failed to send message')
         return
       }
@@ -226,11 +247,12 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
   }
 
   const showDropdown = mentionQuery !== null && mentionOptions.length > 0
-  const replySender = replyingTo?.sender_type === 'agent'
-    ? replyingTo.agents?.name ?? 'Agent'
-    : replyingTo?.sender_type === 'user'
-      ? 'You'
-      : 'System'
+  const replySender =
+    replyingTo?.sender_type === 'agent'
+      ? (replyingTo.agents?.name ?? 'Agent')
+      : replyingTo?.sender_type === 'user'
+        ? 'You'
+        : 'System'
   const replyPreview = replyingTo
     ? replyingTo.content.length > 80
       ? `${replyingTo.content.slice(0, 80)}...`
@@ -264,7 +286,10 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
             {mentionOptions.map((opt) => (
               <li
                 key={opt.id}
-                onMouseDown={(e) => { e.preventDefault(); selectMention(opt.slug) }}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  selectMention(opt.slug)
+                }}
                 className="flex cursor-pointer items-center gap-2 px-4 py-2 hover:bg-gray-50"
               >
                 <span className="text-sm font-medium text-purple-700">@{opt.slug}</span>

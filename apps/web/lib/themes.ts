@@ -8,7 +8,7 @@ export const APP_THEMES = [
   { id: 'dracula', label: 'Dracula' },
 ] as const
 
-export type AppThemeId = typeof APP_THEMES[number]['id']
+export type AppThemeId = (typeof APP_THEMES)[number]['id']
 
 export const DEFAULT_APP_THEME: AppThemeId = 'light-modern'
 

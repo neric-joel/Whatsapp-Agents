@@ -1,9 +1,11 @@
 'use client'
 
-import { useEffect, type ReactNode } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
+import { type ReactNode, useEffect } from 'react'
+
 import { useAuth } from '@/hooks/useAuth'
 import { getAuthShellState } from '@/lib/auth-shell'
+
 import LeftSidebar from './LeftSidebar'
 
 export default function AuthGuard({ children }: { children: ReactNode }) {

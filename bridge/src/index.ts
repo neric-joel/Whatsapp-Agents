@@ -1,14 +1,15 @@
 import 'dotenv/config'
+
 import { log } from './lib/logger.js'
-import { createServiceClient } from './lib/supabase.js'
 import { recoverStaleRuns } from './lib/stale-runs.js'
+import { createServiceClient } from './lib/supabase.js'
 import { processRun } from './workers/run-worker.js'
 
-const WORKER_ID    = process.env.BRIDGE_WORKER_ID               ?? 'bridge-local-1'
-const POLL_MS      = +(process.env.BRIDGE_POLL_INTERVAL_MS      ?? 2000)
-const MAX_CONC     = +(process.env.BRIDGE_MAX_CONCURRENT_RUNS   ?? 3)
+const WORKER_ID = process.env.BRIDGE_WORKER_ID ?? 'bridge-local-1'
+const POLL_MS = +(process.env.BRIDGE_POLL_INTERVAL_MS ?? 2000)
+const MAX_CONC = +(process.env.BRIDGE_MAX_CONCURRENT_RUNS ?? 3)
 const HEARTBEAT_MS = +(process.env.BRIDGE_HEARTBEAT_INTERVAL_MS ?? 5000)
-const STALE_MS     = +(process.env.BRIDGE_STALE_RUN_TIMEOUT_MS  ?? 60000)
+const STALE_MS = +(process.env.BRIDGE_STALE_RUN_TIMEOUT_MS ?? 60000)
 const STALE_SWEEP_MS = Math.max(HEARTBEAT_MS, Math.min(STALE_MS, 30000))
 
 const activeRuns = new Set<string>()
@@ -32,7 +33,12 @@ async function pollOnce() {
     if (activeRuns.has(id)) continue
     activeRuns.add(id)
     processRun(id)
-      .catch(err => log('error', 'run.process.error', { run_id: id, error: err instanceof Error ? err.message : String(err) }))
+      .catch((err) =>
+        log('error', 'run.process.error', {
+          run_id: id,
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      )
       .finally(() => activeRuns.delete(id))
   }
 }
@@ -64,14 +70,32 @@ async function sendHeartbeat() {
 }
 
 async function main() {
-  log('info', 'bridge.start', { poll_interval_ms: POLL_MS, max_concurrent: MAX_CONC, stale_sweep_ms: STALE_SWEEP_MS })
+  log('info', 'bridge.start', {
+    poll_interval_ms: POLL_MS,
+    max_concurrent: MAX_CONC,
+    stale_sweep_ms: STALE_SWEEP_MS,
+  })
   await recoverStaleRunsOnce('stale: recovered on startup')
-  setInterval(() => { pollOnce().catch(err => log('error', 'poll.error', { error: err instanceof Error ? err.message : String(err) })) }, POLL_MS)
-  setInterval(() => { sendHeartbeat().catch(err => log('error', 'heartbeat.error', { error: err instanceof Error ? err.message : String(err) })) }, HEARTBEAT_MS)
-  setInterval(() => { recoverStaleRunsOnce('stale: recovered by periodic sweep').catch(err => log('error', 'stale.recovery.error', { error: err instanceof Error ? err.message : String(err) })) }, STALE_SWEEP_MS)
+  setInterval(() => {
+    pollOnce().catch((err) =>
+      log('error', 'poll.error', { error: err instanceof Error ? err.message : String(err) }),
+    )
+  }, POLL_MS)
+  setInterval(() => {
+    sendHeartbeat().catch((err) =>
+      log('error', 'heartbeat.error', { error: err instanceof Error ? err.message : String(err) }),
+    )
+  }, HEARTBEAT_MS)
+  setInterval(() => {
+    recoverStaleRunsOnce('stale: recovered by periodic sweep').catch((err) =>
+      log('error', 'stale.recovery.error', {
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    )
+  }, STALE_SWEEP_MS)
 }
 
-main().catch(err => {
+main().catch((err) => {
   log('error', 'bridge.fatal', { error: err instanceof Error ? err.message : String(err) })
   process.exitCode = 1
 })

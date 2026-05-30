@@ -1,7 +1,23 @@
+import type {
+  AgentProvider,
+  ContextPacketV1,
+  DiscussionMode,
+  PinnedItem,
+  ReplyMode,
+  SenderType,
+} from '@agentroom/shared'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { AgentProvider, ContextPacketV1, DiscussionMode, PinnedItem, ReplyMode, SenderType } from '@agentroom/shared'
-import { readContextMessageLimit, readContextMessageMaxChars, trimContextMessages } from './context-window.js'
-import { hydrateFilePreviews, type ContextFilePreview, type FilePreviewRow } from './file-context.js'
+
+import {
+  readContextMessageLimit,
+  readContextMessageMaxChars,
+  trimContextMessages,
+} from './context-window.js'
+import {
+  type ContextFilePreview,
+  type FilePreviewRow,
+  hydrateFilePreviews,
+} from './file-context.js'
 
 interface BuildContextArgs {
   supabase: SupabaseClient
@@ -52,7 +68,10 @@ export async function buildContextPacket({
     .lte('created_at', triggerMsg.created_at)
     .order('created_at', { ascending: false })
     .limit(contextMessageLimit)
-  const recentMessages = trimContextMessages(((recentRaw ?? []) as RecentMsg[]).reverse(), contextMessageMaxChars)
+  const recentMessages = trimContextMessages(
+    ((recentRaw ?? []) as RecentMsg[]).reverse(),
+    contextMessageMaxChars,
+  )
 
   const { data: roomRaw } = await supabase
     .from('rooms')
@@ -85,7 +104,9 @@ export async function buildContextPacket({
     const uniqueFileIds = [...new Set(fileIds)].slice(0, 10)
     const { data: fileRows } = await supabase
       .from('files')
-      .select('id, filename, mime_type, size_bytes, storage_path, storage_bucket, extracted_text, metadata')
+      .select(
+        'id, filename, mime_type, size_bytes, storage_path, storage_bucket, extracted_text, metadata',
+      )
       .in('id', uniqueFileIds)
     files = await hydrateFilePreviews(supabase, (fileRows ?? []) as FilePreviewRow[])
   }

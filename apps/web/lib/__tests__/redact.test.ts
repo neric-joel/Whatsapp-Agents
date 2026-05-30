@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+
 import { redact } from '../../../../bridge/src/lib/redact'
 
 describe('redact', () => {

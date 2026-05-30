@@ -1,7 +1,8 @@
 'use client'
-import { useCallback, useEffect, useState } from 'react'
-import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import type { Room } from '@agentroom/shared'
+import { useCallback, useEffect, useState } from 'react'
+
+import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 export function useRooms() {
   const [rooms, setRooms] = useState<Room[]>([])

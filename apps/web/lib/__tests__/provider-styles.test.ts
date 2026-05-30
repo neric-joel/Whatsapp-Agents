@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+
 import { getProviderStyle, PROVIDER_STYLES } from '../provider-styles'
 
 describe('provider styles', () => {

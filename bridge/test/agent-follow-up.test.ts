@@ -39,7 +39,7 @@ function createSupabaseStub(options: StubOptions = {}) {
                 }
                 return Promise.resolve({ data: null })
               },
-              then(resolve: (value: QueryResult) => void) {
+              then(resolve: (_value: QueryResult) => void) {
                 if (table === 'room_members') {
                   resolve({
                     data: [
@@ -47,13 +47,23 @@ function createSupabaseStub(options: StubOptions = {}) {
                         agent_id: 'source',
                         muted: false,
                         reply_enabled: true,
-                        agents: { id: 'source', name: 'Codex Builder', slug: 'codex_builder', is_active: true },
+                        agents: {
+                          id: 'source',
+                          name: 'Codex Builder',
+                          slug: 'codex_builder',
+                          is_active: true,
+                        },
                       },
                       {
                         agent_id: 'reviewer',
                         muted: false,
                         reply_enabled: true,
-                        agents: { id: 'reviewer', name: 'Reviewer', slug: 'reviewer', is_active: true },
+                        agents: {
+                          id: 'reviewer',
+                          name: 'Reviewer',
+                          slug: 'reviewer',
+                          is_active: true,
+                        },
                       },
                     ],
                   })
