@@ -143,6 +143,20 @@ Already exists: list global agents; add/remove/mute **seeded** agents per room (
 
 ---
 
+## 2026-05-30 — GOAL: Phase 2 — Code quality, type-safety & dead-code — **ACTIVE**
+- Phase: 2 (Quality). Branch: `harden/p2-quality` (stack on `feat/p1-security`).
+- Iteration budget: 10. State: ACTIVE.
+- Acceptance criteria (testable; from plan + DoD):
+  - [ ] Root ESLint (flat config) + Prettier + import sorting shared across `apps/web`, `bridge`, `packages/shared`; `pnpm lint`/`format` wired; `pnpm lint` green (warnings allowed, 0 errors).
+  - [ ] Shared base `tsconfig.base.json`; `noUncheckedIndexedAccess` (+ strict, no implicit any) adopted across all workspaces; `pnpm typecheck` green.
+  - [ ] `knip` (or ts-prune+depcheck) reports no unused files/exports/deps (or a justified allowlist committed); net code removed vs. baseline; wired into CI.
+  - [ ] No architecture violations (web ↔ bridge only via shared types + DB contract); anchor the middleware matcher (Phase-1 L-1 follow-up).
+  - [ ] Critique gate (Code-Quality Auditor + Adversarial Critic: no load-bearing deletion, no premature abstraction) PASS → `docs/reviews/`; `typecheck`/`lint`/`test` (≥135)/`build` green; no open Critical/High.
+
+Judge rule: DONE only when every box is checked with linked evidence and no Critical/High is open.
+
+---
+
 ## 2026-05-30 — GOAL: Phase 1 — Security hardening (real base) — **DONE ✅**
 - Phase: 1 (Security). Branch: `feat/p1-security` (stack on `harden/p0-foundation`). PR: #5 (see Night log).
 - Iteration budget: 10. State: **DONE** (judge-gated: both critics PASS, no open Critical/High, all checks green).
