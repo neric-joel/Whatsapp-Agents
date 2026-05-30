@@ -1,14 +1,17 @@
 import 'dotenv/config'
 
+import { loadBridgeEnv } from './lib/env.js'
 import { log } from './lib/logger.js'
 import { recoverStaleRuns } from './lib/stale-runs.js'
 import { createServiceClient } from './lib/supabase.js'
 import { processRun } from './workers/run-worker.js'
 
-const POLL_MS = +(process.env.BRIDGE_POLL_INTERVAL_MS ?? 2000)
-const MAX_CONC = +(process.env.BRIDGE_MAX_CONCURRENT_RUNS ?? 3)
-const HEARTBEAT_MS = +(process.env.BRIDGE_HEARTBEAT_INTERVAL_MS ?? 5000)
-const STALE_MS = +(process.env.BRIDGE_STALE_RUN_TIMEOUT_MS ?? 60000)
+// Fail fast on a bad environment, naming the offending var(s).
+const env = loadBridgeEnv()
+const POLL_MS = env.BRIDGE_POLL_INTERVAL_MS
+const MAX_CONC = env.BRIDGE_MAX_CONCURRENT_RUNS
+const HEARTBEAT_MS = env.BRIDGE_HEARTBEAT_INTERVAL_MS
+const STALE_MS = env.BRIDGE_STALE_RUN_TIMEOUT_MS
 const STALE_SWEEP_MS = Math.max(HEARTBEAT_MS, Math.min(STALE_MS, 30000))
 
 const activeRuns = new Set<string>()

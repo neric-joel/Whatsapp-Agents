@@ -47,6 +47,11 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  // Enable the instrumentation.ts hook (stable in Next 15; opt-in in 14.2)
+  // so we can validate the server environment once at boot.
+  experimental: {
+    instrumentationHook: true,
+  },
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }]
   },
