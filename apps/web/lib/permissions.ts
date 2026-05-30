@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 import { apiError } from './api-error'
 
-export async function getRoomMembership(
+async function getRoomMembership(
   supabase: SupabaseClient,
   roomId: string,
   userId: string,
@@ -30,15 +30,6 @@ export async function requireRoomMember(
 ): Promise<void> {
   const { isMember } = await getRoomMembership(supabase, roomId, userId)
   if (!isMember) throw apiError('FORBIDDEN', 'Not a room member', 403)
-}
-
-export async function requireRoomAdmin(
-  supabase: SupabaseClient,
-  roomId: string,
-  userId: string,
-): Promise<void> {
-  const { isAdmin } = await getRoomMembership(supabase, roomId, userId)
-  if (!isAdmin) throw apiError('FORBIDDEN', 'Admin required', 403)
 }
 
 export async function requireRoomOwner(

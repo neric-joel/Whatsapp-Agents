@@ -1,9 +1,9 @@
-export type MessageBlock =
+type MessageBlock =
   | { type: 'paragraph'; text: string }
   | { type: 'list'; items: string[] }
   | { type: 'code'; text: string }
 
-export type InlineSegment =
+type InlineSegment =
   | { type: 'text'; text: string }
   | { type: 'bold'; text: string }
   | { type: 'italic'; text: string }

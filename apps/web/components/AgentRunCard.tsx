@@ -14,7 +14,7 @@ function initials(name: string) {
     .toUpperCase()
 }
 
-export interface AgentRunCardProps {
+interface AgentRunCardProps {
   run: {
     id: string
     status: RunStatus

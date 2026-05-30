@@ -87,7 +87,7 @@ interface Bucket {
 }
 const buckets = new Map<string, Bucket>()
 
-export interface RateLimitResult {
+interface RateLimitResult {
   ok: boolean
   retryAfterMs: number
   remaining: number

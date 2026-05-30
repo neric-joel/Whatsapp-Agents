@@ -2,7 +2,7 @@ type DeleteResult = {
   error: { message: string } | null
 }
 
-export type RoomChatDeleteClient = {
+type RoomChatDeleteClient = {
   from(table: string): {
     delete(): {
       eq(column: string, value: string): PromiseLike<DeleteResult>

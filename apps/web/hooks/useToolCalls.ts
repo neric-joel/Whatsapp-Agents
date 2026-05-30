@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
-export interface ToolCallRow {
+interface ToolCallRow {
   id: string
   room_id: string
   tool_name: string

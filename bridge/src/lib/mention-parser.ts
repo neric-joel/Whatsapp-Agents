@@ -1,4 +1,4 @@
-export interface ParsedMention {
+interface ParsedMention {
   type: 'agent' | 'everyone'
   slug?: string
   agent_id?: string

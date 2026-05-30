@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
-export interface DbAgentRun {
+interface DbAgentRun {
   id: string
   status: 'queued' | 'claimed' | 'running' | 'failed' | 'cancelled'
   agent_id: string

@@ -56,5 +56,7 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|auth).*)'],
+  // Anchor the `auth` exclusion to the exact segment so only `/auth` and
+  // `/auth/*` are skipped (not e.g. `/authxyz`). Phase-1 review L-1.
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|auth(?:/|$)).*)'],
 }

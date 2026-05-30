@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-export type ApiErrorCode =
+type ApiErrorCode =
   | 'VALIDATION_ERROR'
   | 'UNAUTHORIZED'
   | 'FORBIDDEN'

@@ -19,7 +19,7 @@ const toneClass: Record<ToastType, string> = {
   info: 'border-[#7C3AED]',
 }
 
-export function Toast({ toast, onDismiss }: ToastProps) {
+function Toast({ toast, onDismiss }: ToastProps) {
   return (
     <div
       className={`animate-[toast-life_4000ms_ease-in-out_forwards] rounded-md border-l-4 ${toneClass[toast.type]} bg-white px-4 py-3 text-sm text-gray-900 shadow-lg transition-opacity`}

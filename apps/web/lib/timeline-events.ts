@@ -1,15 +1,15 @@
-export type TimelineMessageLike = {
+type TimelineMessageLike = {
   id: string
   created_at: string
 }
 
-export type TimelineRunLike = {
+type TimelineRunLike = {
   id: string
   trigger_msg_id: string | null
   created_at: string
 }
 
-export type TimelineEvent<TMessage extends TimelineMessageLike, TRun extends TimelineRunLike> =
+type TimelineEvent<TMessage extends TimelineMessageLike, TRun extends TimelineRunLike> =
   | { type: 'message'; id: string; message: TMessage }
   | { type: 'run'; id: string; run: TRun }
 

@@ -28,7 +28,7 @@ function avatarInitial(name: string | null | undefined) {
   return (name?.trim().charAt(0) || 'U').toUpperCase()
 }
 
-export interface MessageBubbleProps {
+interface MessageBubbleProps {
   message: {
     id: string
     content: string

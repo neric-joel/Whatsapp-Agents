@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
-export interface DbMessage {
+interface DbMessage {
   id: string
   content: string
   sender_type: string

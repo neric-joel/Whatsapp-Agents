@@ -1,6 +1,6 @@
-export type AgentProvider = 'claude_code' | 'codex_cli' | 'ruflo' | 'mock'
+type AgentProvider = 'claude_code' | 'codex_cli' | 'ruflo' | 'mock'
 
-export interface ProviderStyle {
+interface ProviderStyle {
   bubble: string
   border: string
   text: string

@@ -1,4 +1,4 @@
-export interface HallucinationResult {
+interface HallucinationResult {
   flagged: boolean
   confidence: 'low' | 'medium' | 'high'
   reasons: string[]
