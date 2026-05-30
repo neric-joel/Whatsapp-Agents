@@ -1,173 +1,160 @@
 # AgentRoom Production Hardening — PROGRESS
 
-Living log of the hardening effort (MVP → self-hostable, OSS-ready, v1.0). One entry
-per loop iteration. Authoritative status lives here; `03_DEFINITION_OF_DONE.md` holds
-the box checklist. Dates are absolute.
-
-Conventions: each goal is judge-gated — DONE only when every acceptance criterion is
-checked **with linked evidence** and no Critical/High review finding is open.
+Living log of the hardening effort (MVP → self-hostable, OSS-ready, v1.0). The
+**single source of truth for the autonomous runner** — every iteration re-grounds from
+this file + `CLAUDE.md` + git. `03_DEFINITION_OF_DONE.md` holds the box checklist.
+Dates are absolute. **Base of record: `origin/main` (`f780235`).**
 
 ---
 
-## Operating policy (standing — added 2026-05-30)
+## Operating policy (standing)
 
-Authorized by the project owner for the remainder of this effort:
-
-- **Autonomy / continuous run.** Run `/goal` → `/loop` across phases 0–11 without
-  waiting for approval. After a goal is DONE, immediately set the next `/goal` (per
-  `01_HARDENING_PLAN.md` + `04_HERMES_CAPABILITIES.md`) and continue. Leave a one-line
-  heartbeat here after each goal instead of stopping. Stop only when every DoD box is
-  checked and `v1.0.0` is tagged, or when `docs/production-hardening/DONE.flag` exists.
-- **When to pause (rare).** ONE precise question only if a decision is irreversible AND
-  expensive AND genuinely ambiguous (destructive data loss, license choice, dropping a
-  feature). Otherwise pick the best-justified default, record it here, and proceed.
-- **Standing batch approval.** Pre-approved reversible batches: removing `do/*`
-  worktrees, deleting only-merged `do/*` branches (report unmerged, never force),
-  pruning dead remote branches, committing existing uncommitted work onto a `harden/*`
-  branch. `main` stays protected — branches + PRs only. Never commit secrets.
-- **gh.** GitHub CLI is installed + authenticated → use it for the tracking issue and all PRs.
+- **Autonomy / continuous run.** Run `/goal` → `/loop` across phases without waiting.
+  After a goal is DONE, set the next `/goal` (per `01_HARDENING_PLAN.md` +
+  `04_HERMES_CAPABILITIES.md`) and continue. Leave a one-line heartbeat in the Night
+  log per goal. Stop only when every DoD box is checked and `v1.0.0` is tagged, or when
+  `docs/production-hardening/DONE.flag` exists.
+- **NIGHT RULE (unattended until morning 2026-05-31).** Never stop to ask. On any
+  blocker or ambiguous/expensive choice: take the **safe reversible path**, or **skip
+  that item and log it under `## For morning review`**, then continue with the next
+  thing. Keep a running `## Night log`.
+- **FORBIDDEN (never; skip + log instead):** commit/force-push to `main`; delete data /
+  drop tables; commit or rotate secrets. Everything else → feature branches + PRs.
+- **Branch stacking.** While a phase's PR is unmerged (the human merges at breakfast),
+  branch the next phase off the latest `harden/*`/`feat/*` branch (stack), and note it;
+  rebase onto `main` after merges land.
 - **Self-healing.** On ANY breakage (red typecheck/lint/test/build, failing stress test,
-  CI failure, Critical/High critic finding): do not stop. Write a root-cause note here
-  (symptom · hypothesis · evidence), set a corrective `/goal` (`fix: <root cause>`),
-  implement, re-verify until green. A goal is DONE only with passing checks + evidence
-  + zero open Critical/High.
-- **Restart-safe.** `scripts/agent-runner.ps1` + Windows Scheduled Task `AgentRoomHarden`
-  re-launch the headless loop at logon and every 5h, sleeping through usage-limit
-  windows. Stop = create `DONE.flag` or `schtasks /End /TN AgentRoomHarden`. See `RUNNER.md`.
-- **Stress testing (Phase 3+).** Expand `pnpm stress:agents`; cover concurrent
-  rooms/agents, queue saturation, long `/discuss`, deep hand-off chains (prove loop
-  guards), many/large uploads, stale-run recovery, cancellation under load. Metrics →
-  `docs/reviews/stress-*.md`. Fix every failure via the self-healing loop. Needs Docker.
-- **UI/UX (Phase 4).** Research current best-in-class chat UI/UX + motion (21st.dev and
-  other open/free resources); implement tasteful transitions honoring
-  `prefers-reduced-motion` + WCAG AA; adapt (never copy proprietary); cite sources in the
-  Phase 4 review/ADR.
-- **Reuse assets.** Use `~/.claude` + `./.claude` agents/skills throughout
-  (`security-review`/`security-auditor` for P1, `code-review`/`code-reviewer` for
-  critiques, `brainstorming` for features); note which asset each review used.
-- **Security invariants (never weaken).** auth, RLS, tool-approval flow, subprocess
-  validation, memory-injection scanning. No secrets in git/logs/PRs.
+  CI failure, Critical/High critic finding): write a root-cause note here (symptom ·
+  hypothesis · evidence), set a corrective `/goal` (`fix: …`), fix, re-verify until
+  green. A goal is DONE only with passing checks + evidence + zero open Critical/High.
+- **gh.** Authenticated as `neric-joel`. Use it for issues + one PR per phase.
+- **Restart-safe.** `scripts/agent-runner.ps1` loops headless Claude (fresh state-load
+  each iteration; redacts the gitignored `runner.log`; singleton mutex; sleeps ~5h on a
+  usage limit; stops on `DONE.flag`). Stop = create `DONE.flag` or kill the runner. See `RUNNER.md`.
+- **Security invariants (never weaken):** auth, RLS, tool-approval flow, subprocess
+  validation, memory-injection scanning. `main` protected by GitHub branch protection +
+  `.githooks/pre-push`.
+- **Reuse assets** (`~/.claude` + `./.claude`): `security-auditor`/`code-reviewer` for
+  critiques, `brainstorming` for features; note which asset each review used.
+- **UI/UX (Phase 4):** research current best-in-class chat UI/motion (21st.dev + open
+  resources); tasteful transitions honoring `prefers-reduced-motion` + WCAG AA; cite sources.
 
 ---
 
-## 2026-05-30 — Phase 0 baseline audit (`/audit`)
+## PIVOT to origin/main — 2026-05-30 (night)
 
-Read-only reconnaissance. No code changed. Findings below seed the Phase 0 goal and
-map to the backlog in `01_HARDENING_PLAN.md`.
+**Discovery:** the local checkout was **45 commits stale** (`7833573`); real
+`origin/main` is `f780235` ("AgentRoom v2 complete" + Supabase auth/login/AuthGuard +
+agent management + README/QUICKSTART + themes + stress tests + run cancellation + image
+text extraction + math rendering). The earlier Phase-0 work + the captured "feature
+wave" were built on the stale base and are **superseded**. Pivoted reversibly:
 
-### Environment / tooling
-| Tool | State | Impact |
-|------|-------|--------|
-| `gh` (GitHub CLI) | **NOT installed** (not on PATH, not in Program Files) | Cannot auto-create issues/PRs. Fallback: `git push` + paste-ready blocks (see `GITHUB_ISSUES.md`). Installing `gh` (`winget install GitHub.cli`) would restore full automation. |
-| Docker daemon | **DOWN** (client v28.4.0 present; Desktop Linux engine pipe absent) | `pnpm dev:supabase` / `supabase start` cannot be smoke-tested until Docker Desktop is started. Not blocking for P0 (hygiene/CI/lint/typecheck need no DB). Required for the Supabase-local smoke + Phase 3 e2e + Phase 5. |
-| Supabase CLI | v2.98.2 (v2.102.0 available) | OK; update is non-blocking. |
-| Remote | `git@github.com:neric-joel/Whatsapp-Agents.git` (SSH) | Push works. |
-
-### Baseline check status (run 2026-05-30 against the current dirty tree)
-| Check | Result | Evidence |
-|-------|--------|----------|
-| `pnpm typecheck` | ✅ PASS | 3 workspaces (web, bridge, shared) `tsc --noEmit` clean, incl. uncommitted code |
-| `pnpm --filter web build` | ✅ PASS | `next build` ok; 17 routes compile (incl. `/login`, `/api/agents`, `/api/rooms/[roomId]/members`) |
-| `pnpm test` | ✅ PASS | vitest: 3 files / 14 tests pass (web only; bridge & shared have **no tests**) |
-| `pnpm lint` | ⚠️ NOT CONFIGURED | `apps/web` has no ESLint config; `next lint` would prompt interactively → effectively unconfigured. Phase 0 will add a minimal config; Phase 2 unifies at root. |
-| `pnpm audit` | ⚠️ 18 vulns (6 high / 10 moderate / 2 low) | Almost all `next@14.2.35` (patched only in 15.x → major upgrade) + dev-only transitives (`glob`, `brace-expansion` via eslint) + patchable `postcss`/`ws`. |
-
-### Secrets — CLEAN ✅
-- No secret tracked; none in git history (only `f2fb917` added `*.env.example` placeholder files, values blank).
-- Real `apps/web/.env.local` (438B) + `bridge/.env` (458B) exist on disk, correctly **untracked** (`.gitignore` has `.env`, `.env.local`).
-- No `SERVICE_ROLE`/secret in any `NEXT_PUBLIC_*` var. `SUPABASE_SERVICE_ROLE_KEY` referenced only in `apps/web/lib/supabase/server.ts` (server-only) and `bridge/src/lib/supabase.ts`.
-
-### Working tree — one coherent uncommitted feature wave
-`main` has **11 untracked + 11 modified** files forming a single "agent-room management"
-change-set (login, agents/rooms/members APIs, 4 panels, api-client). Verified
-**load-bearing, no broken imports, builds green** → capture in the P0 branch (see
-`docs/reviews/phase-0-untracked-loadbearing.md`). EXCEPTION: do **not** commit the
-health-route regression as-is (restore the documented contract first).
-
-### Repo hygiene debt
-- 7 stale worktrees in `.worktrees/do-*` + 7 local `do/*` branches + remote `origin/do/0509-6csl`.
-- `.gitignore` (11 lines) does not cover `.worktrees/`, `graphify-out/`, `.claude/do-tasks/`, `next-env.d.ts`.
-- `.claude/do-tasks/` (17 `/do` task files) + `graphify-out/` (generated) should be ignored, not committed.
-
-### Findings → backlog map
-| # | Finding | Sev | Phase | Source |
-|---|---------|-----|-------|--------|
-| 1 | No CI (`.github/workflows` absent) | High | 0 | standards |
-| 2 | Stale worktrees/branches; gitignore gaps | Info | 0 | hygiene |
-| 3 | `launch-agentroom.ps1` hardcodes `$REPO` machine path (no secret) | High | 0/5 | `launch-agentroom.ps1:1` |
-| 4 | Dead `apps/web/lib/api.ts` (superseded by `api-error.ts`) | High | 0/2 | dead-code |
-| 5 | Health route regressed: returns `{ok:true}`, missing `data.service` | Med | 0 | `health/route.ts:4` |
-| 6 | Missing LICENSE/CONTRIBUTING/SECURITY/CODE_OF_CONDUCT/CHANGELOG/README | High | 0/7 | standards |
-| 7 | **Subprocess `shell:true` on win32 + `system_prompt` arg → command injection** | High | 1 | `subprocess-adapter.ts:27` |
-| 8 | No child output-size cap (unbounded stdout/stderr → memory DoS) | High | 1 | `subprocess-adapter.ts:34-35` |
-| 9 | Full `process.env` forwarded to child → service-role key leaks to agent CLIs | Med→High | 1 | `subprocess-adapter.ts:25` |
-| 10 | `*_BIN` not allowlisted; child `cwd` not set/validated (runs in repo root) | Med | 1 | adapters / `subprocess-adapter.ts` |
-| 11 | Denylist substring-match bypassable; guards a stubbed execution path | Med | 1 | `bridge/src/lib/denylist.ts` |
-| 12 | Supabase `error.message` returned verbatim to clients (info disclosure) | Med | 1 | api routes |
-| 13 | Any room member (not just admin) can add agents | Low | 1 | `members/route.ts:39` |
-| 14 | Signed-upload trusts client `mime_type`/`size_bytes`; no MIME allowlist | Low | 1 | `signed-upload/route.ts` |
-| 15 | Phase9 storage `FOR INSERT` policy may allow upload regardless of room membership | Med? | 1 | `phase9_extensions.sql:54` (verify) |
-| 16 | `reply_mode` enum drift: schema `['all','mentioned_only']` rejects canonical `'everyone'` | High | 2 | `api-validation.ts:6` |
-| 17 | Adapter registry routes on `adapter_type`; codex/ruflo unreachable; `myclaude` orphan | Med | 2 | `bridge/src/adapters/registry.ts` |
-| 18 | `denylist` imported into web test via `../../../../bridge/...`; move to shared | Low | 2 | `denylist.test.ts:2` |
-| 19 | Duplicated `ApiResponse<T>`/member types in components vs shared; shared `ApiError` shape disagrees w/ runtime | Low | 2 | shared + components |
-| 20 | `next@14.2.35` → 15.x for 6 high advisories (breaking; needs ADR + e2e) | High | 1/2 | `pnpm audit` |
-| 21 | TS `strict:true` set but no `noUncheckedIndexedAccess`/`noUnusedLocals`; no shared base tsconfig | Med | 2 | tsconfigs |
-| 22 | No Dockerfile/compose/devcontainer; no env-validation-at-boot | — | 5 | standards |
-| 23 | `NEXT_PUBLIC_APP_URL` in `.env.example` but unused in code | Info | 2 | env table |
-
-Full reports: `docs/reviews/phase-0-security-seed.md`, `…-deadcode.md`,
-`…-standards-and-env.md`, `…-untracked-loadbearing.md`.
-
-### Decisions recorded (will become ADRs where significant)
-- **D1 — Capture the uncommitted feature wave in the Phase 0 branch.** It is coherent,
-  load-bearing, and green. Committing on a branch (not `main`) via PR respects the
-  no-commit-to-main rule. The health-route regression is restored first; the dead
-  `api.ts` is deleted; other warts are tracked to their phases.
-- **D2 — `gh` absent → push branch + paste-ready PR/issue text** (per `00_MASTER_PROMPT`
-  fallback). Recommend installing GitHub CLI to restore automation.
-- **D3 — `next@14→15` upgrade is its own change** (breaking; App Router 14→15). Deferred
-  to a dedicated Phase 1/2 security PR with an ADR + full e2e re-verify, not bundled
-  into P0. P0 security workflow runs `pnpm audit` informationally; the 6 highs are
-  risk-accepted-pending-upgrade with this tracked note (DoD allows "risk-accepted in writing").
-- **D4 — P0 CI gate = typecheck/lint/test/build (blocking); security.yml = informational**
-  until the dep upgrade lands. A minimal ESLint config is added in P0 so `lint` is real.
+- **Backup:** `backup/pre-pivot-2026-05-30` @ `35ad8fb` (also on origin as
+  `harden/p0-baseline-hygiene-ci`). Nothing lost.
+- Reset local `main` → `origin/main`; new working branch **`harden/p0-foundation`**.
+- **Salvaged (carried onto origin/main):** the hardening package only — `.github/**`
+  (CI/security/dependabot/PR-template), `.editorconfig`, `.nvmrc`, `.gitattributes`,
+  `.githooks/pre-push`, `scripts/agent-runner.ps1` + `register-task.ps1`,
+  `.claude/commands/**` + `settings.json`, `docs/production-hardening/**`; merged
+  `.gitignore`; re-applied `packageManager: pnpm@11.0.8`.
+- **Discarded (stale duplicates / wrong on real code):** the product "feature wave"
+  (login/members/agents routes, 4 panels, api-client, modified components/hooks,
+  health change, `api.ts` deletion, config tweak). On `origin/main` `api.ts` is **live**
+  and health already returns `{ service }`. Skipped redundant `apps/web/.eslintrc.json`
+  (origin/main has an identical one) and `launch-agentroom.ps1` (origin has its own launchers).
+- **Stale PR #3** (`harden/p0-baseline-hygiene-ci` → conflicting, no merge ref) is being closed.
 
 ---
 
-## 2026-05-30 — GOAL: Phase 0 — Baseline, safety net & repo hygiene
+## Phase 0 — foundation (re-grounded on origin/main) — 2026-05-30
 
-- Phase: 0 (Baseline, safety net & repo hygiene)
-- Branch/worktree: `harden/p0-baseline-hygiene-ci`
-- Iteration budget: 8
-- State: ACTIVE (awaiting `/loop`)
-- Acceptance criteria (testable):
-  - [ ] Stale hygiene removed: 7 `.worktrees/` worktrees removed; 7 local `do/*` branches deleted; `origin/do/0509-6csl` pruned; `git worktree list` shows only the main tree.
-  - [ ] `.gitignore` covers `.worktrees/`, `graphify-out/`, `.claude/do-tasks/`, `next-env.d.ts`; nothing generated is tracked; `git status` is clean after the branch's commits.
-  - [ ] Coherent feature wave (11 untracked + 11 modified) committed on the branch with: health route restored to `{ ok:true, data:{ service:'agentroom-web' } }`; dead `apps/web/lib/api.ts` deleted (after re-confirming zero live importers). `pnpm typecheck`, `pnpm test`, `pnpm --filter web build` still green.
-  - [ ] `.github/workflows/ci.yml`: pnpm (cached) install → typecheck → lint → test → `--filter web build`, on PR + push to `main`; green on the P0 PR.
-  - [ ] Minimal ESLint config added so `next lint` runs non-interactively and passes (or reports only tracked, deferred issues).
-  - [ ] `.github/workflows/security.yml` (gitleaks + `pnpm audit` + CodeQL JS/TS) + `.github/dependabot.yml` (npm + actions) present and running (audit step informational per D3).
-  - [ ] `.editorconfig` + `.nvmrc` (Node 20) added; `launch-agentroom.ps1` repo path derived from `$PSScriptRoot` (no hardcoded machine path).
-  - [ ] `PROGRESS.md` baseline recorded (this entry); GitHub tracking issue created — or paste-ready block produced (`GITHUB_ISSUES.md`) since `gh` is absent.
-  - [ ] Critique gate: Code-Quality Auditor + Security secret-scan pass with no open Critical/High for the P0 scope (reports in `docs/reviews/`).
+**Baseline (real `origin/main` + carried infra), verified green:**
+`pnpm install` ✓ · `typecheck` ✓ (after clearing a stale `.next/types` cache — self-heal,
+not a code bug) · `lint` ✓ (3 non-blocking warnings → Phase 4) · `test` ✓ **110 passed**
+(61 web vitest + 49 bridge node:test) · `pnpm --filter web build` ✓.
+`origin/main` had **no `.github`/CI**, no `.editorconfig`/`.nvmrc`/`.gitattributes` — all
+now added. Secrets: clean (fresh grep). Local Supabase Docker stack is **running**.
 
-Judge rule: DONE only when every box above is checked with linked evidence (CI run,
-diff, `git worktree list` output, review reports) and no Critical/High is open.
+**Status:** foundation = the hardening infra `origin/main` lacked. PR: see Night log.
+Branch-protection High (from the stale branch's critique) is resolved and still applies:
+GitHub branch protection on `main` is live; `.githooks/pre-push` carried.
 
 ---
 
-## 2026-05-30 — Phase 0 `/loop` iteration 1
+## Fresh audit on origin/main — 2026-05-30 (supersedes the stale-tree audit)
 
-- **Plan:** branch `harden/p0-baseline-hygiene-ci`; remove stale worktrees/branches; capture the green feature wave; gitignore; CI + security workflows; eslint/editorconfig/nvmrc; restart-safe runner; critique gate.
-- **Implemented:** 6 commits — `feat(rooms)`, `fix(api) health`, `chore(hygiene)`, `ci`, docs/runner (launcher folded in), and `security(p0)` (this fix commit). Worktrees + 7 `do/*` branches removed; `origin/do/0509-6csl` pruned (`git worktree list` = main only).
-- **Verify:** `typecheck` / `lint` / `test` (14) / `--filter web build` all green locally (lint has 1 non-blocking `<img>` warning → Phase 4). `pnpm audit`: 18 vulns (mostly `next@14` → decision D3, tracked).
-- **Critique (mandatory gate):** Adversarial Critic + Code-Quality Auditor + Security secret-scan (reused `code-reviewer` + `security-auditor` assets). Reports: `docs/reviews/phase-0-critique-{adversarial,quality,security}.md`. **Secret scan CLEAN** (full-repo grep; no committed secret).
-- **Findings integrated:**
-  - **[High] `main` unprotected under the runner** (`--dangerously-skip-permissions` bypasses `settings.json`). **FIXED** → GitHub branch protection on `main` (`enforce_admins:true`, PR required, force-push + deletion blocked) **+** committed `.githooks/pre-push` + `git config core.hooksPath .githooks` (git-level, survives the flag).
-  - **[Medium] `runner.log` secret capture** → FIXED (`RedactSecrets` filter on the runner tee, mirrors `bridge/src/lib/redact.ts`).
-  - **[Medium] no `.gitattributes` (EOL churn)** → FIXED (LF default; CRLF for `*.ps1/*.cmd`).
-  - **[Low] RUNNER.md Stop missing Startup-launcher removal** → FIXED.
-  - **Deferred (tracked, not Critical/High):** bridge/shared real ESLint → **Phase 2** (today `lint` aliases `tsc`); `Local\` mutex scope (accepted for a single-user box); `.claude/commands` vs `docs/claude-commands` duplication (by design — docs = source); `config.toml` `[functions]` removal (accepted — no edge functions).
-- **Environment notes:** Docker up; local Supabase stack running (`supabase_*_agent-room`, postgres 15.8.1). `gh` authenticated (`neric-joel`). Branch protection live on `main`.
-- **Heartbeat:** Phase 0 implementation + critique fixes complete and green locally. Remaining for DONE: push branch, open PR, observe CI green, then check the final DoD boxes → set Phase 1 goal. Continuing without pause.
+### Security surface (Phase 1) — `security-auditor`
+Prior stale findings mostly **do not hold**: subprocess uses `spawn(cmd, args[])` (no
+shell-string), service-role key is server-only/clean, RLS is read-only-correct (browser
+cannot write `agent_runs`), run-claim is atomic, process-tree-kill on abort/timeout,
+zod validation on all bodies, bridge logs redacted. **Real risks to fix in Phase 1:**
+- **[High]** `subprocess-adapter.ts` `shell: process.platform==='win32'` + `claude-code-adapter.ts` pushes DB-controlled `system_prompt` into argv → Windows command injection. Fix: `shell:false` + resolve binary path; pass `system_prompt` via stdin.
+- **[High]** Storage RLS scoped to `auth.uid() IS NOT NULL`, **not room membership** (`phase9_extensions.sql:39-56`) → any authed user can read/write any file in `agentroom-files` directly. Fix: scope to `is_room_user_member()` via the `rooms/{roomId}/…` path; add UPDATE/DELETE policies.
+- **[Med]** No max-output cap on child stdout/stderr (OOM/DoS) → cap + kill.
+- **[Med]** No CSRF/Origin check on cookie-authed mutating routes → add Origin allowlist or require Bearer.
+- **[Med]** No rate limiting on writes (message POST fans out N subprocess runs) → per-user/room throttle.
+- **[Med]** `middleware.ts` is fail-open (refreshes session, never enforces) → redirect unauthenticated on protected paths (keep API checks as defense-in-depth).
+- **[Med]** OpenAI image-text egress (`file-context.ts`) is automatic + undocumented → document + make opt-in.
+- **[Low]** Raw Supabase `error.message` leaked on 500s; signed-upload no MIME allowlist; denylist bypassable (tool-exec is still a stub).
+
+### Standards / OSS — `Explore`
+Present now (added): CI/security/dependabot/PR-template, editorconfig, nvmrc, gitattributes, pre-push, README, QUICKSTART. **Still missing:** `LICENSE`, `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md`, `CODEOWNERS`, `.github/ISSUE_TEMPLATE/`, `docs/ARCHITECTURE.md`, `docs/adr/`, `docs/SELF_HOSTING.md`, Dockerfile/compose/.devcontainer. tsconfigs: `strict:true` everywhere but no `noUncheckedIndexedAccess`/shared base (Phase 2). Env fully documented (incl. optional `OPENAI_API_KEY`/`OPENAI_VISION_MODEL`). README/QUICKSTART = local-Docker Supabase, ~15 min.
+
+### "User-created agents" re-scope (Phase 11)
+Already exists: list global agents; add/remove/mute **seeded** agents per room (`/api/rooms/{roomId}/members` + RoomHeader UI). **Gap to build:** create/edit/disable **new** agents — `POST/PATCH/DELETE /api/agents`, `createAgentSchema`/`updateAgentSchema`, a "Create agent" form (name/slug/avatar/provider/adapter_type/model/system_prompt/capabilities/reply_policy), `created_by_user_id = auth.uid()`, admin+ gating. DB + RLS already support it. ⚠ Couples to the Phase-1 `system_prompt` injection fix (don't let a user-set `system_prompt` reach a shell).
+
+---
+
+## Re-grounded backlog (what's left on top of origin/main)
+| Phase | Already on origin/main | Remaining work |
+|---|---|---|
+| 0 Foundation | — | CI/configs/docs (this branch) → PR + merge |
+| 1 Security | spawn args[], RLS reads, atomic claim, zod, redaction | shell:false, storage-RLS room scope, output cap, CSRF, rate-limit, fail-closed mw, doc OpenAI egress, headers, error redaction, MIME allowlist |
+| 2 Quality | strict TS, eslint(web) | root ESLint+Prettier, `noUncheckedIndexedAccess`, bridge/shared real lint, knip dead-code, shared base tsconfig |
+| 3 Testing | 110 tests, stress-test-agents.ts | coverage floor in CI, Playwright e2e, RLS/policy tests, run stress hard (needs Docker) |
+| 4 UI/UX | themes, auth UI | a11y WCAG AA, loading/empty/error states, motion (21st.dev), responsive, design tokens |
+| 5 DX/Docker | README/QUICKSTART, launchers | Dockerfiles + compose + devcontainer, env validation at boot, SELF_HOSTING.md |
+| 6 Observability | redaction, health route, heartbeat | structured logging, error tracking (opt-in), reliability/chaos |
+| 7 Docs/OSS | README | LICENSE/CONTRIBUTING/SECURITY/CoC/CHANGELOG/CODEOWNERS/ARCHITECTURE/ADRs |
+| 8 Release | — | CHANGELOG, v1.0 tag, release workflow |
+| 9 Memory | — | agent_memory + user_profile (FTS, injection-scanned) |
+| 10 A2A | discuss/loop guards/tag-turns | roster in context, /handoff, cycle detection |
+| 11 Commands + user-agents | add/remove/mute seeded agents | command registry + RBAC; **create new agents** (the gap above) |
+
+---
+
+## Night log
+- **2026-05-30 ~00:00** — Installed workflow commands; ran Phase 0 audit (stale tree); built CI/runner/docs; opened PR #3 (later found stale).
+- **2026-05-30 ~01:1x** — Critique gate found "main unprotected under runner" (High) → enabled GitHub branch protection on `main` + committed `.githooks/pre-push`.
+- **2026-05-30 ~01:2x** — **Discovered local checkout 45 commits stale.** Paused, confirmed with the owner.
+- **2026-05-30 (night)** — Owner approved pivot + unattended mode. Snapshot `backup/pre-pivot-2026-05-30`. Reset to `origin/main`; branch `harden/p0-foundation`; carried the hardening package; discarded stale product duplicates. Fresh audits on the real code (security + standards + agent-mgmt re-scope). Baseline green (110 tests). Unattended scaffolding written (settings.local.json, sleep prevention, runner). NEXT: close PR #3, push foundation + PR, launch overnight runner → runner drives Phase 1+.
+
+---
+
+## For morning review
+- **Merge order:** review/merge the **Phase 0 foundation PR** first (on `origin/main`), then the stacked phase PRs the runner opens overnight. Stacked branches rebase onto `main` after each merge.
+- **Stale PR #3** (`harden/p0-baseline-hygiene-ci`) — closed as superseded by the pivot; verify.
+- **Docker/Supabase:** local stack is up; Phase 3 e2e + `pnpm stress:agents` (hard) run only while Docker is up. If it goes down overnight, those are queued here.
+- **`next@14→15` upgrade** (6 high `pnpm audit` advisories) — breaking; its own PR + ADR (decision D3). CI audit job is informational until then.
+- **Runner caveats:** uses `--dangerously-skip-permissions` (unattended); `runner.log` is gitignored + redaction-filtered but is local plaintext — treat as sensitive. The Startup-folder launcher (`%APPDATA%\…\Startup\agentroom-harden.cmd`) auto-resumes at logon (mutex prevents double-run); remove it to fully disable.
+- **`scripts/register-task.ps1`** (full logon+5h scheduled task) needs ONE elevated run — optional (Startup launcher + the running loop already cover continuity).
+- **Decisions recorded:** D1 pivot to origin/main; D2 gh now authed; D3 defer next@15; D4 runner = owner's spec prompt + safety wrappers (mutex/redaction).
+
+---
+
+## 2026-05-30 — GOAL: Phase 1 — Security hardening (real base)
+- Phase: 1 (Security). Branch: `feat/p1-security` (stack on `harden/p0-foundation`).
+- Iteration budget: 10. State: ACTIVE (after the Phase 0 foundation PR is opened).
+- Acceptance criteria (testable; from the fresh audit):
+  - [ ] Subprocess: `shell:false` unconditionally; `system_prompt` never enters argv with a shell; binary path resolved/allowlisted; child env minimized (no service-role key forwarded). Bridge tests still green; the `shell:true` deprecation warning gone.
+  - [ ] Storage RLS scoped to room membership (read + insert + update + delete) via `is_room_user_member()`; a policy test proves a non-member cannot read/write another room's file.
+  - [ ] Child stdout/stderr output cap (kill + error past N MB).
+  - [ ] CSRF/Origin defense on all mutating API routes (Origin allowlist or required Bearer); test proves cross-origin POST rejected.
+  - [ ] Rate limiting on message POST + signed-upload (per user/room).
+  - [ ] `middleware.ts` fail-closed for protected paths (redirect unauthenticated); API checks remain.
+  - [ ] OpenAI image-text egress documented + opt-in (config flag); off by default unless key + flag set.
+  - [ ] Security headers (CSP/HSTS/X-Content-Type-Options/Referrer-Policy/frame-ancestors) via next config/middleware.
+  - [ ] 5xx responses return generic errors (raw `error.message` logged server-side only); signed-upload enforces a MIME allowlist + max size.
+  - [ ] Critique gate (Security Auditor + Adversarial Critic) PASS, saved to `docs/reviews/`; no open Critical/High; `typecheck`/`lint`/`test`/`build` green.
+
+Judge rule: DONE only when every box is checked with linked evidence and no Critical/High is open.

@@ -50,7 +50,7 @@ function Get-ActiveGoal {
 }
 
 $Prompt = @'
-Resume the hardening loop: read docs/production-hardening/PROGRESS.md, run /loop until the active /goal is DONE, then set the next /goal per 01_HARDENING_PLAN.md + 04_HERMES_CAPABILITIES.md and continue. Stop only when docs/production-hardening/DONE.flag exists.
+Load state from docs/production-hardening/PROGRESS.md, CLAUDE.md and git. Continue the hardening loop: run the active /goal to DONE, then set the next /goal per 01_HARDENING_PLAN.md + 04_HERMES_CAPABILITIES.md and keep going. Never stop to ask; on a blocker take the safe reversible path or log it under '## For morning review' and continue. Feature branches + PRs only; never touch main; no secrets. When the Definition of Done is fully met, create docs/production-hardening/DONE.flag.
 '@
 
 if ($DryRun) {
@@ -78,7 +78,7 @@ while (-not (Test-Path $DoneFlag)) {
   Write-Log 'Launching headless Claude Code cycle...'
   # --dangerously-skip-permissions: unattended operation cannot stop for a prompt.
   # main stays protected by CLAUDE.md + branch/PR discipline; secrets are never committed.
-  & claude --model opus --continue -p $Prompt --dangerously-skip-permissions 2>&1 |
+  & claude -p $Prompt --dangerously-skip-permissions --model opus 2>&1 |
     ForEach-Object { RedactSecrets ([string]$_) } | Tee-Object -FilePath $Log -Append
   $code = $LASTEXITCODE
   if (Test-Path $DoneFlag) { Write-Log 'DONE.flag present - stopping.'; break }
