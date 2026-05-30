@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
 import type { AgentAdapter, AgentEvent, AgentResponseV1, ContextPacketV1 } from '@agentroom/shared'
+import { BinaryNotFoundError, buildChildEnv, resolveBinaryPath, resolveSpawnTarget } from '../lib/subprocess-security.js'
 
 export abstract class SubprocessAdapter implements AgentAdapter {
   abstract readonly name: string
@@ -9,6 +10,8 @@ export abstract class SubprocessAdapter implements AgentAdapter {
   protected abstract buildArgs(packet: ContextPacketV1): string[]
   protected abstract envVarName(): string
   protected getTimeoutMs(): number { return 120_000 }
+  /** Max combined stdout+stderr bytes before the child is killed (DoS/OOM guard). */
+  protected getMaxOutputBytes(): number { return 10 * 1024 * 1024 }
 
   protected buildStdin(packet: ContextPacketV1): string {
     return JSON.stringify(packet)
@@ -27,8 +30,24 @@ export abstract class SubprocessAdapter implements AgentAdapter {
   }
 
   async *run(packet: ContextPacketV1, signal: AbortSignal): AsyncGenerator<AgentEvent> {
-    const command = this.resolveCommand()
     const args = this.buildArgs(packet)
+
+    // Resolve the binary to an absolute path from a trusted source (the *_BIN
+    // env var or PATH) before spawning. Never spawn agent-controlled strings.
+    let target: { command: string; args: string[] }
+    try {
+      const binPath = resolveBinaryPath(this.resolveCommand())
+      target = resolveSpawnTarget(binPath, args)
+    } catch (err) {
+      if (err instanceof BinaryNotFoundError) {
+        yield {
+          type: 'error', run_id: packet.run_id,
+          message: `Adapter '${this.name}' binary not found. Set ${this.envVarName()} env var.`,
+        }
+        return
+      }
+      throw err
+    }
 
     const stdoutLines: string[] = []
     const stdoutEvents: AgentEvent[] = []
@@ -41,10 +60,42 @@ export abstract class SubprocessAdapter implements AgentAdapter {
     let forceExitResolve!: () => void
     const forceExitPromise = new Promise<void>((r) => { forceExitResolve = r })
 
-    const child = spawn(command, args, {
+    const child = spawn(target.command, target.args, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      shell: process.platform === 'win32',
+      shell: false, // never spawn through a shell — no command-injection surface
+      env: buildChildEnv(), // allowlisted env — secrets are never forwarded
+      windowsHide: true,
     })
+
+    // SIGTERM → 2s grace → force-kill. Some CLIs ignore termination, so
+    // forceExitPromise prevents a stuck run. Declared before output listeners so
+    // the output-cap guard can call it.
+    let killTimer: ReturnType<typeof setTimeout> | null = null
+    let forceExitTimer: ReturnType<typeof setTimeout> | null = null
+    let killed = false
+    const kill = () => {
+      if (killed) return
+      killed = true
+      child.kill('SIGTERM')
+      killTimer = setTimeout(() => {
+        this.forceKillProcessTree(child.pid)
+        forceExitTimer = setTimeout(() => { forceExitResolve() }, 1_000)
+      }, 2_000)
+    }
+
+    // Output cap: kill the child if combined stdout+stderr exceeds the limit.
+    const maxOutputBytes = this.getMaxOutputBytes()
+    let outputBytes = 0
+    let outputExceeded = false
+    const countBytes = (chunk: Buffer | string) => {
+      outputBytes += Buffer.byteLength(chunk)
+      if (maxOutputBytes > 0 && outputBytes > maxOutputBytes && !outputExceeded) {
+        outputExceeded = true
+        kill()
+      }
+    }
+    child.stdout!.on('data', countBytes)
+    child.stderr!.on('data', countBytes)
 
     // Swallow stdin errors (EPIPE when child fails to start)
     child.stdin!.on('error', () => { /* intentional noop */ })
@@ -61,17 +112,6 @@ export abstract class SubprocessAdapter implements AgentAdapter {
     child.on('close', (code) => { exitCode = code; exitResolve() })
     child.on('error', (err) => { spawnError = err; exitResolve() })
 
-    // SIGTERM → 2s grace → force-kill. Some Windows shells do not close when the
-    // spawned CLI ignores termination, so forceExitPromise prevents a stuck run.
-    let killTimer: ReturnType<typeof setTimeout> | null = null
-    let forceExitTimer: ReturnType<typeof setTimeout> | null = null
-    const kill = () => {
-      child.kill('SIGTERM')
-      killTimer = setTimeout(() => {
-        this.forceKillProcessTree(child.pid)
-        forceExitTimer = setTimeout(() => { forceExitResolve() }, 1_000)
-      }, 2_000)
-    }
     signal.addEventListener('abort', kill, { once: true })
 
     let timedOut = false
@@ -94,6 +134,14 @@ export abstract class SubprocessAdapter implements AgentAdapter {
         ? `Adapter '${this.name}' binary not found. Set ${this.envVarName()} env var.`
         : e.message
       yield { type: 'error', run_id: packet.run_id, message: msg }
+      return
+    }
+
+    if (outputExceeded) {
+      yield {
+        type: 'error', run_id: packet.run_id,
+        message: `Adapter '${this.name}' exceeded the ${maxOutputBytes}-byte output limit and was terminated.`,
+      }
       return
     }
 
