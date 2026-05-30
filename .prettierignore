@@ -8,3 +8,6 @@ supabase/.temp/
 .worktrees/
 *.diff
 .turbo/
+
+coverage
+.nyc_output

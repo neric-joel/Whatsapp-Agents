@@ -14,6 +14,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "pnpm -r --if-present run test",
+    "test:coverage": "pnpm -r --if-present run test:coverage",
     "stress:agents": "tsx scripts/stress-test-agents.ts"
   },
   "devDependencies": {

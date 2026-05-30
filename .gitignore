@@ -18,3 +18,7 @@ bridge/.tmp-test/
 graphify-out/
 docs/production-hardening/DONE.flag
 .claude/settings.local.json
+
+# Coverage output
+coverage/
+.nyc_output/
