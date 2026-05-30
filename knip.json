@@ -5,5 +5,8 @@
       "entry": ["scripts/*.ts", "scripts/*.test.ts"]
     }
   },
-  "ignoreBinaries": ["supabase"]
+  "ignoreBinaries": ["supabase"],
+  "playwright": {
+    "config": ["playwright.config.ts"]
+  }
 }

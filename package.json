@@ -15,11 +15,14 @@
     "format:check": "prettier --check .",
     "test": "pnpm -r --if-present run test",
     "test:coverage": "pnpm -r --if-present run test:coverage",
-    "stress:agents": "tsx scripts/stress-test-agents.ts"
+    "stress:agents": "tsx scripts/stress-test-agents.ts",
+    "e2e": "playwright test",
+    "e2e:list": "playwright test --list"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@next/eslint-plugin-next": "^16.2.6",
+    "@playwright/test": "^1.60.0",
     "@supabase/supabase-js": "^2.105.3",
     "@types/node": "^20.11.0",
     "dotenv": "^16.6.1",

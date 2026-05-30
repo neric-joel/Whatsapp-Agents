@@ -235,7 +235,7 @@ export default function MessageTimeline({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[var(--surface)]">
+    <div className="flex-1 overflow-y-auto bg-[var(--surface)]" data-testid="message-timeline">
       <div className="min-h-full py-4">
         {allMessages.length === 0 && runs.length === 0 && !loading && (
           <div className="flex min-h-full items-center justify-center p-8 text-center">

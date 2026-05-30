@@ -22,3 +22,7 @@ docs/production-hardening/DONE.flag
 # Coverage output
 coverage/
 .nyc_output/
+
+# Playwright e2e artifacts
+playwright-report/
+test-results/
