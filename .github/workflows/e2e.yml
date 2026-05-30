@@ -4,19 +4,19 @@ name: E2E Tests
 # This workflow is the e2e gate: it runs Playwright against the Next.js app.
 #
 # Scope decision (read before changing):
-# ─────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Standing up a fully seeded local Supabase instance in GitHub Actions is
 # possible (the Supabase CLI supports `supabase start` on Linux runners) but
 # adds ~2-3 minutes of setup and requires Docker-in-Docker. For the initial
 # scaffold we split the work into two tiers:
 #
-#   Tier 1 — always runs (no backend needed):
-#     auth.spec.ts  — unauthenticated redirect + form-rendering tests
-#     chat.spec.ts  — "sign-in form interaction" describe block (error-path only)
-#     a11y.spec.ts  — axe-core WCAG scan of /auth (fails on serious/critical)
+#   Tier 1 â€” always runs (no backend needed):
+#     auth.spec.ts  â€” unauthenticated redirect + form-rendering tests
+#     chat.spec.ts  â€” "sign-in form interaction" describe block (error-path only)
+#     a11y.spec.ts  â€” axe-core WCAG scan of /auth (fails on serious/critical)
 #
-#   Tier 2 — requires E2E_LIVE=1 + a seeded Supabase + bridge (NOT enabled here):
-#     chat.spec.ts  — "chat journey" describe block
+#   Tier 2 â€” requires E2E_LIVE=1 + a seeded Supabase + bridge (NOT enabled here):
+#     chat.spec.ts  â€” "chat journey" describe block
 #
 # To promote Tier 2 to CI, add the "start-supabase" and "start-bridge" steps
 # below (marked TODO) and set E2E_LIVE: '1' in the env block.
@@ -39,14 +39,14 @@ jobs:
     timeout-minutes: 15
 
     env:
-      # ── Next.js build-time env (dummy values — app boots but Supabase calls fail) ──
+      # â”€â”€ Next.js build-time env (dummy values â€” app boots but Supabase calls fail) â”€â”€
       NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
-      # CRITICAL: use PUBLISHABLE_KEY not ANON_KEY — see CLAUDE.md §7
+      # CRITICAL: use PUBLISHABLE_KEY not ANON_KEY â€” see CLAUDE.md Â§7
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-dummy-publishable-key
       SUPABASE_SERVICE_ROLE_KEY: ci-dummy-service-role-key
       NEXT_PUBLIC_APP_URL: http://localhost:3000
 
-      # ── Playwright settings ──
+      # â”€â”€ Playwright settings â”€â”€
       CI: 'true'
       # Uncomment and set these to enable the full chat journey (Tier 2):
       # E2E_LIVE: '1'
@@ -63,13 +63,13 @@ jobs:
       - name: Setup Node 20
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # ── Tier 2 TODO: start local Supabase ──────────────────────────────────────
+      # â”€â”€ Tier 2 TODO: start local Supabase â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       # Uncomment this block when promoting the chat journey to CI.
       # Requires Docker available on the runner (ubuntu-latest has Docker).
       #
@@ -91,9 +91,9 @@ jobs:
       #       -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
       #       -H "Content-Type: application/json" \
       #       -d "{\"email\":\"$E2E_EMAIL\",\"password\":\"$E2E_PASSWORD\",\"email_confirm\":true}"
-      # ──────────────────────────────────────────────────────────────────────────
+      # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-      # ── Tier 2 TODO: start bridge with mock adapter ───────────────────────────
+      # â”€â”€ Tier 2 TODO: start bridge with mock adapter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       # Uncomment when promoting to Tier 2. The bridge uses MOCK_ONLY or the
       # BRIDGE_ADAPTER env to force the mock adapter regardless of agent config.
       #
@@ -105,7 +105,7 @@ jobs:
       #     BRIDGE_WORKER_ID: ci-bridge-1
       #     BRIDGE_POLL_INTERVAL_MS: 500
       #     BRIDGE_MAX_CONCURRENT_RUNS: 2
-      # ──────────────────────────────────────────────────────────────────────────
+      # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
       - name: Install Playwright browsers (Chromium only)
         run: pnpm exec playwright install --with-deps chromium
