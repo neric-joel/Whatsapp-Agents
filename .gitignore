@@ -12,3 +12,9 @@ agentroom_graph_*.html
 .claude/do-tasks/*/
 apps/web/.claude/
 bridge/.tmp-test/
+
+# hardening: stale worktrees, graphify output, runner stop-flag, local settings
+.worktrees/
+graphify-out/
+docs/production-hardening/DONE.flag
+.claude/settings.local.json
