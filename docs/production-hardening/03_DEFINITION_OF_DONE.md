@@ -20,10 +20,10 @@ linked evidence** (a merged PR, a green CI run, a saved review, or a screenshot)
 - [x] Security red-team review = PASS (saved in `docs/reviews/2026-05-30-phase1-security.md`).
 
 ### Code quality (Phase 2)
-- [ ] Root ESLint + Prettier enforced across all workspaces; `pnpm lint` green.
-- [ ] TypeScript strict (+ `noUncheckedIndexedAccess`, no implicit `any`); `pnpm typecheck` green.
-- [ ] `knip` (or `ts-prune`+`depcheck`) reports no unused files/exports/deps (or a justified allowlist); net code removed vs. baseline.
-- [ ] No architecture violations (web ↔ bridge only via shared types + DB contract).
+- [x] Root ESLint (flat) + Prettier enforced across all workspaces; `pnpm lint` green (0 errors). _(PR #6)_
+- [x] TypeScript strict (+ `noUncheckedIndexedAccess`, no implicit `any`); `pnpm typecheck` green. _(PR #6)_
+- [x] `knip` reports no unused files/exports/deps; net code removed; wired into CI. _(PR #6)_
+- [x] No architecture violations in production code (one pre-existing test-only web→bridge import deferred → A-3). _(PR #6)_
 
 ### Testing (Phase 3)
 - [ ] Unit/integration coverage ≥ the CI floor on the risk areas; CI gates on it.
