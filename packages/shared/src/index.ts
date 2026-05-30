@@ -13,8 +13,8 @@ export function parseDiscussionCommand(content: string): DiscussionCommand | nul
   if (!match) return null;
 
   return {
-    command: match[1].toLowerCase() as DiscussionCommand['command'],
-    prompt: match[2].trim(),
+    command: (match[1] ?? '').toLowerCase() as DiscussionCommand['command'],
+    prompt: (match[2] ?? '').trim(),
   };
 }
 
@@ -27,7 +27,7 @@ export function parseDiscussionRequest(content: string): DiscussionCommand | nul
 
   return {
     command: 'discuss',
-    prompt: everyoneQuestion[1].trim(),
+    prompt: (everyoneQuestion[1] ?? '').trim(),
   };
 }
 

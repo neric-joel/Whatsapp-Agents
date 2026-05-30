@@ -55,7 +55,7 @@ export function splitMessageBlocks(content: string): MessageBlock[] {
     const listMatch = line.match(/^\s*(?:[-*]|\d+\.)\s+(.+)$/)
     if (listMatch) {
       flushParagraph()
-      list.push(listMatch[1])
+      list.push(listMatch[1] ?? '')
       continue
     }
 

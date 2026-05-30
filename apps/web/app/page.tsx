@@ -8,8 +8,9 @@ export default function Page() {
   const router = useRouter()
 
   useEffect(() => {
-    if (!loading && rooms.length > 0) {
-      router.replace(`/rooms/${rooms[0].id}`)
+    const first = rooms[0]
+    if (!loading && first) {
+      router.replace(`/rooms/${first.id}`)
     }
   }, [rooms, loading, router])
 

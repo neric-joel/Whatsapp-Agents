@@ -91,7 +91,7 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
     const before = val.slice(0, cursor)
     const match = before.match(/@([\w-]*)$/)
     if (match) {
-      setMentionQuery(match[1])
+      setMentionQuery(match[1] ?? '')
       setMentionStart(before.length - match[0].length)
     } else {
       setMentionQuery(null)
