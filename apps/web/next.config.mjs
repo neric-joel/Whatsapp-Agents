@@ -29,7 +29,9 @@ const csp = [
   "font-src 'self' data:",
   "style-src 'self' 'unsafe-inline'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-  `connect-src 'self' ${supabaseOrigin} ${supabaseWs} https:`.replace(/\s+/g, ' ').trim(),
+  // Scope network egress to self + Supabase (REST/storage + realtime wss). No
+  // blanket `https:` so an injected script cannot exfiltrate to arbitrary hosts.
+  `connect-src 'self' ${supabaseOrigin} ${supabaseWs}`.replace(/\s+/g, ' ').trim(),
 ].join('; ')
 
 const securityHeaders = [

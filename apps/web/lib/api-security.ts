@@ -92,7 +92,7 @@ export function enforceRateLimit(key: string, limit: number, windowMs: number) {
   const result = checkRateLimit(key, limit, windowMs)
   if (result.ok) return null
   const retryAfter = Math.ceil(result.retryAfterMs / 1000)
-  return apiError('CONFLICT', `Rate limit exceeded. Retry in ${retryAfter}s.`, 429, { retry_after_seconds: retryAfter })
+  return apiError('RATE_LIMITED', `Rate limit exceeded. Retry in ${retryAfter}s.`, 429, { retry_after_seconds: retryAfter })
 }
 
 /** Test-only: clear all rate-limit buckets. */

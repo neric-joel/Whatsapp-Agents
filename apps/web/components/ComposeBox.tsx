@@ -3,7 +3,10 @@ import { useState, useEffect, useRef, useMemo, KeyboardEvent, ChangeEvent, Clipb
 import { useRooms } from '@/hooks/useRooms'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { getImageFilesFromClipboardItems } from '@/lib/pasted-files'
+import { ALLOWED_UPLOAD_MIME_TYPES, MAX_UPLOAD_BYTES } from '@/lib/api-validation'
 import type { OptimisticMessage } from './MessageTimeline'
+
+const ACCEPTED_UPLOAD_TYPES = ALLOWED_UPLOAD_MIME_TYPES.join(',')
 
 interface Props {
   roomId: string
@@ -106,8 +109,17 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
   }
 
   async function uploadAttachment(file: File) {
-    setUploading(true)
     setFileError(null)
+    // Client-side guard mirroring the server allowlist for a clear message.
+    if (!(ALLOWED_UPLOAD_MIME_TYPES as readonly string[]).includes(file.type)) {
+      setFileError(`File type not supported${file.type ? ` (${file.type})` : ''}. Allowed: images, PDF, text, CSV, JSON, zip.`)
+      return
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setFileError(`File too large. Max ${Math.floor(MAX_UPLOAD_BYTES / (1024 * 1024))} MB.`)
+      return
+    }
+    setUploading(true)
     try {
       const res = await fetch(`/api/rooms/${roomId}/files/signed-upload`, {
         method: 'POST',
@@ -277,7 +289,7 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
         <input
           ref={fileInputRef}
           type="file"
-          accept="*/*"
+          accept={ACCEPTED_UPLOAD_TYPES}
           className="hidden"
           onChange={handleFileSelect}
         />
