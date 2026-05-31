@@ -272,25 +272,30 @@ Judge rule: DONE only when the criterion is met with evidence and no Critical/Hi
 
 ---
 
-## Next-goal boundary — 2026-05-31 (morning)
+## Next-goal boundary — 2026-05-31 (updated: all feature phases done)
 
-With PR #13 the **last autonomously-completable item is done**. Every remaining DoD box
-is **human-gated**; per the loop's own "pause when irreversible/expensive AND genuinely
-ambiguous" rule, these need the owner and are NOT taken unattended:
+**Phase 11 (PR #16, CI green) was the final feature phase.** Phases 0–11 are all DONE —
+the entire autonomously-completable backlog (hardening 0–8 + Hermes 9–11) is finished,
+each judge-gated with a CI-green PR. **Every remaining DoD box is human-gated**; per the
+loop's own "pause when irreversible/expensive AND genuinely ambiguous" rule, these need
+the owner and were NOT taken unattended:
 
-1. **Merge the stack** — PRs **#4→#13** are all CI-green and open; owner merges bottom-up
-   (rebase stack onto `main` after merges). This unblocks the DoD evidence trail.
+1. **Merge the stack** — PRs **#4→#16** are all CI-green and open; owner merges bottom-up
+   (rebase the stack onto `main` after merges). This unblocks the DoD evidence trail.
 2. **License (ADR-0008)** — confirm **MIT** (shipped default) or switch before v1.0.
 3. **Phase 8 close — `v1.0.0` tag + release publish** — human-gated (the `release.yml`
    scaffold is in place and fires only on a human-pushed semver tag).
-4. **Phases 9–11** (agent memory · agent-to-agent · commands + user-created agents) —
-   the plan requires **`/brainstorm <topic>`** with the owner before any build. **This is
-   the real next `/goal`** once the owner approves a design.
-5. **`next@14→15`** breaking upgrade (D3) — its own PR + ADR; owner-scheduled.
-6. **Phase 4 live sign-offs** (Lighthouse ≥95 / axe on authed pages / screenshots) —
-   need a seeded running app.
+4. **`next@14→15`** breaking upgrade (D3) — its own PR + ADR; owner-scheduled.
+5. **Phase 4 live sign-offs** (Lighthouse ≥95 / axe on authed pages / before-after
+   screenshots / keyboard walkthrough) — need a seeded running app.
+6. **DX clean-env proof** (Phase 5: "<15 min clean clone → running app" + devcontainer)
+   — needs a clean machine run.
+7. **Deferred security follow-up** — `agents.system_prompt` RLS column visibility (see
+   "## For morning review"); needs live-DB verification.
 
-`DONE.flag` intentionally NOT created (DoD has unchecked boxes + no `v1.` tag).
+There is **no remaining autonomously-completable `/goal`** — the loop has driven all
+buildable work to DONE and correctly pauses here. `DONE.flag` intentionally NOT created
+(DoD has human-gated unchecked boxes + no `v1.` tag).
 
 ---
 
