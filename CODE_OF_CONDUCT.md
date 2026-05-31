@@ -44,10 +44,12 @@ individual is officially representing the community in public spaces.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to
-the community leaders responsible for enforcement through GitHub (open a private
-report, or contact the repository owner). All complaints will be reviewed and
-investigated promptly and fairly. Community leaders will respect the privacy and
-security of the reporter of any incident.
+the community leaders responsible for enforcement by opening a **private report**
+through GitHub's [security advisory form](https://github.com/neric-joel/Whatsapp-Agents/security/advisories/new)
+(it is private and reaches the maintainers; mark it as a conduct report), or by
+contacting the repository owner [@neric-joel](https://github.com/neric-joel) directly.
+All complaints will be reviewed and investigated promptly and fairly. Community leaders
+will respect the privacy and security of the reporter of any incident.
 
 ## Attribution
 

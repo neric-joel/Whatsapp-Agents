@@ -110,9 +110,17 @@ CLAUDE_BIN=claude
 CODEX_BIN=codex
 MYCLAUDE_BIN=myclaude
 RUFLO_BIN=ruflo
+# Optional image text/OCR extraction sends image bytes to OpenAI — OFF by default.
+# It activates only when the flag is true AND a key is set. See docs/SELF_HOSTING.md.
+ENABLE_IMAGE_TEXT_EXTRACTION=false
 OPENAI_API_KEY=
 OPENAI_VISION_MODEL=gpt-4.1-mini
 ```
+
+> The full, authoritative variable list (including `BRIDGE_HEALTH_PORT`, `LOG_LEVEL`,
+> and optional error-tracking DSNs) lives in
+> [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#environment-variables) and the
+> `.env.example` files.
 
 Keep real keys out of git. The project uses `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`; do not rename it to the deprecated anon key variable.
 

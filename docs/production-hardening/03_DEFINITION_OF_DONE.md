@@ -50,12 +50,12 @@ linked evidence** (a merged PR, a green CI run, a saved review, or a screenshot)
 - [x] Error tracking is wired behind config (no-op without DSN). → shared `createErrorTracker` (opt-in, redacted any-transport); web `internalError` + bridge `run.failed` capture; unit-tested no-op.
 - [x] Induced failures (child crash, DB drop, bad agent output) fail gracefully — no hangs, no lost runs; cancellation truly kills work. → `run-worker.test.ts` (crash/bad-output/DB-error → clean `failed`, one terminal write; cancel → clean `cancelled`); subprocess timeout + output-cap + force-kill-tree; minimal metrics. Critique PASS → `docs/reviews/2026-05-31-phase6-observability.md`.
 
-### Documentation & OSS readiness (Phase 7)
-- [ ] README rewritten for newcomers (what/why, demo, architecture diagram, quickstart, links).
-- [ ] `docs/ARCHITECTURE.md`, full env-var table, API/`ContextPacketV1` reference, and a "new agent adapter" guide exist.
-- [ ] `LICENSE`, `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, issue/PR templates, `CODEOWNERS` present.
-- [ ] Every significant decision has an ADR in `docs/adr/`.
-- [ ] DX/Docs "newcomer" review = PASS.
+### Documentation & OSS readiness (Phase 7) — DONE ✅ (PR pending)
+- [x] README for newcomers (what/why, demo GIF, architecture diagram, quickstart, + new Documentation/Contributing/License footer linking the deeper docs). Pre-existing README was already external-audience quality (Phase 0 audit); Phase 7 added the missing links.
+- [x] `docs/ARCHITECTURE.md` (components, data-flow mermaid, `agent_runs` queue contract, adapter model, trust boundaries), the **full web+bridge env-var table**, the `ContextPacketV1`/`AgentEvent` contract, and a "new agent adapter" guide (in CONTRIBUTING). *(Per-route endpoint reference is summarized — all routes use the `{ok,data}`/`{ok,error}` envelope; a dedicated endpoint table can follow in Phase 8 if needed.)*
+- [x] `LICENSE` (MIT), `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, issue templates (`bug`/`feature`/`config.yml`) + the existing PR template, `.github/CODEOWNERS` present.
+- [x] Significant Phase 1–6 decisions captured as ADRs `docs/adr/0001–0008` + index + template.
+- [x] DX/Docs "newcomer" review = **PASS** (0 Critical/High; 2 Med + 3 Low doc-accuracy fixes applied) → `docs/reviews/2026-05-31-phase7-docs-oss.md`.
 
 ### Hermes capabilities (Phases 9–11)
 - [ ] **Memory:** `agent_memory` + `user_profile` exist with RLS; agents curate memory via the bridge-validated `memory_op` path (no direct table writes); recall is injected into `ContextPacketV1`; `/remember` + `/recall` work.

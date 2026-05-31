@@ -1,6 +1,6 @@
 # 0008 — MIT license
 
-- **Status:** Proposed
+- **Status:** Accepted (owner may revisit before v1.0)
 - **Date:** 2026-05-31
 
 ## Context
@@ -12,8 +12,9 @@ ultimately the repository owner's.
 ## Decision
 
 Adopt the **MIT license** as the safe, permissive default for a self-hostable template
-project: minimal restrictions, maximum adoption, well understood. `package.json` is set
-to `"license": "MIT"` to match.
+project: minimal restrictions, maximum adoption, well understood. `LICENSE` (MIT) is
+committed and `package.json` is set to `"license": "MIT"` to match. The decision is
+*Accepted* and live, with an explicit owner gate to revisit before v1.0 (below).
 
 ## Consequences
 

@@ -103,8 +103,10 @@ abort/timeout/cancel. Adding an adapter is documented in
 
 ## Environment variables
 
-Validated at boot (zod) in both apps — a missing/invalid value fails fast and names
-itself. Keep `.env.example` files authoritative. **Never commit real secrets.**
+The **core connection variables** (Supabase URL + keys) are validated at boot with
+zod — a missing/invalid value fails fast and names itself. The remaining variables are
+read with safe in-code defaults (shown below). Keep `.env.example` files
+authoritative. **Never commit real secrets.**
 
 ### Web (`apps/web/.env.local`)
 
@@ -113,7 +115,7 @@ itself. Keep `.env.example` files authoritative. **Never commit real secrets.**
 | `NEXT_PUBLIC_SUPABASE_URL` | yes | — | Supabase URL (baked into the browser bundle at build time; must be browser-reachable) |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | yes | — | Publishable/anon key for the browser client. **Never use the deprecated `…_ANON_KEY` name** |
 | `SUPABASE_SERVICE_ROLE_KEY` | yes | — | **Server-only** service-role key (route handlers). Never exposed to the browser |
-| `NEXT_PUBLIC_APP_URL` | no | `http://localhost:3000` | App origin; used by the CSRF/Origin allowlist |
+| `NEXT_PUBLIC_APP_URL` | no | — (no runtime fallback) | App origin added to the CSRF/Origin allowlist. Unset ⇒ the app origin is simply not in the allowlist, so set it outside local dev. (The Docker build sets it as a build arg.) |
 | `EXTRA_ALLOWED_ORIGINS` | no | — | Comma-separated extra origins allowed for mutating requests (reverse proxies) |
 | `LOG_LEVEL` | no | `info` | `debug` \| `info` \| `warn` \| `error` |
 | `SENTRY_DSN` / `ERROR_TRACKING_DSN` | no | — | Opt-in error tracking; no-op (and no egress) when unset |

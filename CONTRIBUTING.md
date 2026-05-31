@@ -27,8 +27,9 @@ pnpm db:reset            # apply migrations + seed
 pnpm dev                 # web (:3000) + bridge in parallel
 ```
 
-Env vars are documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#environment-variables)
-and validated at boot (zod) — a missing/invalid var fails fast and names itself.
+Env vars are documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#environment-variables);
+the **core connection vars** are validated at boot (zod) — a missing/invalid one fails
+fast and names itself — and the rest have safe in-code defaults.
 
 ## Quality gates (run before every PR)
 

@@ -14,4 +14,4 @@ are marked, not deleted. Format is [MADR](https://adr.github.io/madr/)-lite — 
 | [0005](0005-subprocess-sandbox.md) | Subprocess sandbox for agent CLIs | Accepted |
 | [0006](0006-opt-in-third-party-egress.md) | Third-party image egress is opt-in, off by default | Accepted |
 | [0007](0007-observability-surfaces.md) | Observability: structured logs, health/metrics endpoints, opt-in error tracking | Accepted |
-| [0008](0008-mit-license.md) | MIT license | Proposed |
+| [0008](0008-mit-license.md) | MIT license | Accepted (owner may revisit before v1.0) |
