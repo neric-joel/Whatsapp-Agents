@@ -10,7 +10,7 @@
 --   * user_profile is readable only by its owner
 
 BEGIN;
-SELECT plan(7);
+SELECT plan(8);
 
 -- Seed as the test superuser (bypasses RLS for setup).
 INSERT INTO auth.users (id, email) VALUES
@@ -72,11 +72,17 @@ SELECT throws_ok(
   NULL,
   'browser (authenticated) cannot INSERT agent_memory directly'
 );
-SELECT throws_ok(
+-- UPDATE under RLS with no UPDATE policy does not raise — it silently affects 0
+-- rows. Prove the write is a no-op: the statement lives, and the row is unchanged.
+SELECT lives_ok(
   $$ UPDATE public.agent_memory SET content = 'tampered'
      WHERE id = '11111111-1111-1111-1111-111111111111' $$,
-  NULL,
-  'browser (authenticated) cannot UPDATE agent_memory directly'
+  'browser UPDATE on agent_memory is a silent no-op (no UPDATE policy)'
+);
+SELECT is(
+  (SELECT content FROM public.agent_memory WHERE id = '11111111-1111-1111-1111-111111111111'),
+  'Room A remembers the deadline is Friday',
+  'browser (authenticated) cannot modify agent_memory — row content unchanged'
 );
 
 -- user_profile: own row only.
