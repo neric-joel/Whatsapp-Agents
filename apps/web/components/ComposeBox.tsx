@@ -228,6 +228,11 @@ export default function ComposeBox({
       setText('')
       setSendError(null)
       setNotice(cmd.global ? 'Saved to your global memory.' : 'Saved to room memory.')
+      // Refresh the Memory panel — room-scoped notes also arrive via realtime, but
+      // global notes (room_id IS NULL) are not covered by the panel's room filter.
+      window.dispatchEvent(
+        new CustomEvent<RecallEventDetail>(RECALL_EVENT, { detail: { roomId, query: '' } }),
+      )
     } finally {
       setSending(false)
     }

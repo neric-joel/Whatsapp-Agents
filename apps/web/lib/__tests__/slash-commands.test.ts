@@ -24,6 +24,11 @@ describe('parseSlashCommand', () => {
     expect(r).toEqual({ command: 'remember', text: 'keep it short', global: true })
   })
 
+  it('strips every --global occurrence (no literal flag left in the note)', () => {
+    const r = parseSlashCommand('/remember --global note --global here')
+    expect(r).toEqual({ command: 'remember', text: 'note here', global: true })
+  })
+
   it('parses /recall with a query', () => {
     expect(parseSlashCommand('/recall deadline')).toEqual({ command: 'recall', query: 'deadline' })
   })

@@ -54,12 +54,22 @@ export async function persistMemoryOp(
   try {
     // replace/consolidate supersede a prior entry — deactivate it, scoped to this
     // agent so an agent can never tamper with another agent's (or a user's) memory.
-    if ((op.op === 'replace' || op.op === 'consolidate') && op.target_id) {
-      await ctx.supabase
-        .from('agent_memory')
-        .update({ is_active: false })
-        .eq('id', op.target_id)
-        .eq('agent_id', ctx.agentId)
+    if (op.op === 'replace' || op.op === 'consolidate') {
+      if (op.target_id) {
+        await ctx.supabase
+          .from('agent_memory')
+          .update({ is_active: false })
+          .eq('id', op.target_id)
+          .eq('agent_id', ctx.agentId)
+      } else {
+        // No target → this degrades to a plain insert (a duplicate, not a replace).
+        // Log it so the no-op is observable rather than silent.
+        log('warn', 'memory.op.supersede_noop', {
+          op: op.op,
+          agent_id: ctx.agentId,
+          room_id: ctx.roomId,
+        })
+      }
     }
 
     const { data, error } = await ctx.supabase

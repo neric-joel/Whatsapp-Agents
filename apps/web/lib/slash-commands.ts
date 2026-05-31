@@ -28,7 +28,11 @@ export function parseSlashCommand(input: string): SlashCommand | null {
     let global = false
     if (/(^|\s)--global(\s|$)/.test(rest)) {
       global = true
-      rest = rest.replace(/(^|\s)--global(\s|$)/, ' ').trim()
+      // strip every occurrence (a user may type the flag more than once)
+      rest = rest
+        .replace(/(^|\s)--global(?=\s|$)/g, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim()
     }
     return { command: 'remember', text: rest, global }
   }

@@ -149,6 +149,24 @@ test('replace: deactivates the target (scoped to the agent) then inserts', async
   assert.equal(fake.inserts.length, 1)
 })
 
+test('replace WITHOUT target_id degrades to insert (no deactivation) but still ok', async () => {
+  const fake = makeFakeSupabase()
+  const res = await persistMemoryOp(
+    {
+      type: 'memory_op',
+      run_id: 'r',
+      op: 'replace',
+      scope: 'room',
+      kind: 'fact',
+      content: 'new fact',
+    },
+    ctx(fake.client),
+  )
+  assert.equal(res.ok, true)
+  assert.equal(fake.updates.length, 0, 'nothing deactivated without a target')
+  assert.equal(fake.inserts.length, 1, 'still inserts the new entry')
+})
+
 test('flags + still stores an injection payload (data, not rejected)', async () => {
   const fake = makeFakeSupabase()
   const res = await persistMemoryOp(

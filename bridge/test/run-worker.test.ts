@@ -209,6 +209,40 @@ test('DB error inserting the reply → run marked failed (clean state, no lost r
   assert.equal(snapshotCounters().runs_failed, 1)
 })
 
+test('memory_op event is handled and a failing memory write does NOT break the run', async () => {
+  // agent_memory writes resolve to {data:null} in this harness → persistMemoryOp
+  // treats it as a failure. The run must still complete (memory is best-effort).
+  const { resolve, runUpdates } = makeHarness({ status: () => 'running' })
+  const supabase = makeFakeSupabase(resolve) as never
+  const adapter = fakeAdapter(async function* (packet) {
+    yield {
+      type: 'memory_op',
+      run_id: packet.run_id,
+      op: 'add',
+      scope: 'room',
+      kind: 'fact',
+      content: 'the deadline is Friday',
+    }
+    yield {
+      type: 'final_response',
+      run_id: packet.run_id,
+      response: {
+        schema_version: 1,
+        run_id: packet.run_id,
+        content: 'noted',
+        content_type: 'text',
+      },
+    }
+  })
+
+  await processRun('run-1', { supabase, getAdapter: () => adapter })
+
+  assert.equal(runUpdates.length, 1, 'exactly one terminal write')
+  assert.equal(runUpdates[0]?.status, 'completed', 'run completes despite the failed memory write')
+  assert.equal(snapshotCounters().runs_completed, 1)
+  assert.equal(snapshotCounters().runs_failed, 0)
+})
+
 test('cancellation mid-run → run marked cancelled, child aborted, not re-thrown', async () => {
   let status = 'running'
   const { resolve, runUpdates } = makeHarness({ status: () => status })

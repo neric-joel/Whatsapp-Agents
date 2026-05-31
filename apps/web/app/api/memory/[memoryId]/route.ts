@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 
 import { apiError, apiSuccess } from '@/lib/api-error'
-import { assertSameOrigin, internalError } from '@/lib/api-security'
+import { assertSameOrigin, enforceRateLimit, internalError } from '@/lib/api-security'
 import { updateMemorySchema } from '@/lib/api-validation'
 import { requireRoomMember } from '@/lib/permissions'
 import { createSupabaseServerClient, createSupabaseServiceClient } from '@/lib/supabase/server'
@@ -25,6 +25,9 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     error: authErr,
   } = await supabaseUser.auth.getUser()
   if (authErr || !user) return apiError('UNAUTHORIZED', 'Unauthorized', 401)
+
+  const limited = enforceRateLimit(`memory-patch:${user.id}`, 60, 60_000)
+  if (limited) return limited
 
   const supabase = createSupabaseServiceClient()
   const { data: mem } = await supabase

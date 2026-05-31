@@ -18,6 +18,10 @@ function readMemoryMaxChars(env: NodeJS.ProcessEnv = process.env): number {
  * Apply the count + character budget to ranked memory rows. Pure so it can be
  * unit-tested without a DB: keeps the highest-ranked entries (RPC returns them
  * ranked) until either the entry cap or the cumulative char budget is hit.
+ *
+ * The char budget bounds RAW title+content only — the rendered prompt block adds
+ * a fixed header plus per-line `> ` quoting overhead (see format-memory.ts), so
+ * the rendered size is somewhat larger. It's a soft budget, not a hard token cap.
  */
 export function applyMemoryBudget(
   rows: MemoryEntry[],
@@ -103,7 +107,11 @@ async function recallUserProfile(
     // Agents see the profile only with explicit consent (Hermes USER.md gate).
     if (!row.consented || !row.summary?.trim()) return undefined
     return { summary: row.summary.trim(), details: row.details }
-  } catch {
+  } catch (err) {
+    log('warn', 'memory.user_profile.error', {
+      error: err instanceof Error ? err.message : String(err),
+      user_id: userId,
+    })
     return undefined
   }
 }
