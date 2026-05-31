@@ -254,3 +254,23 @@ If a tagged agent does not respond, check that the agent is:
 ## Project Status
 
 The MVP is complete. Current work focuses on hardening the local developer experience, improving multi-agent deliberation quality, and making output rendering stable for real math and code-heavy answers.
+
+## Documentation
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — components, data-flow, the `agent_runs` queue contract, the adapter model, trust boundaries, and the full environment-variable reference.
+- [`docs/SELF_HOSTING.md`](docs/SELF_HOSTING.md) — local-Docker default, self-hosted Supabase, and the bridge trust model.
+- [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md) — logging, health/metrics endpoints, error tracking, and the run state machine + stale-run recovery.
+- [`docs/adr/`](docs/adr/) — architecture decision records.
+- [`QUICKSTART.md`](QUICKSTART.md) — the short startup guide.
+
+## Contributing
+
+Contributions are welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup, the
+quality gates, and the branch/commit/PR conventions, and
+[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md). For **security** issues, follow
+[`SECURITY.md`](SECURITY.md) (please don't open a public issue). Changes are tracked in
+[`CHANGELOG.md`](CHANGELOG.md).
+
+## License
+
+[MIT](LICENSE) © AgentRoom contributors.
