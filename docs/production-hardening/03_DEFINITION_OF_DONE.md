@@ -44,11 +44,11 @@ linked evidence** (a merged PR, a green CI run, a saved review, or a screenshot)
 - [ ] Env vars are validated at boot (fail-fast, names the bad var); `.env.example` files are authoritative.
 - [ ] `docs/SELF_HOSTING.md` explains the local-Docker default, the self-hosted production path, and the bridge/subprocess trust model.
 
-### Observability & reliability (Phase 6)
-- [ ] Structured, secret-redacted logging with run/correlation IDs in web + bridge.
-- [ ] Health/readiness endpoints reflect reality; bridge liveness is observable.
-- [ ] Error tracking is wired behind config (no-op without DSN).
-- [ ] Induced failures (child crash, DB drop, bad agent output) fail gracefully — no hangs, no lost runs; cancellation truly kills work.
+### Observability & reliability (Phase 6) — DONE ✅ (PR pending merge)
+- [x] Structured, secret-redacted logging with run/correlation IDs in web + bridge. → shared JSON logger (`ae0d7ef`); unified `redactDeep` across logger + error tracking.
+- [x] Health/readiness endpoints reflect reality; bridge liveness is observable. → web `/api/health` DB ping (force-dynamic); bridge `/healthz` + `/metrics` HTTP server; stale-run recovery documented in `docs/OBSERVABILITY.md`.
+- [x] Error tracking is wired behind config (no-op without DSN). → shared `createErrorTracker` (opt-in, redacted any-transport); web `internalError` + bridge `run.failed` capture; unit-tested no-op.
+- [x] Induced failures (child crash, DB drop, bad agent output) fail gracefully — no hangs, no lost runs; cancellation truly kills work. → `run-worker.test.ts` (crash/bad-output/DB-error → clean `failed`, one terminal write; cancel → clean `cancelled`); subprocess timeout + output-cap + force-kill-tree; minimal metrics. Critique PASS → `docs/reviews/2026-05-31-phase6-observability.md`.
 
 ### Documentation & OSS readiness (Phase 7)
 - [ ] README rewritten for newcomers (what/why, demo, architecture diagram, quickstart, links).
