@@ -80,9 +80,10 @@ test('GET /metrics returns Prometheus text including queued gauge', async () => 
   assert.match(res.body, /^agentroom_bridge_runs_started_total 1$/m)
   assert.match(res.body, /^agentroom_bridge_runs_active 1$/m)
   assert.match(res.body, /^agentroom_bridge_runs_queued 7$/m)
+  assert.match(res.body, /^agentroom_bridge_db_reachable 1$/m)
 })
 
-test('GET /metrics tolerates a DB error in the queued count (gauge 0)', async () => {
+test('GET /metrics tolerates a DB error: queued 0 AND db_reachable 0 (not masked)', async () => {
   const res = fakeRes()
   await handleHealthRequest(
     { url: '/metrics', method: 'GET' },
@@ -95,6 +96,25 @@ test('GET /metrics tolerates a DB error in the queued count (gauge 0)', async ()
   )
   assert.equal(res.statusCode, 200)
   assert.match(res.body, /^agentroom_bridge_runs_queued 0$/m)
+  assert.match(res.body, /^agentroom_bridge_db_reachable 0$/m)
+})
+
+test('GET /metrics reports db_reachable 0 when the queued count is null', async () => {
+  const res = fakeRes()
+  await handleHealthRequest(
+    { url: '/metrics', method: 'GET' },
+    res,
+    baseDeps({ getQueuedRuns: async () => null }),
+  )
+  assert.match(res.body, /^agentroom_bridge_db_reachable 0$/m)
+})
+
+test('HEAD /healthz returns 200 headers but no body', async () => {
+  const res = fakeRes()
+  await handleHealthRequest({ url: '/healthz', method: 'HEAD' }, res, baseDeps())
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.headers?.['content-type'], 'application/json')
+  assert.equal(res.body, '')
 })
 
 test('unknown path 404s; non-GET 405s', async () => {

@@ -35,10 +35,15 @@ export async function handleHealthRequest(
   const now = deps.now ?? Date.now
   const method = req.method ?? 'GET'
   const url = (req.url ?? '/').split('?')[0]
+  const isHead = method === 'HEAD'
+  // Per HTTP, a HEAD response carries headers but no body.
+  const send = (code: number, headers: Record<string, string>, body: string) => {
+    res.writeHead(code, headers)
+    res.end(isHead ? undefined : body)
+  }
 
-  if (method !== 'GET' && method !== 'HEAD') {
-    res.writeHead(405, { 'content-type': 'text/plain', allow: 'GET, HEAD' })
-    res.end('Method Not Allowed\n')
+  if (method !== 'GET' && !isHead) {
+    send(405, { 'content-type': 'text/plain', allow: 'GET, HEAD' }, 'Method Not Allowed\n')
     return
   }
 
@@ -50,26 +55,27 @@ export async function handleHealthRequest(
       active_runs: deps.getActiveRuns(),
       last_poll_at: deps.getLastPollAt(),
     })
-    res.writeHead(200, { 'content-type': 'application/json' })
-    res.end(body)
+    send(200, { 'content-type': 'application/json' }, body)
     return
   }
 
   if (url === '/metrics') {
-    let queued = 0
+    let queued: number | null = null
     try {
-      queued = (await deps.getQueuedRuns()) ?? 0
+      queued = await deps.getQueuedRuns()
     } catch {
-      // keep the initial 0 if the queued-count query fails
+      // leave queued as null → db_reachable renders 0
     }
-    const gauges: MetricsGauges = { runs_active: deps.getActiveRuns(), runs_queued: queued }
-    res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4' })
-    res.end(renderPrometheus(gauges))
+    const gauges: MetricsGauges = {
+      runs_active: deps.getActiveRuns(),
+      runs_queued: queued ?? 0,
+      db_reachable: queued !== null,
+    }
+    send(200, { 'content-type': 'text/plain; version=0.0.4' }, renderPrometheus(gauges))
     return
   }
 
-  res.writeHead(404, { 'content-type': 'text/plain' })
-  res.end('Not Found\n')
+  send(404, { 'content-type': 'text/plain' }, 'Not Found\n')
 }
 
 /** Create (but do not start) the HTTP server. Returns null when port <= 0. */

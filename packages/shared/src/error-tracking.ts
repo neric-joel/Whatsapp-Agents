@@ -8,6 +8,7 @@
 // call site. `capture()` returns true iff the error was forwarded — this is what
 // the unit tests assert for the no-op-without-DSN contract.
 import { createLogger, type Logger } from './logger.js'
+import { redact, redactDeep } from './redact.js'
 
 export interface ErrorTrackerConfig {
   /** DSN/endpoint. Empty/undefined ⇒ tracker disabled (capture is a no-op). */
@@ -31,15 +32,22 @@ export interface ErrorTracker {
   capture(error: unknown, context?: Record<string, unknown>): boolean
 }
 
+// Redact secrets/PII here so the invariant holds for EVERY transport — not just the
+// default logger one. A real Sentry/OTLP transport gets already-redacted data.
 function toEvent(error: unknown, context?: Record<string, unknown>): CapturedErrorEvent {
+  const redactedContext =
+    context !== undefined ? (redactDeep(context) as Record<string, unknown>) : undefined
   if (error instanceof Error) {
     return {
-      message: error.message,
-      ...(error.stack ? { stack: error.stack } : {}),
-      ...(context ? { context } : {}),
+      message: redact(error.message),
+      ...(error.stack ? { stack: redact(error.stack) } : {}),
+      ...(redactedContext ? { context: redactedContext } : {}),
     }
   }
-  return { message: String(error), ...(context ? { context } : {}) }
+  return {
+    message: redact(String(error)),
+    ...(redactedContext ? { context: redactedContext } : {}),
+  }
 }
 
 export function createErrorTracker(config: ErrorTrackerConfig = {}): ErrorTracker {

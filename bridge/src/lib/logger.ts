@@ -4,7 +4,7 @@
 // exported for per-run correlation.
 import { createLogger, type LogLevel } from '@agentroom/shared'
 
-const logger = createLogger({
+export const logger = createLogger({
   base: { worker_id: process.env['BRIDGE_WORKER_ID'] ?? 'bridge' },
 })
 

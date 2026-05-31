@@ -1,6 +1,10 @@
 import { ok } from '@/lib/api'
 import { checkDatabase } from '@/lib/health'
 
+// Run on every request (never prerendered/cached) so the DB ping reflects current
+// reality rather than a build-time snapshot.
+export const dynamic = 'force-dynamic'
+
 // Liveness + best-effort readiness. ALWAYS returns 200 with the standard
 // { ok, data } envelope so container/orchestrator liveness probes (and the CI
 // image smoke test) stay green even when the DB is unreachable — the DB status

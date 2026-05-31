@@ -21,6 +21,8 @@ interface MetricsCounters {
 export interface MetricsGauges {
   runs_active: number
   runs_queued: number
+  /** 1 if the queued-count query succeeded, 0 if the DB was unreachable. */
+  db_reachable: boolean
 }
 
 const counters: MetricsCounters = {
@@ -96,9 +98,12 @@ export function renderPrometheus(gauges: MetricsGauges): string {
     '# HELP agentroom_bridge_runs_active Runs currently being processed by this worker.',
     '# TYPE agentroom_bridge_runs_active gauge',
     `agentroom_bridge_runs_active ${gauges.runs_active}`,
-    '# HELP agentroom_bridge_runs_queued Runs waiting in the queue (status=queued).',
+    '# HELP agentroom_bridge_runs_queued Runs waiting in the queue (status=queued). Only meaningful when db_reachable=1.',
     '# TYPE agentroom_bridge_runs_queued gauge',
     `agentroom_bridge_runs_queued ${gauges.runs_queued}`,
+    '# HELP agentroom_bridge_db_reachable 1 if the queued-count DB query succeeded at scrape time, else 0.',
+    '# TYPE agentroom_bridge_db_reachable gauge',
+    `agentroom_bridge_db_reachable ${gauges.db_reachable ? 1 : 0}`,
   ]
   return lines.join('\n') + '\n'
 }

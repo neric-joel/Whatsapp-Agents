@@ -64,6 +64,10 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
   const supabase = deps.supabase ?? createServiceClient()
   const getAdapter = deps.getAdapter ?? defaultGetAdapter
   const startedAt = Date.now()
+  // Gates the terminal metrics: only count an outcome for a run we actually moved
+  // into `running`. Otherwise a claim/running-transition error or a cancel-in-the-gap
+  // would skew the counters (started without terminal, or terminal without started).
+  let started = false
 
   // a. Fetch run with agent data
   const { data: runRaw } = await supabase
@@ -92,7 +96,6 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
       return
     }
     log('info', 'run.start', { run_id: runId, agent_id: runRow.agent_id, room_id: runRow.room_id })
-    recordRunStarted()
 
     // c. Update to running
     const { data: running } = await supabase
@@ -106,6 +109,9 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
       log('debug', 'run.skipped', { run_id: runId, reason: 'cancelled_before_running' })
       return
     }
+    // The run is now truly in flight — count it exactly once, here.
+    recordRunStarted()
+    started = true
 
     // d. Fetch trigger message
     const fallbackMsg = {
@@ -336,7 +342,7 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
           completed_at: new Date().toISOString(),
         })
         .eq('id', runId)
-      recordRunCancelled()
+      if (started) recordRunCancelled()
       log('warn', 'run.cancelled', { run_id: runId })
       return
     }
@@ -344,7 +350,7 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
       .from('agent_runs')
       .update({ status: 'failed', error_message: message })
       .eq('id', runId)
-    recordRunFailed()
+    if (started) recordRunFailed()
     captureError(err, { run_id: runId, where: 'processRun' })
     log('error', 'run.failed', { run_id: runId, error: message })
     throw err

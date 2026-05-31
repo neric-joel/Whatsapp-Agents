@@ -2,7 +2,7 @@
 // { ts, level, event, ...base, ...bound, ...fields }. Every string field value is
 // run through redact() so secrets/PII cannot leak via logs. Level threshold from
 // LOG_LEVEL (default 'info'); error -> stderr, everything else -> stdout.
-import { redact } from './redact.js'
+import { redactDeep } from './redact.js'
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
@@ -17,18 +17,6 @@ function toThreshold(t: LogLevel | number | undefined): number {
   if (typeof t === 'number') return t
   if (typeof t === 'string') return LEVEL_ORDER[t] ?? LEVEL_ORDER.info
   return envThreshold()
-}
-
-/** Recursively redact secrets/PII from any field value before it is serialized. */
-function redactValue(value: unknown): unknown {
-  if (typeof value === 'string') return redact(value)
-  if (Array.isArray(value)) return value.map(redactValue)
-  if (value && typeof value === 'object') {
-    const out: Record<string, unknown> = {}
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) out[k] = redactValue(v)
-    return out
-  }
-  return value
 }
 
 export interface Logger {
@@ -62,7 +50,7 @@ export function createLogger(options: LoggerOptions = {}): Logger {
   function make(bound: Record<string, unknown>): Logger {
     const emit = (level: LogLevel, event: string, fields?: Record<string, unknown>) => {
       if (LEVEL_ORDER[level] < threshold) return
-      const safe = redactValue({ ...base, ...bound, ...fields }) as Record<string, unknown>
+      const safe = redactDeep({ ...base, ...bound, ...fields }) as Record<string, unknown>
       sink(JSON.stringify({ ts: new Date().toISOString(), level, event, ...safe }), level)
     }
     return {

@@ -35,4 +35,16 @@ describe('checkDatabase', () => {
     const result = await checkDatabase()
     expect(result.status).toBe('down')
   })
+
+  it('reports down when the DB query exceeds the 2s timeout (never hangs)', async () => {
+    vi.useFakeTimers()
+    try {
+      selectMock.mockImplementation(() => new Promise(() => {})) // never settles
+      const pending = checkDatabase()
+      await vi.advanceTimersByTimeAsync(2000)
+      expect((await pending).status).toBe('down')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

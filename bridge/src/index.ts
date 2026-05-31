@@ -107,6 +107,11 @@ async function main() {
     getLastPollAt: () => lastPollAt,
   })
   if (healthServer) {
+    // Surface a bind failure (e.g. EADDRINUSE) instead of failing silently — the
+    // container HEALTHCHECK would otherwise restart-loop with no diagnostic.
+    healthServer.on('error', (err: NodeJS.ErrnoException) =>
+      log('error', 'health.listen.error', { port: HEALTH_PORT, error: err.message }),
+    )
     healthServer.listen(HEALTH_PORT, () => log('info', 'health.listening', { port: HEALTH_PORT }))
   }
 

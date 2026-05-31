@@ -57,7 +57,7 @@ test('snapshot is a copy — callers cannot mutate internal state', () => {
 test('renderPrometheus emits HELP/TYPE + counter and gauge lines', () => {
   recordRunStarted()
   recordRunCompleted(400)
-  const text = renderPrometheus({ runs_active: 2, runs_queued: 5 })
+  const text = renderPrometheus({ runs_active: 2, runs_queued: 5, db_reachable: true })
 
   assert.match(text, /# TYPE agentroom_bridge_runs_started_total counter/)
   assert.match(text, /^agentroom_bridge_runs_started_total 1$/m)
@@ -65,10 +65,16 @@ test('renderPrometheus emits HELP/TYPE + counter and gauge lines', () => {
   assert.match(text, /^agentroom_bridge_run_latency_ms_avg 400$/m)
   assert.match(text, /^agentroom_bridge_runs_active 2$/m)
   assert.match(text, /^agentroom_bridge_runs_queued 5$/m)
+  assert.match(text, /^agentroom_bridge_db_reachable 1$/m)
   assert.ok(text.endsWith('\n'))
 })
 
 test('renderPrometheus avg latency is 0 when no completed runs measured', () => {
-  const text = renderPrometheus({ runs_active: 0, runs_queued: 0 })
+  const text = renderPrometheus({ runs_active: 0, runs_queued: 0, db_reachable: true })
   assert.match(text, /^agentroom_bridge_run_latency_ms_avg 0$/m)
+})
+
+test('renderPrometheus reports db_reachable 0 when the DB count was unavailable', () => {
+  const text = renderPrometheus({ runs_active: 0, runs_queued: 0, db_reachable: false })
+  assert.match(text, /^agentroom_bridge_db_reachable 0$/m)
 })
