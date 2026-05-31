@@ -8,6 +8,7 @@ import type {
 } from '@agentroom/shared'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+import { recallMemory } from '../memory/recall.js'
 import {
   readContextMessageLimit,
   readContextMessageMaxChars,
@@ -40,6 +41,7 @@ interface BuildContextArgs {
     id: string
     content: string
     sender_type: string
+    sender_user_id?: string | null
     created_at: string
   }
 }
@@ -111,6 +113,14 @@ export async function buildContextPacket({
     files = await hydrateFilePreviews(supabase, (fileRows ?? []) as FilePreviewRow[])
   }
 
+  // Recall ranked memory (Phase 9). Resilient — never breaks the run.
+  const memory = await recallMemory(supabase, {
+    agentId: agentInfo.id,
+    roomId: run.room_id,
+    queryText: triggerMsg.content,
+    userId: triggerMsg.sender_type === 'user' ? (triggerMsg.sender_user_id ?? null) : null,
+  })
+
   return {
     schema_version: 1,
     run_id: run.id,
@@ -148,5 +158,6 @@ export async function buildContextPacket({
     discussion_mode: run.discussion_mode,
     deliberation_depth: run.deliberation_depth,
     deliberation_root_id: run.deliberation_root_id,
+    ...(memory ? { memory } : {}),
   }
 }

@@ -12,8 +12,10 @@ import {
 import { useRooms } from '@/hooks/useRooms'
 import { ALLOWED_UPLOAD_MIME_TYPES, MAX_UPLOAD_BYTES } from '@/lib/api-validation'
 import { getImageFilesFromClipboardItems } from '@/lib/pasted-files'
+import { parseSlashCommand, type SlashCommand } from '@/lib/slash-commands'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
+import { RECALL_EVENT, type RecallEventDetail } from './MemoryPanel'
 import type { OptimisticMessage } from './MessageTimeline'
 
 const ACCEPTED_UPLOAD_TYPES = ALLOWED_UPLOAD_MIME_TYPES.join(',')
@@ -49,6 +51,7 @@ export default function ComposeBox({
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [fileError, setFileError] = useState<string | null>(null)
   const [attachedFile, setAttachedFile] = useState<{ id: string; name: string } | null>(null)
@@ -101,6 +104,7 @@ export default function ComposeBox({
     const val = e.target.value
     const cursor = e.target.selectionStart ?? val.length
     setText(val)
+    if (notice) setNotice(null)
     const before = val.slice(0, cursor)
     const match = before.match(/@([\w-]*)$/)
     if (match) {
@@ -192,9 +196,53 @@ export default function ComposeBox({
     )
   }
 
+  async function handleSlashCommand(cmd: SlashCommand) {
+    if (cmd.command === 'recall') {
+      window.dispatchEvent(
+        new CustomEvent<RecallEventDetail>(RECALL_EVENT, { detail: { roomId, query: cmd.query } }),
+      )
+      setText('')
+      setSendError(null)
+      setNotice(
+        cmd.query ? `Recalling “${cmd.query}” — see the Memory panel.` : 'Showing recent memory.',
+      )
+      return
+    }
+    // /remember
+    if (!cmd.text) {
+      setSendError('Usage: /remember <note>  (add --global for a personal cross-room note)')
+      return
+    }
+    setSending(true)
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/memory`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: cmd.text, scope: cmd.global ? 'global' : 'room' }),
+      })
+      if (!res.ok) {
+        const json = (await res.json().catch(() => ({}))) as { error?: { message?: string } }
+        setSendError(json.error?.message ?? 'Failed to save memory')
+        return
+      }
+      setText('')
+      setSendError(null)
+      setNotice(cmd.global ? 'Saved to your global memory.' : 'Saved to room memory.')
+    } finally {
+      setSending(false)
+    }
+  }
+
   async function submit() {
+    if (sending || uploading) return
+    // Intercept `/remember` and `/recall` before sending a chat message.
+    const slash = parseSlashCommand(text)
+    if (slash) {
+      await handleSlashCommand(slash)
+      return
+    }
     const content = text.trim() || attachedFile?.name
-    if (!content || sending || uploading) return
+    if (!content) return
     setSending(true)
     const metadata = attachedFile ? { file_ids: [attachedFile.id] } : {}
     try {
@@ -310,6 +358,14 @@ export default function ComposeBox({
         />
         {sendError && (
           <p className="absolute left-1 top-full mt-1 px-1 text-xs text-red-600">{sendError}</p>
+        )}
+        {!sendError && notice && (
+          <p
+            role="status"
+            className="absolute left-1 top-full mt-1 px-1 text-xs text-[var(--muted)]"
+          >
+            {notice}
+          </p>
         )}
         <input
           ref={fileInputRef}

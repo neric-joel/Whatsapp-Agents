@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  createMemorySchema,
   createPinSchema,
   createRoomSchema,
   sendMessageSchema,
+  updateMemorySchema,
   updatePinSchema,
 } from '../api-validation'
 
@@ -91,5 +93,42 @@ describe('updatePinSchema', () => {
   })
   it('accepts a single field', () => {
     expect(updatePinSchema.safeParse({ is_active: false }).success).toBe(true)
+  })
+})
+
+describe('createMemorySchema', () => {
+  it('accepts minimal content', () => {
+    expect(createMemorySchema.safeParse({ content: 'remember this' }).success).toBe(true)
+  })
+  it('rejects empty content', () => {
+    expect(createMemorySchema.safeParse({ content: '' }).success).toBe(false)
+  })
+  it('rejects content over the 8000-char cap', () => {
+    expect(createMemorySchema.safeParse({ content: 'x'.repeat(8001) }).success).toBe(false)
+  })
+  it('accepts a full valid payload', () => {
+    expect(
+      createMemorySchema.safeParse({
+        content: 'I prefer concise answers',
+        scope: 'global',
+        kind: 'preference',
+        title: 'tone',
+      }).success,
+    ).toBe(true)
+  })
+  it('rejects an unknown kind', () => {
+    expect(createMemorySchema.safeParse({ content: 'x', kind: 'bogus' }).success).toBe(false)
+  })
+})
+
+describe('updateMemorySchema', () => {
+  it('rejects an empty update', () => {
+    expect(updateMemorySchema.safeParse({}).success).toBe(false)
+  })
+  it('accepts pinned toggle', () => {
+    expect(updateMemorySchema.safeParse({ pinned: true }).success).toBe(true)
+  })
+  it('accepts is_active toggle (forget)', () => {
+    expect(updateMemorySchema.safeParse({ is_active: false }).success).toBe(true)
   })
 })

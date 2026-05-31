@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import ComposeBox from '@/components/ComposeBox'
+import MemoryPanel from '@/components/MemoryPanel'
 import type { OptimisticMessage, ReplyingMessage } from '@/components/MessageTimeline'
 import MessageTimeline from '@/components/MessageTimeline'
 import PinnedItemsPanel from '@/components/PinnedItemsPanel'
@@ -44,13 +45,17 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
         />
       </main>
       <aside
-        className="hidden w-72 flex-shrink-0 border-l border-[var(--border)] bg-[var(--right-panel)] lg:block"
-        aria-label="Pinned items"
+        className="hidden w-72 flex-shrink-0 overflow-y-auto border-l border-[var(--border)] bg-[var(--right-panel)] lg:block"
+        aria-label="Pinned items and memory"
       >
         <div className="border-b border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm font-medium text-[var(--text)]">
           Pinned
         </div>
         <PinnedItemsPanel roomId={roomId} />
+        <div className="border-y border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm font-medium text-[var(--text)]">
+          Memory
+        </div>
+        <MemoryPanel roomId={roomId} />
       </aside>
     </div>
   )

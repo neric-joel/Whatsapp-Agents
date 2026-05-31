@@ -1,6 +1,7 @@
 import type { AgentEvent, ContextPacketV1, SenderType } from '@agentroom/shared'
 
 import { formatFilesForPrompt } from '../context/file-context.js'
+import { formatMemoryForPrompt } from '../memory/format-memory.js'
 import { SubprocessAdapter } from './subprocess-adapter.js'
 
 export class CodexCliAdapter extends SubprocessAdapter {
@@ -34,6 +35,9 @@ export class CodexCliAdapter extends SubprocessAdapter {
         `Relevant recent context only. Use it as background, but prioritize the current message if there is any conflict:\n${history}`,
       )
     }
+
+    const memoryContext = formatMemoryForPrompt(packet.memory)
+    if (memoryContext) sections.push(memoryContext)
 
     const fileContext = formatFilesForPrompt(packet.files)
     if (fileContext) sections.push(fileContext)

@@ -18,6 +18,7 @@ import {
 } from '../lib/metrics.js'
 import { redact } from '../lib/redact.js'
 import { createServiceClient } from '../lib/supabase.js'
+import { persistMemoryOp } from '../memory/persist-memory-op.js'
 
 /** Injectable dependencies — defaults are the real Supabase client + adapter registry. */
 interface ProcessRunDeps {
@@ -118,6 +119,7 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
       id: runId,
       content: '(no trigger)',
       sender_type: 'user',
+      sender_user_id: null as string | null,
       created_at: new Date().toISOString(),
       metadata: {} as Record<string, unknown>,
     }
@@ -125,7 +127,7 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
     if (runRow.trigger_msg_id) {
       const { data: tm } = await supabase
         .from('messages')
-        .select('id, content, sender_type, created_at, metadata')
+        .select('id, content, sender_type, sender_user_id, created_at, metadata')
         .eq('id', runRow.trigger_msg_id)
         .single()
       if (tm) triggerMsg = tm as typeof triggerMsg
@@ -256,6 +258,16 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
               .update({ status: 'succeeded', output: redact(JSON.stringify(result)) })
               .eq('id', tc.id)
           }
+        } else if (event.type === 'memory_op') {
+          // Agent-curated memory: the bridge validates, injection-scans, and
+          // persists (the agent never writes the DB). A bad op is logged + skipped
+          // — it must never fail the run.
+          await persistMemoryOp(event, {
+            supabase,
+            agentId: runRow.agent_id,
+            roomId: runRow.room_id,
+            triggerMessageId: runRow.trigger_msg_id ?? null,
+          })
         }
       }
     } finally {

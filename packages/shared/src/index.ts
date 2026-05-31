@@ -2,6 +2,7 @@ export const AGENTROOM_VERSION = '0.1.0'
 
 export * from './error-tracking.js'
 export * from './logger.js'
+export * from './memory-scan.js'
 export * from './redact.js'
 
 export type DiscussionPhase = 'individual' | 'critique' | 'consensus'
@@ -247,6 +248,9 @@ export type AgentProvider = 'claude_code' | 'codex_cli' | 'ruflo' | 'mock'
 export type AdapterType = 'subprocess' | 'mock'
 export type ReplyPolicy = 'always' | 'reply_when_invoked' | 'never'
 export type RunStatus = 'queued' | 'claimed' | 'running' | 'completed' | 'failed' | 'cancelled'
+export type MemoryScope = 'global' | 'room'
+export type MemoryKind = 'fact' | 'preference' | 'skill' | 'episodic'
+export type MemoryOp = 'add' | 'replace' | 'consolidate'
 export type ToolCallStatus =
   | 'pending'
   | 'waiting_approval'
@@ -258,6 +262,38 @@ export type ToolCallStatus =
   | 'executed'
   | 'failed'
   | 'error'
+
+// ─── AGENT MEMORY (Phase 9) ───
+
+/**
+ * A persisted memory entry. Stored memory is DATA, never instructions — recall
+ * renders it as quoted, non-instruction text and the bridge injection-scans +
+ * sanitizes every write before it lands. `agent_id === null` means room-shared
+ * memory (e.g. a user's `/remember` note) recalled for every agent in the room.
+ */
+export interface MemoryEntry {
+  id: string
+  agent_id: string | null
+  room_id: string | null
+  scope: MemoryScope
+  kind: MemoryKind
+  title: string | null
+  content: string
+  source_message_id: string | null
+  created_by_user_id: string | null
+  confidence: number
+  pinned: boolean
+  is_active: boolean
+  injection_flagged: boolean
+  created_at: string
+  updated_at: string
+}
+
+/** The Hermes `USER.md` analog, injected into context only when consented. */
+export interface UserProfileSummary {
+  summary: string
+  details?: Record<string, unknown>
+}
 
 // ─── CONTEXT PACKET V1 ───
 
@@ -282,6 +318,15 @@ export interface ContextPacketV1 {
   discussion_mode: DiscussionMode
   deliberation_depth: number
   deliberation_root_id: string | null
+  /**
+   * Recalled memory for this run (Phase 9). Rendered to agents as quoted DATA,
+   * never as instructions — it can never override the system prompt or escalate
+   * tool permissions. `user` is present only when the user has consented.
+   */
+  memory?: {
+    agent: MemoryEntry[]
+    user?: UserProfileSummary
+  }
 }
 
 // ─── AGENT RESPONSE V1 ───
@@ -308,6 +353,17 @@ export type AgentEvent =
       requires_approval: boolean
     }
   | { type: 'visible_message'; run_id: string; content: string }
+  | {
+      type: 'memory_op'
+      run_id: string
+      op: MemoryOp
+      scope: MemoryScope
+      kind: MemoryKind
+      title?: string
+      content: string
+      /** For 'replace'/'consolidate': the existing memory id to supersede. */
+      target_id?: string
+    }
 
 // ─── AGENT ADAPTER INTERFACE ───
 

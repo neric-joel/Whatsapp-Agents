@@ -79,3 +79,19 @@ export const updatePinSchema = z
     sort_order: z.number().int().optional(),
   })
   .refine((d) => Object.keys(d).length > 0, 'At least one field required')
+
+// Phase 9 — agent memory. `/remember` (user-authored) stores room-shared notes by
+// default; `--global` stores a personal cross-room note.
+export const createMemorySchema = z.object({
+  content: z.string().min(1).max(8000),
+  scope: z.enum(['global', 'room']).optional(),
+  kind: z.enum(['fact', 'preference', 'skill', 'episodic']).optional(),
+  title: z.string().max(200).optional(),
+})
+
+export const updateMemorySchema = z
+  .object({
+    is_active: z.boolean().optional(),
+    pinned: z.boolean().optional(),
+  })
+  .refine((d) => Object.keys(d).length > 0, 'At least one field required')

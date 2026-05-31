@@ -253,6 +253,7 @@ export abstract class SubprocessAdapter implements AgentAdapter {
       case 'error':
       case 'tool_call_requested':
       case 'visible_message':
+      case 'memory_op':
         return { ...event, run_id: runId }
     }
   }
