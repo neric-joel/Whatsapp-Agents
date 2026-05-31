@@ -58,9 +58,12 @@ services:
       BRIDGE_MAX_CONCURRENT_RUNS: ${BRIDGE_MAX_CONCURRENT_RUNS:-3}
       BRIDGE_HEARTBEAT_INTERVAL_MS: ${BRIDGE_HEARTBEAT_INTERVAL_MS:-5000}
       BRIDGE_STALE_RUN_TIMEOUT_MS: ${BRIDGE_STALE_RUN_TIMEOUT_MS:-60000}
+      BRIDGE_HEALTH_PORT: ${BRIDGE_HEALTH_PORT:-9090}
     # NOTE: this image runs the MOCK adapter only. Real agent CLIs (claude/codex/
     # ruflo) are not present in the image — see the trust model in docs/SELF_HOSTING.md.
-    # Port-less worker: liveness is observable via agent_runs.heartbeat_at, not a port.
+    # Liveness is provided by the image HEALTHCHECK (probes /healthz). The /healthz +
+    # /metrics endpoints stay on the internal compose network (unauthenticated — do
+    # NOT publish them publicly); scrape from a sidecar/Prometheus on this network.
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     restart: unless-stopped

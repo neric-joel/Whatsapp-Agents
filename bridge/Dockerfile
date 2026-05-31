@@ -38,5 +38,11 @@ COPY --chown=node:node packages/shared ./packages/shared
 COPY --chown=node:node bridge ./bridge
 USER node
 WORKDIR /repo/bridge
+# Liveness/metrics server (GET /healthz, /metrics). Internal to the compose network
+# by default — unauthenticated, so do not publish this port to the public internet.
+ENV BRIDGE_HEALTH_PORT=9090
+EXPOSE 9090
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD node -e "require('http').get('http://127.0.0.1:'+(process.env.BRIDGE_HEALTH_PORT||9090)+'/healthz',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 # tsx resolves from the repo-root node_modules; mirrors `pnpm --filter bridge start`.
 CMD ["/repo/node_modules/.bin/tsx", "src/index.ts"]
