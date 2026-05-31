@@ -98,17 +98,25 @@ active room agents (`name`, `slug`, and a `capabilities` blurb), rendered as
 reference DATA so an agent can address a peer deliberately — by `@mention` or by a
 hand-off. The roster excludes the acting agent and muted/inactive members.
 
-**Hand-off protocol.** An agent emits a `handoff_requested` event
-(`{ to_agent_slug, reason, payload? }`). The run worker defers it until the agent's
+**Hand-off protocol (agent-emitted).** An agent emits a `handoff_requested` event by
+printing a control envelope to stdout (`{ "type":"handoff_requested", "to_agent_slug",
+"reason", "payload"? }`); the subprocess adapter parses it into the `AgentEvent`
+(alongside `final_response`/`memory_op`). The run worker defers it until the agent's
 reply is inserted (that message becomes the peer run's trigger), then
 `agents/handoff.ts` resolves the slug to a room agent and creates a **targeted**
-`agent_runs` row — never the agent itself. Users invoke the same path with
-`/handoff @agent <task>` (rewritten to a targeted mention message); `/agents` lists
-the roster + active runs.
+`agent_runs` row — never the agent itself — under the full loop guards **and cycle
+detection** below. At most `MAX_HANDOFFS_PER_RUN` are honored per run.
 
-**Loop-guard math (chains provably terminate).** A hand-off is allowed only when
-**all** hold; otherwise it's blocked (and a cap posts a visible *"Deliberation ended …"*
-system message):
+**User `/handoff` (a convenience, not the agent engine).** `/handoff @agent <task>`
+typed by a user is rewritten client-side to a targeted `@agent <task>` message and
+goes through the normal messages route + mention routing. It is **round/hop bounded**
+like any mention but does **not** run the agent-chain cycle detection (a human turn
+is not a loop risk; the deliberation chain it may start is still round-capped).
+`/agents` lists the roster + active runs.
+
+**Loop-guard math (agent hand-off chains provably terminate).** An agent-emitted
+hand-off is allowed only when **all** hold; otherwise it's blocked (and a cap/cycle
+posts a visible *"Deliberation ended …"* system message):
 
 - `rooms.allow_agent_to_agent` is true.
 - **Round cap:** `round_index + 1 < rooms.max_agent_rounds` (default 3).

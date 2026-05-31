@@ -70,7 +70,8 @@ Respond directly and specifically to the CURRENT MESSAGE above as ${packet.agent
       return { type: 'visible_message', run_id: '', content }
     }
 
-    return null
+    // Defer to the base parser for control envelopes (memory_op / handoff_requested).
+    return super.parseStdoutLine(line)
   }
 
   private senderLabel(senderType: SenderType): string {

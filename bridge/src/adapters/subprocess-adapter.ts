@@ -31,6 +31,33 @@ export abstract class SubprocessAdapter implements AgentAdapter {
   protected parseStdoutLine(line: string): AgentEvent | null {
     try {
       const obj = JSON.parse(line) as Record<string, unknown>
+
+      // Agent-emitted control envelopes (Phase 9 memory, Phase 10 hand-off). The
+      // run worker validates these downstream (zod) and treats memory/roster as
+      // DATA — emitting them here is what wires those features end-to-end. run_id
+      // is stamped by withRunId().
+      if (obj.type === 'memory_op' && typeof obj.content === 'string') {
+        return {
+          type: 'memory_op',
+          run_id: '',
+          op: obj.op,
+          scope: obj.scope,
+          kind: obj.kind,
+          ...(typeof obj.title === 'string' ? { title: obj.title } : {}),
+          content: obj.content,
+          ...(typeof obj.target_id === 'string' ? { target_id: obj.target_id } : {}),
+        } as AgentEvent
+      }
+      if (obj.type === 'handoff_requested' && typeof obj.to_agent_slug === 'string') {
+        return {
+          type: 'handoff_requested',
+          run_id: '',
+          to_agent_slug: obj.to_agent_slug,
+          reason: typeof obj.reason === 'string' ? obj.reason : '',
+          ...(typeof obj.payload === 'string' ? { payload: obj.payload } : {}),
+        } as AgentEvent
+      }
+
       if (
         obj.schema_version === 1 &&
         typeof obj.run_id === 'string' &&

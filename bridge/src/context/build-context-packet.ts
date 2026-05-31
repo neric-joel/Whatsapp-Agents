@@ -120,6 +120,9 @@ export async function buildContextPacket({
     .eq('room_id', run.room_id)
     .eq('member_type', 'agent')
     .eq('muted', false)
+    // Only advertise peers that are actually addressable — matches the hand-off
+    // resolver + the mention path (both require reply_enabled).
+    .eq('reply_enabled', true)
   const roster = ((rosterRaw ?? []) as unknown as Array<{ agents: RosterAgentRow | null }>)
     .map((r) => r.agents)
     .filter((a): a is RosterAgentRow => Boolean(a && a.is_active && a.id !== agentInfo.id))

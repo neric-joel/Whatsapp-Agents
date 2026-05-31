@@ -135,6 +135,7 @@ export async function handleHandoffRequest(
     const { data: existing } = await ctx.supabase
       .from('agent_runs')
       .select('id')
+      .eq('room_id', ctx.roomId)
       .eq('trigger_msg_id', ctx.sourceMessageId)
       .eq('agent_id', targetAgentId)
       .eq('round_index', nextRoundIndex)

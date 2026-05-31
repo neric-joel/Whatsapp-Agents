@@ -32,6 +32,8 @@ type DiscussionMode = 'independent' | 'tag_turns'
 type HandoffRequestedEvent = Extract<AgentEvent, { type: 'handoff_requested' }>
 
 const WORKER_ID = process.env.BRIDGE_WORKER_ID ?? 'bridge-local-1'
+/** Max distinct hand-offs honored per run — bounds fan-out amplification. */
+const MAX_HANDOFFS_PER_RUN = 4
 const CANCEL_POLL_MS = 1000
 
 class RunCancelledError extends Error {
@@ -332,7 +334,16 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
     // Agent-to-agent hand-offs (Phase 10) — create targeted peer runs under the
     // loop guards + cycle detection. Processed BEFORE mention follow-ups so the
     // follow-up dedup sees any hand-off runs already created at the next round.
-    for (const handoff of handoffEvents) {
+    // Cap the count per run to bound fan-out amplification (each is still
+    // round/hop/cycle-guarded); drop + log the excess.
+    if (handoffEvents.length > MAX_HANDOFFS_PER_RUN) {
+      log('warn', 'handoff.capped', {
+        run_id: runId,
+        requested: handoffEvents.length,
+        cap: MAX_HANDOFFS_PER_RUN,
+      })
+    }
+    for (const handoff of handoffEvents.slice(0, MAX_HANDOFFS_PER_RUN)) {
       await handleHandoffRequest(handoff, {
         supabase,
         roomId: runRow.room_id,

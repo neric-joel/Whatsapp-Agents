@@ -243,6 +243,120 @@ test('memory_op event is handled and a failing memory write does NOT break the r
   assert.equal(snapshotCounters().runs_failed, 0)
 })
 
+test('handoff_requested event creates a targeted peer run and the source run completes', async () => {
+  // Bespoke resolver shaped for the hand-off queries (rooms guards, room peer,
+  // chain lookup, dedup, targeted insert) — proves the run-worker wiring end to end.
+  const targetInserts: Array<Record<string, unknown>> = []
+  const runUpdates: Array<Record<string, unknown>> = []
+  const resolve: Resolver = (ctx) => {
+    if (ctx.table === 'agent_runs') {
+      if (ctx.op === 'insert') {
+        targetInserts.push(ctx.values ?? {})
+        return { data: { id: 'peer-run' }, error: null }
+      }
+      if (ctx.op === 'update') {
+        const v = ctx.values ?? {}
+        if (v.status === 'claimed' || v.status === 'running')
+          return { data: { id: 'run-1' }, error: null }
+        runUpdates.push(v)
+        return { data: null, error: null }
+      }
+      if (ctx.fields === 'status') return { data: { status: 'running' }, error: null }
+      // collectChainAgents: root run (single) → source agent; descendants → []
+      if (ctx.fields === 'agent_id')
+        return ctx.single
+          ? { data: { agent_id: 'agent-1' }, error: null }
+          : { data: [], error: null }
+      if (ctx.fields === 'id') return { data: [], error: null } // dedup → none
+      return { data: RUN_ROW, error: null } // initial full fetch
+    }
+    if (ctx.table === 'rooms')
+      return {
+        data: {
+          id: 'room-1',
+          name: 'Test Room',
+          reply_mode: 'everyone',
+          max_agent_rounds: 5,
+          discussion_mode: 'independent',
+          allow_agent_to_agent: true,
+          max_agent_hops: 6,
+        },
+        error: null,
+      }
+    if (ctx.table === 'room_members')
+      return {
+        data: [
+          {
+            agent_id: 'agent-B',
+            agents: {
+              id: 'agent-B',
+              name: 'Reviewer',
+              slug: 'reviewer',
+              capabilities: null,
+              is_active: true,
+            },
+          },
+        ],
+        error: null,
+      }
+    if (ctx.table === 'messages') {
+      if (ctx.op === 'insert') return { data: { id: 'reply-1' }, error: null }
+      return { data: [], error: null }
+    }
+    if (ctx.table === 'pinned_items') return { data: [], error: null }
+    if (ctx.table === 'files') return { data: [], error: null }
+    return { data: null, error: null }
+  }
+  const supabase = makeFakeSupabase(resolve) as never
+  const adapter = fakeAdapter(async function* (packet) {
+    yield {
+      type: 'handoff_requested',
+      run_id: packet.run_id,
+      to_agent_slug: 'reviewer',
+      reason: 'please review',
+    }
+    yield {
+      type: 'final_response',
+      run_id: packet.run_id,
+      response: {
+        schema_version: 1,
+        run_id: packet.run_id,
+        content: 'handing off',
+        content_type: 'text',
+      },
+    }
+  })
+
+  await processRun('run-1', { supabase, getAdapter: () => adapter })
+
+  assert.equal(targetInserts.length, 1, 'one targeted peer run created')
+  assert.equal(targetInserts[0]?.agent_id, 'agent-B')
+  assert.equal(targetInserts[0]?.round_index, 1)
+  assert.equal(targetInserts[0]?.deliberation_depth, 1)
+  assert.equal(targetInserts[0]?.trigger_msg_id, 'reply-1')
+  assert.equal(runUpdates.at(-1)?.status, 'completed', 'source run still completes')
+  assert.equal(snapshotCounters().runs_completed, 1)
+})
+
+test('a hand-off that resolves to an unknown peer does not break the run', async () => {
+  // Default harness returns no room_members → handoff blocked (unknown_target).
+  const { resolve, runUpdates } = makeHarness({ status: () => 'running' })
+  const supabase = makeFakeSupabase(resolve) as never
+  const adapter = fakeAdapter(async function* (packet) {
+    yield { type: 'handoff_requested', run_id: packet.run_id, to_agent_slug: 'ghost', reason: 'x' }
+    yield {
+      type: 'final_response',
+      run_id: packet.run_id,
+      response: { schema_version: 1, run_id: packet.run_id, content: 'done', content_type: 'text' },
+    }
+  })
+
+  await processRun('run-1', { supabase, getAdapter: () => adapter })
+
+  assert.equal(runUpdates.length, 1)
+  assert.equal(runUpdates[0]?.status, 'completed', 'a blocked hand-off never fails the run')
+})
+
 test('cancellation mid-run → run marked cancelled, child aborted, not re-thrown', async () => {
   let status = 'running'
   const { resolve, runUpdates } = makeHarness({ status: () => status })
