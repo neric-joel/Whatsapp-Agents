@@ -47,17 +47,20 @@ SELECT is(
 SELECT throws_ok(
   $$ SELECT system_prompt FROM public.agents WHERE id = 'cccccccc-cccc-cccc-cccc-cccccccccccc' $$,
   '42501',
+  NULL,
   'authenticated CANNOT read agents.system_prompt'
 );
 SELECT throws_ok(
   $$ SELECT tool_permissions FROM public.agents WHERE id = 'cccccccc-cccc-cccc-cccc-cccccccccccc' $$,
   '42501',
+  NULL,
   'authenticated CANNOT read agents.tool_permissions'
 );
 -- SELECT * pulls the revoked columns, so the whole-row read is denied too.
 SELECT throws_ok(
   $$ SELECT * FROM public.agents $$,
   '42501',
+  NULL,
   'authenticated SELECT * on agents is denied (covers the sensitive columns)'
 );
 
