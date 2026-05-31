@@ -1,5 +1,6 @@
 import { getBearerToken } from './api-auth'
 import { apiError } from './api-error'
+import { captureError } from './error-tracking'
 import { logger } from './logger'
 
 /**
@@ -135,5 +136,7 @@ export function internalError(context: string, raw: unknown, fields?: Record<str
   const detail = raw instanceof Error ? raw.message : String(raw)
   // The logger redacts secrets/PII in field values; the client still gets a generic message.
   logger.error('api.internal_error', { context, detail, ...fields })
+  // Forward to opt-in error tracking (no-op unless a DSN is configured).
+  captureError(raw, { context, ...fields })
   return apiError('INTERNAL_ERROR', 'An internal error occurred', 500)
 }
