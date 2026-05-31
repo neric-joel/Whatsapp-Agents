@@ -1,8 +1,8 @@
 import type { AgentEvent } from '@agentroom/shared'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-import { handleHandoffRequest } from '../agents/handoff.js'
 import { getAdapter as defaultGetAdapter } from '../adapters/registry.js'
+import { handleHandoffRequest } from '../agents/handoff.js'
 import { buildContextPacket } from '../context/build-context-packet.js'
 import { maybeScheduleAgentMentionFollowUps } from '../lib/agent-follow-up.js'
 import { sanitizeAgentOutput } from '../lib/agent-output.js'

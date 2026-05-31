@@ -1,4 +1,5 @@
 'use client'
+import { formatHelp, getCommandSpec, type MemberRole, roleAllows } from '@agentroom/shared'
 import {
   ChangeEvent,
   ClipboardEvent,
@@ -59,6 +60,7 @@ export default function ComposeBox({
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
   const [mentionStart, setMentionStart] = useState(-1)
   const [roomAgents, setRoomAgents] = useState<SlimAgent[]>([])
+  const [userRole, setUserRole] = useState<MemberRole>('member')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropdownRef = useRef<HTMLUListElement>(null)
@@ -80,6 +82,28 @@ export default function ComposeBox({
           .map((m) => ({ id: m.agents.id, slug: m.agents.slug, name: m.agents.name }))
         setRoomAgents(agents)
       })
+  }, [roomId])
+
+  useEffect(() => {
+    const supabase = createSupabaseBrowserClient()
+    let cancelled = false
+    void (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase
+        .from('room_members')
+        .select('role')
+        .eq('room_id', roomId)
+        .eq('user_id', user.id)
+        .maybeSingle()
+      const role = (data?.role as MemberRole | undefined) ?? 'member'
+      if (!cancelled) setUserRole(role)
+    })()
+    return () => {
+      cancelled = true
+    }
   }, [roomId])
 
   useEffect(() => {
@@ -198,6 +222,70 @@ export default function ComposeBox({
   }
 
   async function handleSlashCommand(cmd: SlashCommand) {
+    if (cmd.command === 'unknown') {
+      setSendError(`Unknown command: /${cmd.name}. Type /help to see what you can run.`)
+      return
+    }
+    // Server re-enforces RBAC; this is a friendly pre-check so over-privileged
+    // commands are not sent at all.
+    const spec = getCommandSpec(cmd.command)
+    if (spec && !roleAllows(userRole, spec.minRole)) {
+      setSendError(`/${spec.name} requires the ${spec.minRole} role.`)
+      return
+    }
+    if (cmd.command === 'help') {
+      setText('')
+      setSendError(null)
+      setNotice(formatHelp(userRole))
+      return
+    }
+    if (cmd.command === 'pin') {
+      if (!replyingTo) {
+        setSendError('Reply to a message first, then /pin to pin it.')
+        return
+      }
+      setSending(true)
+      try {
+        const res = await fetch(`/api/rooms/${roomId}/pins`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source_message_id: replyingTo.id, pin_type: 'message' }),
+        })
+        if (!res.ok) {
+          const json = (await res.json().catch(() => ({}))) as { error?: { message?: string } }
+          setSendError(json.error?.message ?? 'Failed to pin')
+          return
+        }
+        setText('')
+        setSendError(null)
+        setNotice('Pinned — see the Pinned panel.')
+        onCancelReply?.()
+      } finally {
+        setSending(false)
+      }
+      return
+    }
+    if (cmd.command === 'reset') {
+      setSending(true)
+      try {
+        const res = await fetch(`/api/rooms/${roomId}/reset`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        })
+        if (!res.ok) {
+          const json = (await res.json().catch(() => ({}))) as { error?: { message?: string } }
+          setSendError(json.error?.message ?? 'Failed to reset agent context')
+          return
+        }
+        setText('')
+        setSendError(null)
+        setNotice('Agent context reset. Agents start fresh from here.')
+        onRefetch()
+      } finally {
+        setSending(false)
+      }
+      return
+    }
     if (cmd.command === 'recall') {
       window.dispatchEvent(
         new CustomEvent<RecallEventDetail>(RECALL_EVENT, { detail: { roomId, query: cmd.query } }),
@@ -385,7 +473,7 @@ export default function ComposeBox({
         {!sendError && notice && (
           <p
             role="status"
-            className="absolute left-1 top-full mt-1 px-1 text-xs text-[var(--muted)]"
+            className="absolute bottom-full left-1 right-1 mb-1 max-h-48 overflow-y-auto whitespace-pre-line rounded-lg border border-[var(--border)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--muted)] shadow-sm"
           >
             {notice}
           </p>

@@ -63,21 +63,10 @@ export async function buildContextPacket({
 }: BuildContextArgs): Promise<ContextPacketV1> {
   const contextMessageLimit = readContextMessageLimit()
   const contextMessageMaxChars = readContextMessageMaxChars()
-  const { data: recentRaw } = await supabase
-    .from('messages')
-    .select('id, content, sender_type, sender_agent_id, created_at, metadata')
-    .eq('room_id', run.room_id)
-    .lte('created_at', triggerMsg.created_at)
-    .order('created_at', { ascending: false })
-    .limit(contextMessageLimit)
-  const recentMessages = trimContextMessages(
-    ((recentRaw ?? []) as RecentMsg[]).reverse(),
-    contextMessageMaxChars,
-  )
 
   const { data: roomRaw } = await supabase
     .from('rooms')
-    .select('id, name, reply_mode, max_agent_rounds, discussion_mode')
+    .select('id, name, reply_mode, max_agent_rounds, discussion_mode, context_reset_at')
     .eq('id', run.room_id)
     .single()
   if (!roomRaw) throw new Error(`Room ${run.room_id} not found`)
@@ -87,7 +76,26 @@ export async function buildContextPacket({
     reply_mode: string
     max_agent_rounds: number
     discussion_mode: DiscussionMode
+    context_reset_at: string | null
   }
+
+  // `/reset` (admin+) stamps a watermark: agents only see messages at/after it,
+  // so their rolling context starts fresh while the transcript stays intact.
+  let recentQuery = supabase
+    .from('messages')
+    .select('id, content, sender_type, sender_agent_id, created_at, metadata')
+    .eq('room_id', run.room_id)
+    .lte('created_at', triggerMsg.created_at)
+  if (room.context_reset_at) {
+    recentQuery = recentQuery.gte('created_at', room.context_reset_at)
+  }
+  const { data: recentRaw } = await recentQuery
+    .order('created_at', { ascending: false })
+    .limit(contextMessageLimit)
+  const recentMessages = trimContextMessages(
+    ((recentRaw ?? []) as RecentMsg[]).reverse(),
+    contextMessageMaxChars,
+  )
 
   const { data: pinnedItems } = await supabase
     .from('pinned_items')

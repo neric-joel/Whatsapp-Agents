@@ -101,3 +101,25 @@ export function getCommandSpec(name: string): CommandSpec | undefined {
 export function allowedCommands(userRole: MemberRole): CommandSpec[] {
   return Object.values(COMMAND_REGISTRY).filter((c) => roleAllows(userRole, c.minRole))
 }
+
+/**
+ * Detect a leading slash command. Returns the lowercased command name and the
+ * remaining argument text, or `null` when the input is plain text / an
+ * `@mention`. A command token is `^/<letter><word-chars…>` — this deliberately
+ * ignores stray leading slashes (paths, fractions) that are not command-like.
+ * Single source of truth for "is this a command?" across the parser + API.
+ */
+export function extractCommand(input: string): { name: string; rest: string } | null {
+  const m = /^\/([a-z][a-z0-9-]*)\b([\s\S]*)$/i.exec(input.trim())
+  if (!m) return null
+  return { name: (m[1] ?? '').toLowerCase(), rest: (m[2] ?? '').trim() }
+}
+
+/** Render the `/help` body listing exactly the commands `userRole` may run. */
+export function formatHelp(userRole: MemberRole): string {
+  const lines = allowedCommands(userRole).map((c) => {
+    const usage = c.argsSpec ? ` ${c.argsSpec}` : ''
+    return `/${c.name}${usage} — ${c.description}`
+  })
+  return ['Available commands:', ...lines].join('\n')
+}

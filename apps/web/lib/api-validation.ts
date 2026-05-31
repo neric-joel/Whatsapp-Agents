@@ -95,3 +95,62 @@ export const updateMemorySchema = z
     pinned: z.boolean().optional(),
   })
   .refine((d) => Object.keys(d).length > 0, 'At least one field required')
+
+// Phase 11 — user-created agents. adapter_type is allowlisted to the adapters the
+// bridge actually implements (an unknown type would crash the run-worker). A
+// user-set `system_prompt` is attacker-influenced: the bridge delivers it to the
+// CLI via stdin only, never argv (see bridge/src/lib/subprocess-security.ts and
+// the subprocess-security tests) — this schema does not relax that invariant.
+export const AGENT_ADAPTER_TYPES = [
+  'mock',
+  'claude-code',
+  'subprocess',
+  'codex-cli',
+  'myclaude',
+  'ruflo',
+] as const
+
+export const AGENT_PROVIDERS = [
+  'claude_code',
+  'codex',
+  'mock',
+  'ruflo',
+  'myclaude',
+  'openai',
+  'custom',
+] as const
+
+const agentSlug = z
+  .string()
+  .min(2)
+  .max(40)
+  .regex(/^[a-z0-9][a-z0-9_-]*$/, 'slug must be lowercase letters, numbers, _ or -')
+
+export const createAgentSchema = z.object({
+  // The room the new agent is added to — admin+ membership of it is required.
+  room_id: z.string().uuid(),
+  name: z.string().min(1).max(80),
+  slug: agentSlug,
+  avatar_url: z.string().url().max(2000).optional(),
+  provider: z.enum(AGENT_PROVIDERS),
+  adapter_type: z.enum(AGENT_ADAPTER_TYPES).optional(),
+  model: z.string().max(100).optional(),
+  system_prompt: z.string().max(8000).optional(),
+  capabilities: z.string().max(500).optional(),
+  reply_policy: z.enum(['always', 'reply_when_invoked', 'never']).optional(),
+  // Accepted for forward-compat but does NOT grant tool auto-approval: the bridge
+  // gates tools through the live approval flow, never this field.
+  tool_permissions: z.record(z.string(), z.unknown()).optional(),
+})
+
+export const updateAgentSchema = z
+  .object({
+    name: z.string().min(1).max(80).optional(),
+    avatar_url: z.string().url().max(2000).nullable().optional(),
+    model: z.string().max(100).nullable().optional(),
+    system_prompt: z.string().max(8000).nullable().optional(),
+    capabilities: z.string().max(500).nullable().optional(),
+    reply_policy: z.enum(['always', 'reply_when_invoked', 'never']).optional(),
+    is_active: z.boolean().optional(),
+  })
+  .refine((d) => Object.keys(d).length > 0, 'At least one field required')

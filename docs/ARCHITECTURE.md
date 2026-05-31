@@ -131,6 +131,45 @@ Because `deliberation_depth` strictly increases per hand-off and is bounded by
 The `/discuss` phase machine (`individual → critique → consensus`) and the
 `tag_turns` mention-follow-up path are bounded the same way by `max_agent_rounds`.
 
+## Slash commands & RBAC (Phase 11)
+
+A single **command registry** (`packages/shared/src/commands.ts`,
+`COMMAND_REGISTRY`) is the source of truth for every in-product slash command:
+`{ name, description, argsSpec, minRole, surface }`. Both the message parser
+(`apps/web/lib/slash-commands.ts`, via `extractCommand`) and the API read from it,
+so a command's existence and role gating live in one place. The v1 set:
+`/help`, `/commands`, `/discuss`, `/remember`, `/recall`, `/handoff`, `/agents`,
+`/pin`, `/reset`.
+
+**RBAC.** Roles are the per-room `MemberRole` (`owner > admin > member`). `roleAllows`
+ranks them; `allowedCommands`/`formatHelp` drive `/help`, which lists **exactly** the
+caller's permitted commands. Member-level commands need only room membership;
+admin-only commands (currently `/reset`) are enforced **server-side** — the
+`/reset` route calls `requireRoomAdmin`, so a `member` is rejected with 403 even if the
+UI did not hide the command. The parser never bypasses RLS or the tool-approval flow;
+unknown/over-privileged commands get a friendly rejection rather than being sent.
+
+**`/reset`** clears a room's *rolling agent context* without deleting data: it stamps
+`rooms.context_reset_at`, and the bridge context builder only includes messages created
+at/after that watermark. The transcript stays intact and the action is reversible.
+
+## User-created agents (Phase 11)
+
+Beyond adding seeded agents to a room, admins can author new agents:
+`POST /api/agents` (create + attach to a room), `PATCH/DELETE /api/agents/[agentId]`
+(edit / disable). **RBAC:** create requires `requireRoomAdmin` on the target room;
+edit/disable require being the agent's creator (`created_by_user_id = auth.uid()`).
+Seeded agents (`created_by_user_id IS NULL`) are not editable. `DELETE` disables
+(`is_active = false`) rather than hard-deleting, so it is reversible.
+
+**Security coupling (hard invariant).** A user-set `system_prompt` is fully
+attacker-controlled. It is persisted as data and reaches a CLI **only via stdin, never
+argv** — `buildArgs` is static and `buildStdin` carries the persona (see
+`subprocess-security.test.ts`). `adapter_type` is allowlisted to implemented adapters
+(an unknown type cannot reach the run worker), and `tool_permissions` is forced empty:
+a user-created agent gets **no** tool auto-approvals — every tool still flows through
+the approval gate.
+
 ## Trust boundaries
 
 - **Browser ↔ web**: untrusted client. Auth (Supabase) + RLS + per-route

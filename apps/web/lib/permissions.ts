@@ -40,3 +40,17 @@ export async function requireRoomOwner(
   const { isOwner } = await getRoomMembership(supabase, roomId, userId)
   if (!isOwner) throw apiError('FORBIDDEN', 'Owner required', 403)
 }
+
+/**
+ * Admin+ gate (admin or owner). Used by RBAC-gated commands (`/reset`) and by
+ * user-created-agent management — server-side enforcement, never UI-only.
+ */
+export async function requireRoomAdmin(
+  supabase: SupabaseClient,
+  roomId: string,
+  userId: string,
+): Promise<void> {
+  const { isMember, isAdmin } = await getRoomMembership(supabase, roomId, userId)
+  if (!isMember) throw apiError('FORBIDDEN', 'Not a room member', 403)
+  if (!isAdmin) throw apiError('FORBIDDEN', 'Admin required', 403)
+}

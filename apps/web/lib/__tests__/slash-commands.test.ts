@@ -70,11 +70,31 @@ describe('parseSlashCommand', () => {
     expect(parseSlashCommand('/agents list')).toEqual({ command: 'agents' })
   })
 
+  it('parses /help and /commands (alias) to a help command', () => {
+    expect(parseSlashCommand('/help')).toEqual({ command: 'help' })
+    expect(parseSlashCommand('/commands')).toEqual({ command: 'help' })
+  })
+
+  it('parses /pin and /reset', () => {
+    expect(parseSlashCommand('/pin')).toEqual({ command: 'pin' })
+    expect(parseSlashCommand('/reset')).toEqual({ command: 'reset' })
+  })
+
+  it('returns an unknown marker for unregistered slash commands (friendly rejection)', () => {
+    expect(parseSlashCommand('/foo bar')).toEqual({ command: 'unknown', name: 'foo' })
+    // a superset/typo of a real command is unknown, not silently sent
+    expect(parseSlashCommand('/rememberance is not a command')).toEqual({
+      command: 'unknown',
+      name: 'rememberance',
+    })
+    expect(parseSlashCommand('/agentsfoo')).toEqual({ command: 'unknown', name: 'agentsfoo' })
+  })
+
   it('does not match @mentions, plain text, or /discuss', () => {
     expect(parseSlashCommand('@claude_thinker hello')).toBeNull()
     expect(parseSlashCommand('just a normal message')).toBeNull()
     expect(parseSlashCommand('/discuss should we ship?')).toBeNull()
-    expect(parseSlashCommand('/rememberance is not a command')).toBeNull()
-    expect(parseSlashCommand('/agentsfoo')).toBeNull()
+    // a stray leading slash that is not command-like flows through as a message
+    expect(parseSlashCommand('/123 not a command')).toBeNull()
   })
 })
