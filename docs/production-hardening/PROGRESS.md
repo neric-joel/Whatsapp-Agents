@@ -201,9 +201,27 @@ Already exists: list global agents; add/remove/mute **seeded** agents per room (
 
 ---
 
-## 2026-05-30 — GOAL: Phase 6 — Observability, reliability & error handling — **DONE ✅ (PR pending CI/merge)**
-- Phase: 6 (Observability). Branch: `harden/p6-observability-reliability` (off Phase 5 HEAD). PR → `main` (per the stacked-PR dirty-merge note).
-- Iteration budget: 12. State: **DONE** — judge-gated: all boxes checked w/ evidence; critique (chaos critic + code-reviewer) **PASS** after fixes, 0 open Critical/High; local gate green. CI confirmation: see Night log / `gh pr checks`.
+## 2026-05-31 — GOAL: Phase 7 — Documentation & open-source readiness — **ACTIVE**
+- Phase: 7 (Docs/OSS). Branch: `harden/p7-docs-oss` (stacked off Phase 6 HEAD). PR → `main` (per the stacked-PR dirty-merge note).
+- Iteration budget: 10. State: ACTIVE.
+- Acceptance criteria (testable; from 01_HARDENING_PLAN §Phase 7 + DoD; headless-completable per the overnight scope):
+  - [ ] `LICENSE` present (safe reversible default: **MIT** — owner can change; logged for morning). `package.json` `license` set to match.
+  - [ ] `CONTRIBUTING.md` (clone→run, branch/PR/commit conventions, test/lint gates, the `/do` + hardening loop context) and `CODE_OF_CONDUCT.md` (Contributor Covenant).
+  - [ ] `SECURITY.md` — disclosure policy + the **subprocess/bridge trust model** (the bridge runs CLIs on the host) + the opt-in OpenAI image egress.
+  - [ ] `CODEOWNERS` (owner = repo owner) + `.github/ISSUE_TEMPLATE/` (bug + feature + config.yml).
+  - [ ] `docs/ARCHITECTURE.md` — data-flow, the `agent_runs` queue contract, the bridge adapter model, trust boundaries (diagram in text/mermaid), links to OBSERVABILITY/SELF_HOSTING.
+  - [ ] `docs/adr/` — ADRs for the significant Phase 1–6 decisions (stack lock, local-Supabase default, subprocess sandbox, opt-in egress, observability surfaces) + an ADR index/template.
+  - [ ] One env-var reference table (web + bridge) — in ARCHITECTURE or a dedicated doc; cross-checked against `.env.example`s + zod schemas.
+  - [ ] `CHANGELOG.md` (Keep a Changelog, `Unreleased` section). NOTE: the v1.0.0 tag/release is Phase 8 + human-gated — do NOT tag here.
+  - [ ] Critique gate (DX & Docs Reviewer + newcomer-persona Critic — can a fresh reader set up + explain the architecture from docs alone?) PASS → `docs/reviews/`; markdown links valid; no Critical/High.
+
+Judge rule: DONE only when every box is checked with linked evidence and no Critical/High is open.
+
+---
+
+## 2026-05-30 — GOAL: Phase 6 — Observability, reliability & error handling — **DONE ✅ (PR #10, CI green)**
+- Phase: 6 (Observability). Branch: `harden/p6-observability-reliability`. PR: **#10 (→ `main`)**.
+- Iteration budget: 12. State: **DONE** — judge-gated: all boxes checked w/ evidence; critique (chaos critic + code-reviewer) **PASS** after fixes, 0 open Critical/High; local gate green; **CI green on PR #10** (`verify` + `build-images` smoke-tests + Playwright e2e + `rls` + `secret-scan` + `codeql`/`CodeQL` all PASS; `audit` allowed-red per D3).
 - Acceptance criteria (testable; from 01_HARDENING_PLAN §Phase 6 + DoD):
   - [x] Structured logging (JSON: level, timestamp, worker_id, run/correlation IDs) in BOTH bridge + web API; secrets/PII redacted; stray `console.*` replaced. Unit test proves redaction + shape. → shared `createLogger` (`ae0d7ef`) + unified `redactDeep` (logger + error tracking); `no-console` lint; `logger.test.ts`.
   - [x] Health/readiness: `/api/health` reflects reality; bridge liveness observable (heartbeat/health signal); stale-run recovery documented. → web `/api/health` best-effort DB ping (always 200, `force-dynamic`); bridge `/healthz` HTTP server (`last_poll_at`, active/queued); stale-run recovery + heartbeat documented in `docs/OBSERVABILITY.md`. Tests: `health.test.ts`, `health-server.test.ts`.
