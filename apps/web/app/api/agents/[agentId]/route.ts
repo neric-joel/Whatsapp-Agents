@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 
 import { apiError, apiSuccess } from '@/lib/api-error'
-import { assertSameOrigin, internalError } from '@/lib/api-security'
+import { assertSameOrigin, enforceRateLimit, internalError } from '@/lib/api-security'
 import { updateAgentSchema } from '@/lib/api-validation'
 import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
 
@@ -12,7 +12,8 @@ interface RouteParams {
 /**
  * Loads the agent and asserts the caller created it. Seeded agents
  * (`created_by_user_id IS NULL`) and other users' agents are never editable —
- * this is the ownership gate for edit/disable.
+ * this is the ownership gate for edit/disable. Also rate-limits per user (each
+ * call does a DB read), mirroring the memory sub-resource route.
  */
 async function requireAgentCreator(req: NextRequest, agentId: string) {
   const {
@@ -20,6 +21,9 @@ async function requireAgentCreator(req: NextRequest, agentId: string) {
     error: authErr,
   } = await getAuthenticatedUser(req)
   if (authErr || !user) return { error: apiError('UNAUTHORIZED', 'Unauthorized', 401) }
+
+  const limited = enforceRateLimit(`agent-mutate:${user.id}`, 60, 60_000)
+  if (limited) return { error: limited }
 
   const supabase = createSupabaseServiceClient()
   const { data: agent } = await supabase

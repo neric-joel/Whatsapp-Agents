@@ -62,6 +62,20 @@ export async function POST(req: NextRequest) {
     return e as Response
   }
 
+  // Reject a slug that already names an active agent in this room — mention +
+  // hand-off resolution is by slug within the room, so duplicates are ambiguous.
+  const { data: clash } = await supabase
+    .from('room_members')
+    .select('agent_id, agents!inner(slug, is_active)')
+    .eq('room_id', input.room_id)
+    .eq('member_type', 'agent')
+  const slugTaken = (
+    (clash ?? []) as unknown as Array<{ agents: { slug: string; is_active: boolean } | null }>
+  ).some((m) => m.agents?.is_active && m.agents.slug === input.slug)
+  if (slugTaken) {
+    return apiError('CONFLICT', 'An agent with that slug is already in this room', 409)
+  }
+
   const { data: agent, error: agentErr } = await supabase
     .from('agents')
     .insert({
@@ -95,9 +109,11 @@ export async function POST(req: NextRequest) {
     reply_enabled: true,
     muted: false,
   })
-  // The agent exists even if room attach races; surface a soft warning rather
-  // than failing the whole create (a duplicate member is harmless).
+  // A duplicate member (23505) is harmless. Any other attach failure would leave
+  // an orphan agent (owned, attached to no room, polluting the slug namespace):
+  // disable it before returning so create+attach is effectively all-or-nothing.
   if (memberErr && memberErr.code !== '23505') {
+    await supabase.from('agents').update({ is_active: false }).eq('id', agent.id)
     return internalError('agent create room attach', memberErr)
   }
 

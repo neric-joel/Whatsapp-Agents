@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { assertSameOrigin, enforceRateLimit, internalError } from '@/lib/api-security'
+import { logger } from '@/lib/logger'
 import { requireRoomAdmin } from '@/lib/permissions'
 import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
 
@@ -45,7 +46,8 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     .eq('id', roomId)
   if (updErr) return internalError('room context reset', updErr)
 
-  await supabase.from('messages').insert({
+  // Best-effort transcript notice — the reset itself already succeeded above.
+  const { error: noticeErr } = await supabase.from('messages').insert({
     room_id: roomId,
     sender_type: 'system',
     content: 'Agent context was reset by an admin. Agents start fresh from here.',
@@ -54,6 +56,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     target_agent_ids: [],
     round_index: 0,
   })
+  if (noticeErr) logger.error('room.reset.notice_failed', { room_id: roomId })
 
   return apiSuccess({ context_reset_at: now })
 }

@@ -126,12 +126,20 @@ const agentSlug = z
   .max(40)
   .regex(/^[a-z0-9][a-z0-9_-]*$/, 'slug must be lowercase letters, numbers, _ or -')
 
+// Avatars are rendered as <img src>. Constrain to https to avoid mixed-content /
+// tracking-pixel / (future) SSRF surfaces from an arbitrary URL scheme.
+const avatarUrl = z
+  .string()
+  .url()
+  .max(2000)
+  .refine((u) => u.startsWith('https://'), 'avatar_url must be an https URL')
+
 export const createAgentSchema = z.object({
   // The room the new agent is added to — admin+ membership of it is required.
   room_id: z.string().uuid(),
   name: z.string().min(1).max(80),
   slug: agentSlug,
-  avatar_url: z.string().url().max(2000).optional(),
+  avatar_url: avatarUrl.optional(),
   provider: z.enum(AGENT_PROVIDERS),
   adapter_type: z.enum(AGENT_ADAPTER_TYPES).optional(),
   model: z.string().max(100).optional(),
@@ -146,7 +154,7 @@ export const createAgentSchema = z.object({
 export const updateAgentSchema = z
   .object({
     name: z.string().min(1).max(80).optional(),
-    avatar_url: z.string().url().max(2000).nullable().optional(),
+    avatar_url: avatarUrl.nullable().optional(),
     model: z.string().max(100).nullable().optional(),
     system_prompt: z.string().max(8000).nullable().optional(),
     capabilities: z.string().max(500).nullable().optional(),

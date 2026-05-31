@@ -61,6 +61,7 @@ export default function ComposeBox({
   const [mentionStart, setMentionStart] = useState(-1)
   const [roomAgents, setRoomAgents] = useState<SlimAgent[]>([])
   const [userRole, setUserRole] = useState<MemberRole>('member')
+  const [roleLoaded, setRoleLoaded] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropdownRef = useRef<HTMLUListElement>(null)
@@ -99,7 +100,10 @@ export default function ComposeBox({
         .eq('user_id', user.id)
         .maybeSingle()
       const role = (data?.role as MemberRole | undefined) ?? 'member'
-      if (!cancelled) setUserRole(role)
+      if (!cancelled) {
+        setUserRole(role)
+        setRoleLoaded(true)
+      }
     })()
     return () => {
       cancelled = true
@@ -227,9 +231,11 @@ export default function ComposeBox({
       return
     }
     // Server re-enforces RBAC; this is a friendly pre-check so over-privileged
-    // commands are not sent at all.
+    // commands are not sent at all. Skip it until the role has loaded so an
+    // admin is never falsely blocked by the default 'member' (the server is the
+    // real gate either way).
     const spec = getCommandSpec(cmd.command)
-    if (spec && !roleAllows(userRole, spec.minRole)) {
+    if (roleLoaded && spec && !roleAllows(userRole, spec.minRole)) {
       setSendError(`/${spec.name} requires the ${spec.minRole} role.`)
       return
     }

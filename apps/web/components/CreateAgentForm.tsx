@@ -152,6 +152,9 @@ export default function CreateAgentForm({ roomId, onCreated }: Props) {
         maxLength={8000}
         className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--panel)] px-2 py-1.5 text-xs text-[var(--text)]"
       />
+      <p className="text-[10px] leading-4 text-[var(--muted)]">
+        Visible to room members — don’t put secrets in the system prompt.
+      </p>
       {error && (
         <p role="alert" className="text-xs text-red-600">
           {error}
