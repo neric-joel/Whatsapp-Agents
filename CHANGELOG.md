@@ -11,6 +11,27 @@ into a self-hostable, OSS-ready project. Highlights by phase:
 
 ### Added
 
+- **In-product slash commands + RBAC (Phase 11).** A central command registry
+  (`COMMAND_REGISTRY`) drives both the parser and the API; the v1 set is `/help`,
+  `/commands`, `/discuss`, `/remember`, `/recall`, `/handoff`, `/agents`, `/pin`,
+  `/reset`. Role tiers (`owner > admin > member`) are enforced **server-side**;
+  `/help` lists exactly the caller's allowed commands; `/reset` (admin+) clears a
+  room's rolling agent context reversibly (no data deleted).
+- **User-created agents (Phase 11).** Admins can create / edit / disable agents from
+  the UI (`POST/PATCH/DELETE /api/agents`), attached to a room as members. A user-set
+  `system_prompt` reaches a CLI via stdin only (never argv); `adapter_type` is
+  allowlisted and `tool_permissions` cannot grant auto-approval.
+- **First-class agent-to-agent interaction (Phase 10).** Agent `capabilities` + a
+  peer `roster` in `ContextPacketV1`; an agent-emitted `handoff_requested` event
+  creates a targeted peer run under hop/round caps + cycle detection; `/handoff @agent`
+  and `/agents` slash commands.
+- **In-product agent memory (Phase 9).** `agent_memory` + `user_profile` tables
+  (Postgres FTS recall) with service-role-only writes; the bridge validates and
+  injection-scans every agent `memory_op` (stored as data, never instructions);
+  `/remember` + `/recall` + a Memory panel.
+- **Release engineering (Phase 8).** A tag-triggered `release.yml` workflow that
+  re-runs the full gate, builds both images, and publishes a GitHub Release (inert
+  until a human pushes a semver tag).
 - **Observability & reliability (Phase 6).** Structured, secret-redacted JSON logging
   shared by web + bridge; web `/api/health` database-readiness ping; a bridge
   `/healthz` + `/metrics` HTTP server (Prometheus exposition); opt-in error tracking

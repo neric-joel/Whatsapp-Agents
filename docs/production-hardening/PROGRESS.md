@@ -209,10 +209,10 @@ Already exists: list global agents; add/remove/mute **seeded** agents per room (
 
 ---
 
-## 2026-05-31 — GOAL: Phase 11 — In-product slash commands + command registry + user-created agents — **DONE ✅ (PR pending, CI confirm)**
-- Phase: 11 (Commands + user-agents — the final Hermes phase). Branch: `harden/p11-commands-user-agents` (stacked off p10 HEAD). PR → `main` (clean CI per the stacked-dirty-merge note).
+## 2026-05-31 — GOAL: Phase 11 — In-product slash commands + command registry + user-created agents — **DONE ✅ (PR #16, CI green)**
+- Phase: 11 (Commands + user-agents — the final Hermes phase). Branch: `harden/p11-commands-user-agents` (stacked off p10 HEAD). PR: **#16 (→ `main`)**.
 - Design source: `04_HERMES_CAPABILITIES.md` §Phase 11 + the §"User-created agents" re-scope in the Fresh-audit section + DoD §"Hermes capabilities" (Commands + User-created agents boxes).
-- Iteration budget: 14 (two workstreams: command registry/RBAC + create/edit/disable agents). State: **DONE** — judge-gated: all criteria met w/ evidence; **security-auditor PASS + code-reviewer PASS** (0 Critical/High); local gate green; PR/CI confirm pending.
+- Iteration budget: 14 (two workstreams: command registry/RBAC + create/edit/disable agents). State: **DONE** — judge-gated: all criteria met w/ evidence; **security-auditor PASS + code-reviewer PASS** (0 Critical/High); local gate green; **CI green on PR #16** (`verify`/`build-images`/`Playwright`/`rls`/`secret-scan`/`codeql`/`CodeQL` PASS; `audit` allowed-red per D3).
 - Acceptance criteria (testable):
   - [x] **Central command registry** in `packages/shared` (`commands.ts` `COMMAND_REGISTRY` = `{ name, description, argsSpec, minRole, surface }`); both the parser (`extractCommand`) and the API read it. `commands-registry.test.ts` enumerates the v1 set.
   - [x] **RBAC tiers** on `MemberRole` (owner > admin > member): `/help`/`/commands` always allowed; `/reset` requires admin+. **Server-side enforcement** via `requireRoomAdmin` (`/reset` route + `POST /api/agents`); `permissions.test.ts` proves a `member`/non-member is rejected with 403 (not UI-only).
@@ -220,9 +220,9 @@ Already exists: list global agents; add/remove/mute **seeded** agents per room (
   - [x] **v1 command set** wired: `/help`, `/commands`, `/discuss`, `/remember`, `/recall`, `/handoff`, `/agents`, `/pin`, `/reset` (admin+). `/reset` clears the rolling agent context **reversibly** via `rooms.context_reset_at` (migration `20260531000003`) honored by the bridge context builder — no data deleted. `/help` lists exactly the caller's allowed commands (`formatHelp`).
   - [x] **User-created agents:** `POST /api/agents` (admin+ of the target room, auto-attached as a member) + `PATCH/DELETE /api/agents/[agentId]` (creator-gated; DELETE = soft disable). `createAgentSchema`/`updateAgentSchema` (adapter_type allowlisted; tool_permissions forced empty). `CreateAgentForm` in `AgentsPanel` (admin-only) + creator Disable. `create-agent-validation.test.ts` + `permissions.test.ts` prove non-admin create / non-creator edit is rejected.
   - [x] **⚠ Security coupling (MANDATORY):** `subprocess-security.test.ts` proves a user-created agent's `system_prompt` (hostile shell metachars + an injected `--dangerously-skip-permissions`) never reaches argv and is delivered via stdin only. **security-auditor PASS** confirmed `buildArgs` is static in both adapters + `shell:false`.
-  - [x] Critique gate: **security-auditor (MANDATORY) PASS + code-reviewer PASS**, 0 open Critical/High → `docs/reviews/2026-05-31-phase11-commands-user-agents.md` (Med/Low fixed: rate-limit PATCH/DELETE, orphan-agent cleanup, in-room slug-clash reject, https avatar, notice-log, role-load gate). Local gate green: typecheck ✓ · lint 0-err ✓ · format ✓ · knip 0 ✓ · **bridge 140 / web 149** ✓ · `next build` 0 Edge warnings ✓. **CI green on the PR** — pending confirmation.
+  - [x] Critique gate: **security-auditor (MANDATORY) PASS + code-reviewer PASS**, 0 open Critical/High → `docs/reviews/2026-05-31-phase11-commands-user-agents.md` (Med/Low fixed: rate-limit PATCH/DELETE, orphan-agent cleanup, in-room slug-clash reject, https avatar, notice-log, role-load gate). Local gate green: typecheck ✓ · lint 0-err ✓ · format ✓ · knip 0 ✓ · **bridge 140 / web 149** ✓ · `next build` 0 Edge warnings ✓. **CI green on PR #16** ✓.
 
-Judge rule: DONE only when every criterion is checked with linked evidence and no Critical/High is open. Server-side RBAC enforcement + the user-`system_prompt` injection-safety test are hard gates — **both met**. Remaining: confirm PR CI green.
+Judge rule: DONE only when every criterion is checked with linked evidence and no Critical/High is open. Server-side RBAC enforcement + the user-`system_prompt` injection-safety test are hard gates — **both met**. **CI green on PR #16 — Phase 11 fully DONE.**
 
 ---
 

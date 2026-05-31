@@ -57,12 +57,12 @@ linked evidence** (a merged PR, a green CI run, a saved review, or a screenshot)
 - [x] Significant Phase 1–6 decisions captured as ADRs `docs/adr/0001–0008` + index + template.
 - [x] DX/Docs "newcomer" review = **PASS** (0 Critical/High; 2 Med + 3 Low doc-accuracy fixes applied) → `docs/reviews/2026-05-31-phase7-docs-oss.md`.
 
-### Hermes capabilities (Phases 9–11)
-- [ ] **Memory:** `agent_memory` + `user_profile` exist with RLS; agents curate memory via the bridge-validated `memory_op` path (no direct table writes); recall is injected into `ContextPacketV1`; `/remember` + `/recall` work.
-- [ ] **Memory safety:** every memory write is prompt-injection scanned and stored as data, not instructions; a red-team test proves stored memory cannot change agent permissions or override the system prompt.
-- [ ] **Agent-to-agent:** roster + capabilities appear in the context packet; `/handoff @agent` creates a targeted run under the hop/round loop guards; chains terminate (proven by a cycle/loop-guard test); `/agents` reflects reality.
-- [ ] **Commands:** one central registry drives parsing + dispatch; RBAC tiers are enforced server-side (a `member` cannot run an `admin` command); `/help` lists exactly the caller's allowed commands; existing `/discuss` + `@mention` tests still pass.
-- [ ] **User-created agents:** admins can create / edit / disable agents from the UI (name, slug, avatar, provider/adapter_type, model, system_prompt, capabilities, reply_policy, tool_permissions), persisted to `agents` and added as `room_members`; gated to admin+ and validated server-side; surfaced in AgentsPanel/RoomAgentsPanel + the agents API; non-admins cannot create/edit (test proves it).
+### Hermes capabilities (Phases 9–11) — DONE ✅ (PRs #14/#15/#16, CI green)
+- [x] **Memory:** `agent_memory` + `user_profile` exist with RLS; agents curate memory via the bridge-validated `memory_op` path (no direct table writes); recall is injected into `ContextPacketV1`; `/remember` + `/recall` work. _(PR #14)_
+- [x] **Memory safety:** every memory write is prompt-injection scanned and stored as data, not instructions; `memory-format-redteam.test.ts` proves stored memory cannot change agent permissions or override the system prompt; security-auditor PASS. _(PR #14)_
+- [x] **Agent-to-agent:** roster + capabilities appear in the context packet; `/handoff @agent` creates a targeted run under the hop/round loop guards; chains terminate (cycle/hop/round-cap tests); `/agents` reflects reality. _(PR #15)_
+- [x] **Commands:** one central registry (`COMMAND_REGISTRY`) drives parsing + dispatch; RBAC enforced server-side (`requireRoomAdmin` — a `member` cannot run `/reset`, `permissions.test.ts`); `/help` lists exactly the caller's allowed commands; `/discuss` + `@mention` tests still pass. _(PR #16)_
+- [x] **User-created agents:** admins create / edit / disable agents from the UI (name, slug, avatar, provider/adapter_type, model, system_prompt, capabilities, reply_policy, tool_permissions), persisted to `agents` + added as `room_members`; admin+ gated + validated server-side; surfaced in AgentsPanel + the agents API; non-admins cannot create/edit (`create-agent-validation.test.ts` + `permissions.test.ts`); user `system_prompt` reaches the CLI via stdin only (`subprocess-security.test.ts`). _(PR #16)_
 
 ### Release (Phase 8)
 - [ ] `CHANGELOG.md` complete; SemVer adopted; dependencies locked for reproducible builds.
