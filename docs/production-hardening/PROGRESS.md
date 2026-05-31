@@ -203,9 +203,23 @@ Already exists: list global agents; add/remove/mute **seeded** agents per room (
 
 ---
 
-## 2026-05-31 — GOAL: Phase 7 — Documentation & open-source readiness — **DONE ✅ (PR pending CI/merge)**
-- Phase: 7 (Docs/OSS). Branch: `harden/p7-docs-oss` (stacked off Phase 6 HEAD). PR → `main` (per the stacked-PR dirty-merge note).
-- Iteration budget: 10. State: **DONE** — judge-gated: all boxes checked w/ evidence; DX/Docs newcomer critique **PASS** (0 Critical/High); format/typecheck/knip green. CI confirmation: see Night log / `gh pr checks`.
+## 2026-05-31 — GOAL: Phase 8 (automatable parts) — Release engineering scaffold — **ACTIVE**
+- Phase: 8 (Release eng). Branch: `harden/p8-release-scaffold` (stacked off Phase 7 HEAD). PR → `main`.
+- Iteration budget: 6. State: ACTIVE. **Scope-limited per the overnight policy:** ONLY the automatable, reversible parts. The **v1.0.0 tag + GitHub release publish are HUMAN-GATED** (DEFER) and are NOT done here.
+- Acceptance criteria:
+  - [x] `CHANGELOG.md` (Keep a Changelog, `Unreleased`) — created in Phase 7.
+  - [ ] `.github/workflows/release.yml` — a **tag-triggered** (`v*`) workflow that runs the full gate (typecheck/lint/test/build), builds the container images, and creates a GitHub Release with notes. Guarded so it only fires on a pushed tag (no auto-tagging); safe to merge inert.
+  - [ ] Workflow is YAML-valid + consistent with existing CI (Node 22, pnpm 11). Documented in CHANGELOG/release notes section.
+  - [ ] Critique gate (Adversarial/CI-safety: can this fire destructively or leak secrets?) PASS → `docs/reviews/`; no Critical/High.
+- **DEFER (human-gated, NOT attempted):** the actual `v1.0.0` tag, the release publish, final full-suite-on-`main` + DoD-complete sign-off (Phase 8 close), and Phases 9–11 (need `/brainstorm` approval).
+
+Judge rule: DONE only when the automatable boxes are checked with evidence and no Critical/High is open. (Phase 8 *fully* closes only with the human-gated tag — tracked separately.)
+
+---
+
+## 2026-05-31 — GOAL: Phase 7 — Documentation & open-source readiness — **DONE ✅ (PR #11, CI green)**
+- Phase: 7 (Docs/OSS). Branch: `harden/p7-docs-oss`. PR: **#11 (→ `main`)**.
+- Iteration budget: 10. State: **DONE** — judge-gated: all boxes checked w/ evidence; DX/Docs newcomer critique **PASS** (0 Critical/High); local gate green; **CI green on PR #11** (`verify` + `build-images` + Playwright e2e + `rls` + `secret-scan` + `codeql`/`CodeQL` PASS; `audit` allowed-red per D3).
 - Acceptance criteria (testable; from 01_HARDENING_PLAN §Phase 7 + DoD; headless-completable per the overnight scope):
   - [ ] `LICENSE` present (safe reversible default: **MIT** — owner can change; logged for morning). `package.json` `license` set to match.
   - [ ] `CONTRIBUTING.md` (clone→run, branch/PR/commit conventions, test/lint gates, the `/do` + hardening loop context) and `CODE_OF_CONDUCT.md` (Contributor Covenant).
