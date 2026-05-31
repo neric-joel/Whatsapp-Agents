@@ -42,6 +42,41 @@ Dates are absolute. **Base of record: `origin/main` (`f780235`).**
 
 ---
 
+## Overnight scope (2026-05-30 night → unattended until morning 2026-05-31)
+
+Owner is asleep; the headless runner (`scripts/agent-runner.ps1`) is the **sole driver**.
+ACTIVE goal = **Phase 6 — Observability & reliability** (criteria 2–5 remaining;
+criterion 1 = structured logging, DONE in `ae0d7ef`).
+
+**DO autonomously** — each via the full loop (verify → `/critique` → `/ship` PR →
+**GitHub CI green** per the CI-AWARE rule). **PRs target `main`** (the stacked branches
+have duplicate-Node-22 dirty merges — see For-morning-review — so target `main` for clean CI):
+1. Finish **Phase 6** — criteria 2–5: health/liveness (bridge `/healthz` + `/api/health` DB ping),
+   opt-in error tracking (no-op without DSN), reliability fixes, minimal metrics.
+2. **Phase 7 — OSS readiness:** `LICENSE`, `CONTRIBUTING.md`, `SECURITY.md`,
+   `CODE_OF_CONDUCT.md`, `CHANGELOG.md`, `CODEOWNERS`, `docs/ARCHITECTURE.md`, `docs/adr/`,
+   an env-var reference table, `.github/ISSUE_TEMPLATE/` + PR template.
+3. **Phase 8 (automatable parts only):** `CHANGELOG.md`, a `.github/workflows/release.yml`.
+   Do NOT publish a release or create a tag (see DEFER).
+
+**DEFER → log under "## For morning review"; do NOT attempt unattended:**
+- Feature **Phases 9–11** (memory, A2A, commands + user-created agents) — need the owner's
+  `/brainstorm` approval before any build.
+- **v1.0.0 tag + release publish** — human-gated.
+- **next@14→15** breaking upgrade (decision D3).
+- **Phase 4 live sign-offs** (Lighthouse / axe on authed pages / screenshots) — need a seeded running app.
+
+**Phase 6 criterion 4 (run state machine) is delicate:** make the **smallest safe diffs**
+and run the **full bridge test suite on every change**. If a change is not provably safe
+(tests can't confirm it), **revert it and log it under "## For morning review"** rather than
+risk a stuck-/lost-run regression.
+
+**Invariants:** never touch `main` directly or merge PRs (owner merges at breakfast);
+never commit secrets; never create `DONE.flag` (the DoD is far from 0 unchecked + no `v1.` tag).
+Local Docker is wedged (needs a reboot) — rely on CI for image/e2e/db verification.
+
+---
+
 ## PIVOT to origin/main — 2026-05-30 (night)
 
 **Discovery:** the local checkout was **45 commits stale** (`7833573`); real
@@ -146,6 +181,7 @@ Already exists: list global agents; add/remove/mute **seeded** agents per room (
 ---
 
 ## For morning review
+- **[OVERNIGHT DEFERRALS — owner action, NOT attempted unattended]** Per the `## Overnight scope` policy, the runner is told to SKIP these and leave them for you: (1) **Phases 9–11** (memory, agent-to-agent, commands + user-created agents) — need your `/brainstorm` approval before building; (2) **v1.0.0 tag + GitHub release publish** — human-gated; (3) **`next@14→15`** breaking upgrade (D3) — its own PR + ADR; (4) **Phase 4 live sign-offs** (Lighthouse ≥95, axe on authenticated room/pins pages, before/after screenshots, keyboard walkthrough) — need a seeded running app. Also: **reboot to clear the wedged Docker/WSL VM**, then reclaim the ~22 GB Docker build cache (`docker builder prune -af` + `docker image prune -af`; volumes are safe). Check overnight PRs are CI-green and merge bottom-up.
 - **[⚠ DISK CRITICAL — owner action]** The dev machine's **C: is at 100% (≈1.4 GB free of 226 GB).** During Phase 5 this exhausted the last space, **wedged the Docker daemon** (`docker system/buildx prune` hung), and blocked local `docker build` + risks any local build/test. Freed what I safely could (truncated build logs; **never touched Supabase volumes**). Owner: reclaim space — once Docker is responsive run `docker buildx prune -af` + `docker image prune -af` (safe; leaves volumes), and/or clear other caches / expand the disk. Until then, **Phase 5 image-build verification runs in CI** via the new `.github/workflows/docker.yml` (build-only). `next build` was also deferred to CI locally for the same reason.
 - **[⚠ STACKED-PR DIRTY MERGES — owner decision]** The morning "Node-22 on all 6 branches" created **duplicate commits** (e.g. `f3726be` on p4 vs `bbbb197` on p5) that touch the same files, so **adjacent stacked branches conflict on merge** (`mergeable_state=dirty`) — which silently prevents `pull_request` CI from firing. I retargeted **PR #9 (Phase 5) → `main`** (a clean ancestor) so CI could run + verify; its diff is the full stack until #4→#8 land, after which it shrinks to the p5 delta. Recommend the same retarget-to-main (or a clean re-stack/rebase) for any stacked PR that shows no checks. Merging bottom-up #4→#8 may also hit these dup-commit conflicts.
 - **[CI FIXED ✅ this session]** All PRs now go green after Node-22 + gitleaks-allowlist on all 6 branches (`verify`/`secret-scan`/`codeql` pass; `audit` stays informational-red per D3). Merge **bottom-up #4→#5→#6→#7→#8**. Confirm the Phase-3-added `e2e.yml`/`db-tests.yml` jobs pass or are properly gated. **Remaining to v1.0:** finish Phase 5 (Docker/compose/devcontainer/SELF_HOSTING), Phases 6–8, feature Phases 9–11 (need `/brainstorm` design), and the Phase 4 live-app sign-offs.
