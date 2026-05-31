@@ -1,6 +1,8 @@
 import 'dotenv/config'
 
 import { loadBridgeEnv } from './lib/env.js'
+import { errorTrackingEnabled } from './lib/error-tracking.js'
+import { createHealthServer } from './lib/health-server.js'
 import { log } from './lib/logger.js'
 import { recoverStaleRuns } from './lib/stale-runs.js'
 import { createServiceClient } from './lib/supabase.js'
@@ -13,10 +15,14 @@ const MAX_CONC = env.BRIDGE_MAX_CONCURRENT_RUNS
 const HEARTBEAT_MS = env.BRIDGE_HEARTBEAT_INTERVAL_MS
 const STALE_MS = env.BRIDGE_STALE_RUN_TIMEOUT_MS
 const STALE_SWEEP_MS = Math.max(HEARTBEAT_MS, Math.min(STALE_MS, 30000))
+const HEALTH_PORT = env.BRIDGE_HEALTH_PORT
 
 const activeRuns = new Set<string>()
+const startedAt = Date.now()
+let lastPollAt: string | null = null
 
 async function pollOnce() {
+  lastPollAt = new Date().toISOString()
   if (activeRuns.size >= MAX_CONC) return
   log('debug', 'poll.start')
   const supabase = createServiceClient()
@@ -71,12 +77,39 @@ async function sendHeartbeat() {
   }
 }
 
+async function countQueuedRuns(): Promise<number | null> {
+  try {
+    const supabase = createServiceClient()
+    const { count } = await supabase
+      .from('agent_runs')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'queued')
+    return count ?? 0
+  } catch {
+    return null
+  }
+}
+
 async function main() {
   log('info', 'bridge.start', {
     poll_interval_ms: POLL_MS,
     max_concurrent: MAX_CONC,
     stale_sweep_ms: STALE_SWEEP_MS,
+    health_port: HEALTH_PORT,
+    error_tracking: errorTrackingEnabled,
   })
+
+  const healthServer = createHealthServer(HEALTH_PORT, {
+    workerId: env.BRIDGE_WORKER_ID,
+    startedAt,
+    getActiveRuns: () => activeRuns.size,
+    getQueuedRuns: countQueuedRuns,
+    getLastPollAt: () => lastPollAt,
+  })
+  if (healthServer) {
+    healthServer.listen(HEALTH_PORT, () => log('info', 'health.listening', { port: HEALTH_PORT }))
+  }
+
   await recoverStaleRunsOnce('stale: recovered on startup')
   const pollTimer = setInterval(() => {
     pollOnce().catch((err) =>
@@ -108,6 +141,7 @@ async function main() {
     clearInterval(pollTimer)
     clearInterval(heartbeatTimer)
     clearInterval(staleTimer)
+    healthServer?.close()
     setTimeout(() => process.exit(0), 100).unref()
   }
   process.on('SIGTERM', () => shutdown('SIGTERM'))

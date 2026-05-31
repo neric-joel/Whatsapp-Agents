@@ -15,6 +15,14 @@ const intFromEnv = (def: number, min = 1) =>
     .transform((v) => (v === undefined || v === '' ? def : Number(v)))
     .pipe(z.number().int().min(min))
 
+// Like intFromEnv but allows 0 (used to DISABLE the health server / a feature).
+const portFromEnv = (def: number) =>
+  z
+    .string()
+    .optional()
+    .transform((v) => (v === undefined || v === '' ? def : Number(v)))
+    .pipe(z.number().int().min(0).max(65535))
+
 const bridgeEnvSchema = z.object({
   // Required — the bridge cannot do anything without a Supabase service client.
   SUPABASE_URL: z.string().url('must be a valid URL (e.g. http://localhost:54321)'),
@@ -26,6 +34,8 @@ const bridgeEnvSchema = z.object({
   BRIDGE_MAX_CONCURRENT_RUNS: intFromEnv(3, 1),
   BRIDGE_HEARTBEAT_INTERVAL_MS: intFromEnv(5000, 100),
   BRIDGE_STALE_RUN_TIMEOUT_MS: intFromEnv(60000, 1000),
+  // Liveness/metrics HTTP server port. 0 disables it (default 9090).
+  BRIDGE_HEALTH_PORT: portFromEnv(9090),
 })
 
 type BridgeEnv = z.infer<typeof bridgeEnvSchema>

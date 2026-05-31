@@ -1,16 +1,29 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-import { getAdapter } from '../adapters/registry.js'
+import { getAdapter as defaultGetAdapter } from '../adapters/registry.js'
 import { buildContextPacket } from '../context/build-context-packet.js'
 import { maybeScheduleAgentMentionFollowUps } from '../lib/agent-follow-up.js'
 import { sanitizeAgentOutput } from '../lib/agent-output.js'
 import { conclusionDetected } from '../lib/conclusion.js'
 import { isDeniedCommand } from '../lib/denylist.js'
 import { maybeScheduleDiscussionContinuation } from '../lib/discussion-orchestrator.js'
+import { captureError } from '../lib/error-tracking.js'
 import { detectHallucination } from '../lib/hallucination.js'
 import { log } from '../lib/logger.js'
+import {
+  recordRunCancelled,
+  recordRunCompleted,
+  recordRunFailed,
+  recordRunStarted,
+} from '../lib/metrics.js'
 import { redact } from '../lib/redact.js'
 import { createServiceClient } from '../lib/supabase.js'
+
+/** Injectable dependencies — defaults are the real Supabase client + adapter registry. */
+interface ProcessRunDeps {
+  supabase?: SupabaseClient
+  getAdapter?: typeof defaultGetAdapter
+}
 
 type DiscussionMode = 'independent' | 'tag_turns'
 
@@ -47,8 +60,9 @@ interface AgentRunRow {
   agents: AgentInfo | null
 }
 
-export async function processRun(runId: string): Promise<void> {
-  const supabase = createServiceClient()
+export async function processRun(runId: string, deps: ProcessRunDeps = {}): Promise<void> {
+  const supabase = deps.supabase ?? createServiceClient()
+  const getAdapter = deps.getAdapter ?? defaultGetAdapter
   const startedAt = Date.now()
 
   // a. Fetch run with agent data
@@ -78,6 +92,7 @@ export async function processRun(runId: string): Promise<void> {
       return
     }
     log('info', 'run.start', { run_id: runId, agent_id: runRow.agent_id, room_id: runRow.room_id })
+    recordRunStarted()
 
     // c. Update to running
     const { data: running } = await supabase
@@ -308,6 +323,7 @@ export async function processRun(runId: string): Promise<void> {
       currentRoundIndex: runRow.round_index,
       triggerMessage: triggerMsg,
     })
+    recordRunCompleted(Date.now() - startedAt)
     log('info', 'run.complete', { run_id: runId, duration_ms: Date.now() - startedAt })
   } catch (err) {
     const message = redact(err instanceof Error ? err.message : String(err))
@@ -320,6 +336,7 @@ export async function processRun(runId: string): Promise<void> {
           completed_at: new Date().toISOString(),
         })
         .eq('id', runId)
+      recordRunCancelled()
       log('warn', 'run.cancelled', { run_id: runId })
       return
     }
@@ -327,6 +344,8 @@ export async function processRun(runId: string): Promise<void> {
       .from('agent_runs')
       .update({ status: 'failed', error_message: message })
       .eq('id', runId)
+    recordRunFailed()
+    captureError(err, { run_id: runId, where: 'processRun' })
     log('error', 'run.failed', { run_id: runId, error: message })
     throw err
   }

@@ -1,5 +1,6 @@
 export const AGENTROOM_VERSION = '0.1.0'
 
+export * from './error-tracking.js'
 export * from './logger.js'
 export * from './redact.js'
 
