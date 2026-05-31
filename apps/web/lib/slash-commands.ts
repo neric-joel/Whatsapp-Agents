@@ -17,7 +17,17 @@ export interface RecallCommand {
   query: string
 }
 
-export type SlashCommand = RememberCommand | RecallCommand
+export interface HandoffCommand {
+  command: 'handoff'
+  toSlug: string
+  task: string
+}
+
+export interface AgentsCommand {
+  command: 'agents'
+}
+
+export type SlashCommand = RememberCommand | RecallCommand | HandoffCommand | AgentsCommand
 
 export function parseSlashCommand(input: string): SlashCommand | null {
   const trimmed = input.trim()
@@ -40,6 +50,19 @@ export function parseSlashCommand(input: string): SlashCommand | null {
   const recall = /^\/recall\b([\s\S]*)$/i.exec(trimmed)
   if (recall) {
     return { command: 'recall', query: (recall[1] ?? '').trim() }
+  }
+
+  // /handoff @agent <task>
+  const handoff = /^\/handoff\b([\s\S]*)$/i.exec(trimmed)
+  if (handoff) {
+    const rest = (handoff[1] ?? '').trim()
+    const m = /^@([\w-]+)\s*([\s\S]*)$/.exec(rest)
+    return { command: 'handoff', toSlug: m?.[1] ?? '', task: (m?.[2] ?? '').trim() }
+  }
+
+  // /agents (list the room's agents)
+  if (/^\/agents\b/i.test(trimmed)) {
+    return { command: 'agents' }
   }
 
   return null

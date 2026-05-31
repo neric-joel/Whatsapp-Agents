@@ -72,14 +72,16 @@ queued → claimed → running → (completed | failed | cancelled)
   runs with a stale/`null` heartbeat `failed`. Recovered runs are **not auto-retried**
   (see [OBSERVABILITY.md](OBSERVABILITY.md#5--reliability--the-run-state-machine)).
 - Loop guards (`round_index`, hop limits) bound agent-to-agent and `/discuss`
-  fan-out so runs can't multiply unbounded.
+  fan-out so runs can't multiply unbounded — see
+  [Agent-to-agent interaction](#agent-to-agent-interaction-phase-10).
 
 ## The adapter model
 
 Adapters live in `bridge/src/adapters/` and are selected by `adapter_type` in
 `registry.ts`. Each implements `AgentAdapter.run(packet, signal)` and **yields the
 `AgentEvent` union** (`final_response`, `visible_message`, `error`,
-`tool_call_requested`, `partial_content`). Adapters **never write to Supabase
+`tool_call_requested`, `partial_content`, `memory_op` (Phase 9), and
+`handoff_requested` (Phase 10)). Adapters **never write to Supabase
 directly** — the run worker (`workers/run-worker.ts`) owns all persistence.
 
 `SubprocessAdapter` is the base for CLI-backed agents: it resolves an allowlisted
@@ -88,6 +90,38 @@ binary, spawns it with `shell:false` + an argv array, delivers the `ContextPacke
 enforces a timeout + output cap, and force-kills the process tree on
 abort/timeout/cancel. Adding an adapter is documented in
 [CONTRIBUTING.md](../CONTRIBUTING.md#adding-a-new-agent-adapter-extensibility).
+
+## Agent-to-agent interaction (Phase 10)
+
+Agents are first-class peers: each run's `ContextPacketV1.roster` lists the **other**
+active room agents (`name`, `slug`, and a `capabilities` blurb), rendered as
+reference DATA so an agent can address a peer deliberately — by `@mention` or by a
+hand-off. The roster excludes the acting agent and muted/inactive members.
+
+**Hand-off protocol.** An agent emits a `handoff_requested` event
+(`{ to_agent_slug, reason, payload? }`). The run worker defers it until the agent's
+reply is inserted (that message becomes the peer run's trigger), then
+`agents/handoff.ts` resolves the slug to a room agent and creates a **targeted**
+`agent_runs` row — never the agent itself. Users invoke the same path with
+`/handoff @agent <task>` (rewritten to a targeted mention message); `/agents` lists
+the roster + active runs.
+
+**Loop-guard math (chains provably terminate).** A hand-off is allowed only when
+**all** hold; otherwise it's blocked (and a cap posts a visible *"Deliberation ended …"*
+system message):
+
+- `rooms.allow_agent_to_agent` is true.
+- **Round cap:** `round_index + 1 < rooms.max_agent_rounds` (default 3).
+- **Hop cap:** `deliberation_depth + 1 ≤ rooms.max_agent_hops` (default 6).
+- **No cycle:** the target has **not** already appeared in this hand-off chain. Every
+  run in a chain shares a `deliberation_root_id`; cycle detection collects the root
+  run's agent plus all descendants and rejects a hand-off to any agent already
+  present (so `A→B→A`, `A→B→C→B`, etc. are stopped).
+
+Because `deliberation_depth` strictly increases per hand-off and is bounded by
+`max_agent_hops` — and a repeat participant is rejected — every chain terminates.
+The `/discuss` phase machine (`individual → critique → consensus`) and the
+`tag_turns` mention-follow-up path are bounded the same way by `max_agent_rounds`.
 
 ## Trust boundaries
 

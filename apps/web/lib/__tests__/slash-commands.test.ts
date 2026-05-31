@@ -41,10 +41,40 @@ describe('parseSlashCommand', () => {
     expect(parseSlashCommand('/REMEMBER hi')?.command).toBe('remember')
   })
 
+  it('parses /handoff @agent <task>', () => {
+    expect(parseSlashCommand('/handoff @reviewer please check the auth flow')).toEqual({
+      command: 'handoff',
+      toSlug: 'reviewer',
+      task: 'please check the auth flow',
+    })
+  })
+
+  it('parses /handoff @agent with no task', () => {
+    expect(parseSlashCommand('/handoff @reviewer')).toEqual({
+      command: 'handoff',
+      toSlug: 'reviewer',
+      task: '',
+    })
+  })
+
+  it('parses /handoff with no target (empty slug → caller validates)', () => {
+    expect(parseSlashCommand('/handoff do something')).toEqual({
+      command: 'handoff',
+      toSlug: '',
+      task: '',
+    })
+  })
+
+  it('parses /agents', () => {
+    expect(parseSlashCommand('/agents')).toEqual({ command: 'agents' })
+    expect(parseSlashCommand('/agents list')).toEqual({ command: 'agents' })
+  })
+
   it('does not match @mentions, plain text, or /discuss', () => {
     expect(parseSlashCommand('@claude_thinker hello')).toBeNull()
     expect(parseSlashCommand('just a normal message')).toBeNull()
     expect(parseSlashCommand('/discuss should we ship?')).toBeNull()
     expect(parseSlashCommand('/rememberance is not a command')).toBeNull()
+    expect(parseSlashCommand('/agentsfoo')).toBeNull()
   })
 })

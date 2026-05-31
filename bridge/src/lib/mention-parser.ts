@@ -61,6 +61,11 @@ function normalizeMentionToken(token: string): string {
   return token.toLowerCase().replace(/[_\-\s]/g, '')
 }
 
+/** Normalize a slug/name for case- and separator-insensitive matching (Phase 10). */
+export function normalizeSlug(token: string): string {
+  return normalizeMentionToken(token)
+}
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }

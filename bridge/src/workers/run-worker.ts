@@ -1,5 +1,7 @@
+import type { AgentEvent } from '@agentroom/shared'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+import { handleHandoffRequest } from '../agents/handoff.js'
 import { getAdapter as defaultGetAdapter } from '../adapters/registry.js'
 import { buildContextPacket } from '../context/build-context-packet.js'
 import { maybeScheduleAgentMentionFollowUps } from '../lib/agent-follow-up.js'
@@ -27,6 +29,7 @@ interface ProcessRunDeps {
 }
 
 type DiscussionMode = 'independent' | 'tag_turns'
+type HandoffRequestedEvent = Extract<AgentEvent, { type: 'handoff_requested' }>
 
 const WORKER_ID = process.env.BRIDGE_WORKER_ID ?? 'bridge-local-1'
 const CANCEL_POLL_MS = 1000
@@ -156,6 +159,7 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
     const controller = new AbortController()
     const stopCancellationWatcher = watchRunCancellation(supabase, runId, controller)
     let finalContent = ''
+    const handoffEvents: HandoffRequestedEvent[] = []
 
     try {
       for await (const event of adapter.run(packet, controller.signal)) {
@@ -268,6 +272,10 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
             roomId: runRow.room_id,
             triggerMessageId: runRow.trigger_msg_id ?? null,
           })
+        } else if (event.type === 'handoff_requested') {
+          // Defer hand-offs until the reply is inserted (it becomes the targeted
+          // peer run's trigger message). Processed below, before mention follow-ups.
+          handoffEvents.push(event)
         }
       }
     } finally {
@@ -321,6 +329,24 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
       .from('agent_runs')
       .update({ status: 'completed', completed_at: new Date().toISOString() })
       .eq('id', runId)
+    // Agent-to-agent hand-offs (Phase 10) — create targeted peer runs under the
+    // loop guards + cycle detection. Processed BEFORE mention follow-ups so the
+    // follow-up dedup sees any hand-off runs already created at the next round.
+    for (const handoff of handoffEvents) {
+      await handleHandoffRequest(handoff, {
+        supabase,
+        roomId: runRow.room_id,
+        sourceAgentId: runRow.agent_id,
+        sourceMessageId: insertedMessage.id,
+        currentRun: {
+          id: runRow.id,
+          round_index: runRow.round_index,
+          deliberation_depth: runRow.deliberation_depth,
+          deliberation_root_id: runRow.deliberation_root_id,
+          discussion_mode: runRow.discussion_mode,
+        },
+      })
+    }
     await maybeScheduleAgentMentionFollowUps({
       supabase,
       currentRun: {

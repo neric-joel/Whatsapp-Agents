@@ -15,6 +15,7 @@ import { getImageFilesFromClipboardItems } from '@/lib/pasted-files'
 import { parseSlashCommand, type SlashCommand } from '@/lib/slash-commands'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
+import { AGENTS_EVENT } from './AgentsPanel'
 import { RECALL_EVENT, type RecallEventDetail } from './MemoryPanel'
 import type { OptimisticMessage } from './MessageTimeline'
 
@@ -208,6 +209,14 @@ export default function ComposeBox({
       )
       return
     }
+    if (cmd.command === 'agents') {
+      window.dispatchEvent(new CustomEvent(AGENTS_EVENT))
+      setText('')
+      setSendError(null)
+      setNotice('Showing room agents — see the Agents panel.')
+      return
+    }
+    if (cmd.command === 'handoff') return // handled inline in submit() (sent as a targeted message)
     // /remember
     if (!cmd.text) {
       setSendError('Usage: /remember <note>  (add --global for a personal cross-room note)')
@@ -240,13 +249,22 @@ export default function ComposeBox({
 
   async function submit() {
     if (sending || uploading) return
-    // Intercept `/remember` and `/recall` before sending a chat message.
+    // Intercept slash commands. /remember, /recall, /agents are handled out of
+    // band; /handoff rewrites to a targeted @mention message and sends normally
+    // (the messages route creates the targeted peer run).
     const slash = parseSlashCommand(text)
-    if (slash) {
+    if (slash && slash.command !== 'handoff') {
       await handleSlashCommand(slash)
       return
     }
-    const content = text.trim() || attachedFile?.name
+    if (slash && slash.command === 'handoff' && !slash.toSlug) {
+      setSendError('Usage: /handoff @agent <task>')
+      return
+    }
+    const content =
+      slash && slash.command === 'handoff'
+        ? `@${slash.toSlug} ${slash.task}`.trim()
+        : text.trim() || attachedFile?.name
     if (!content) return
     setSending(true)
     const metadata = attachedFile ? { file_ids: [attachedFile.id] } : {}

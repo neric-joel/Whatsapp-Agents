@@ -128,10 +128,20 @@ export interface Agent {
   system_prompt: string | null
   reply_policy: ReplyPolicy
   tool_permissions: Record<string, unknown>
+  /** Short persona/skill blurb shown to peer agents in the room roster (Phase 10). */
+  capabilities: string | null
   is_active: boolean
   created_by_user_id: string | null
   created_at: string
   updated_at: string
+}
+
+/** A peer agent in the same room, surfaced in ContextPacketV1.roster (Phase 10). */
+export interface RosterAgent {
+  id: string
+  name: string
+  slug: string
+  capabilities: string | null
 }
 
 export interface RoomMember {
@@ -319,6 +329,12 @@ export interface ContextPacketV1 {
   deliberation_depth: number
   deliberation_root_id: string | null
   /**
+   * The OTHER active agents in this room (Phase 10) — name, slug, and a capability
+   * blurb — so an agent can address peers deliberately. Rendered as DATA. Excludes
+   * the acting agent and muted/inactive members.
+   */
+  roster?: RosterAgent[]
+  /**
    * Recalled memory for this run (Phase 9). Rendered to agents as quoted DATA,
    * never as instructions — it can never override the system prompt or escalate
    * tool permissions. `user` is present only when the user has consented.
@@ -363,6 +379,15 @@ export type AgentEvent =
       content: string
       /** For 'replace'/'consolidate': the existing memory id to supersede. */
       target_id?: string
+    }
+  | {
+      type: 'handoff_requested'
+      run_id: string
+      /** The peer agent the work is handed to (slug, as seen in the roster). */
+      to_agent_slug: string
+      reason: string
+      /** Optional task detail passed to the peer. */
+      payload?: string
     }
 
 // ─── AGENT ADAPTER INTERFACE ───

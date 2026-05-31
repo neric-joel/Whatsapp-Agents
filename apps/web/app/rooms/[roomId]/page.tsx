@@ -1,6 +1,7 @@
 'use client'
 import { useCallback, useEffect, useState } from 'react'
 
+import AgentsPanel from '@/components/AgentsPanel'
 import ComposeBox from '@/components/ComposeBox'
 import MemoryPanel from '@/components/MemoryPanel'
 import type { OptimisticMessage, ReplyingMessage } from '@/components/MessageTimeline'
@@ -56,6 +57,10 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
           Memory
         </div>
         <MemoryPanel roomId={roomId} />
+        <div className="border-y border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm font-medium text-[var(--text)]">
+          Agents
+        </div>
+        <AgentsPanel roomId={roomId} />
       </aside>
     </div>
   )

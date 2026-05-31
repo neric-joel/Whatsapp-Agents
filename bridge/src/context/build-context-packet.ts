@@ -113,6 +113,18 @@ export async function buildContextPacket({
     files = await hydrateFilePreviews(supabase, (fileRows ?? []) as FilePreviewRow[])
   }
 
+  // Roster of OTHER active room agents (Phase 10) — name, slug, capability blurb.
+  const { data: rosterRaw } = await supabase
+    .from('room_members')
+    .select('agent_id, agents!inner(id, name, slug, capabilities, is_active)')
+    .eq('room_id', run.room_id)
+    .eq('member_type', 'agent')
+    .eq('muted', false)
+  const roster = ((rosterRaw ?? []) as unknown as Array<{ agents: RosterAgentRow | null }>)
+    .map((r) => r.agents)
+    .filter((a): a is RosterAgentRow => Boolean(a && a.is_active && a.id !== agentInfo.id))
+    .map((a) => ({ id: a.id, name: a.name, slug: a.slug, capabilities: a.capabilities ?? null }))
+
   // Recall ranked memory (Phase 9). Resilient — never breaks the run.
   const memory = await recallMemory(supabase, {
     agentId: agentInfo.id,
@@ -158,6 +170,15 @@ export async function buildContextPacket({
     discussion_mode: run.discussion_mode,
     deliberation_depth: run.deliberation_depth,
     deliberation_root_id: run.deliberation_root_id,
+    ...(roster.length > 0 ? { roster } : {}),
     ...(memory ? { memory } : {}),
   }
+}
+
+interface RosterAgentRow {
+  id: string
+  name: string
+  slug: string
+  capabilities: string | null
+  is_active: boolean
 }
