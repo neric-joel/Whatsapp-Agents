@@ -2,7 +2,7 @@ import { type CookieOptions, createServerClient } from '@supabase/ssr'
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 
-import { isForbiddenCrossOrigin } from '@/lib/api-security'
+import { isForbiddenCrossOrigin } from '@/lib/origin'
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl

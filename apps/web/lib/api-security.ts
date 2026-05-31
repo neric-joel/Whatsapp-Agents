@@ -1,71 +1,12 @@
-import { getBearerToken } from './api-auth'
 import { apiError } from './api-error'
 import { captureError } from './error-tracking'
 import { logger } from './logger'
+import { isForbiddenCrossOrigin } from './origin'
 
-/**
- * Origins allowed to make state-changing requests. Derived from NEXT_PUBLIC_APP_URL
- * plus an optional comma-separated EXTRA_ALLOWED_ORIGINS list (for reverse proxies).
- */
-export function allowedOrigins(): string[] {
-  const list = new Set<string>()
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL
-  if (appUrl) {
-    try {
-      list.add(new URL(appUrl).origin)
-    } catch {
-      /* ignore malformed */
-    }
-  }
-  for (const extra of (process.env.EXTRA_ALLOWED_ORIGINS ?? '').split(',')) {
-    const trimmed = extra.trim()
-    if (!trimmed) continue
-    try {
-      list.add(new URL(trimmed).origin)
-    } catch {
-      /* ignore malformed */
-    }
-  }
-  return [...list]
-}
-
-const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
-
-/**
- * CSRF defense for cookie-authenticated mutations. A browser cannot set a custom
- * Authorization header cross-site, so Bearer-authenticated requests are exempt.
- * For cookie auth we require the Origin to match the request host or an allowlisted
- * origin. Returns true when the request should be rejected as cross-origin.
- */
-export function isForbiddenCrossOrigin(req: {
-  method: string
-  headers: Headers
-  nextUrl?: { origin: string }
-  url?: string
-}): boolean {
-  if (!MUTATING_METHODS.has(req.method.toUpperCase())) return false
-
-  // Bearer-authed (programmatic) clients are not subject to CSRF.
-  if (getBearerToken(req)) return false
-
-  const origin = req.headers.get('origin')
-  // No Origin on a state-changing cookie request → treat as suspicious.
-  if (!origin) return true
-
-  const selfOrigin = req.nextUrl?.origin ?? (req.url ? safeOrigin(req.url) : null)
-  const allowed = new Set(allowedOrigins())
-  if (selfOrigin) allowed.add(selfOrigin)
-
-  return !allowed.has(origin)
-}
-
-function safeOrigin(url: string): string | null {
-  try {
-    return new URL(url).origin
-  } catch {
-    return null
-  }
-}
+// The Edge-safe origin/CSRF helpers live in `./origin` (no logger import) so the
+// middleware bundle stays logger-free. Re-exported here for route handlers that
+// already import them from this module.
+export { allowedOrigins, isForbiddenCrossOrigin } from './origin'
 
 /** Route-handler guard: returns a 403 response if the request is cross-origin. */
 export function assertSameOrigin(req: { method: string; headers: Headers; url?: string }) {
