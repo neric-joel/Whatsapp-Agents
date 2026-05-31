@@ -41,7 +41,7 @@ export function useMessages(roomId: string, refreshSignal?: number) {
     refetch()
   }, [refetch, refreshSignal])
 
-  // Realtime: append INSERT events, dedup by id
+  // Realtime: upsert by id — append INSERTs, replace UPDATEs, remove DELETEs.
   useEffect(() => {
     const supabase = createSupabaseBrowserClient()
     const channel = supabase
@@ -67,7 +67,16 @@ export function useMessages(roomId: string, refreshSignal?: number) {
             .single()
           if (data) {
             const msg = data as unknown as DbMessage
-            setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]))
+            // Upsert by id: replace an existing row on UPDATE (edits, soft-deletes,
+            // hallucination accept/reject) so peers see the change live; otherwise
+            // append. A plain append-or-skip silently drops every UPDATE event.
+            setMessages((prev) => {
+              const idx = prev.findIndex((m) => m.id === msg.id)
+              if (idx === -1) return [...prev, msg]
+              const next = prev.slice()
+              next[idx] = msg
+              return next
+            })
           }
         },
       )
