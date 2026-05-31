@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+import { log } from '../lib/logger.js'
+
 export interface ContextFilePreview {
   id: string
   filename: string
@@ -120,9 +122,10 @@ async function extractAndPersistImageText(
 
     return extractedText
   } catch (error) {
-    console.warn(
-      `File text extraction failed for ${file.id}: ${error instanceof Error ? error.message : String(error)}`,
-    )
+    log('warn', 'file.text_extraction.failed', {
+      file_id: file.id,
+      error: error instanceof Error ? error.message : String(error),
+    })
     return null
   }
 }

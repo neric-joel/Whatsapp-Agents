@@ -1,5 +1,6 @@
 import { getBearerToken } from './api-auth'
 import { apiError } from './api-error'
+import { logger } from './logger'
 
 /**
  * Origins allowed to make state-changing requests. Derived from NEXT_PUBLIC_APP_URL
@@ -130,8 +131,9 @@ export function __resetRateLimits() {
 // Error redaction: log the real error server-side, return a generic message.
 // ---------------------------------------------------------------------------
 
-export function internalError(context: string, raw: unknown) {
+export function internalError(context: string, raw: unknown, fields?: Record<string, unknown>) {
   const detail = raw instanceof Error ? raw.message : String(raw)
-  console.error(`[api] ${context}: ${detail}`)
+  // The logger redacts secrets/PII in field values; the client still gets a generic message.
+  logger.error('api.internal_error', { context, detail, ...fields })
   return apiError('INTERNAL_ERROR', 'An internal error occurred', 500)
 }

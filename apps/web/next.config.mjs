@@ -49,6 +49,16 @@ const nextConfig = {
   // @agentroom/shared ships raw TypeScript (no build step), so transpile it
   // explicitly — this makes the production build deterministic in Docker/CI.
   transpilePackages: ['@agentroom/shared'],
+  // @agentroom/shared is ESM/NodeNext and uses explicit `.js` import specifiers
+  // (e.g. `export * from './redact.js'`). webpack does not rewrite `.js`→`.ts` on
+  // its own, so map the extensions like tsx/Node ESM do.
+  webpack: (config) => {
+    config.resolve.extensionAlias = {
+      ...(config.resolve.extensionAlias ?? {}),
+      '.js': ['.ts', '.tsx', '.js', '.jsx'],
+    }
+    return config
+  },
   eslint: {
     ignoreDuringBuilds: true,
   },

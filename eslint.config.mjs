@@ -72,6 +72,11 @@ export default tseslint.config(
       'no-constant-condition': 'warn',
       'no-undef': 'error', // Keep this to catch missing globals
 
+      // No stray console.* in shipped code — use the structured logger
+      // (@agentroom/shared createLogger). Allow-listed for client error boundaries,
+      // dev/CLI scripts, e2e, and tests below.
+      'no-console': 'warn',
+
       // Import sorting as warn
       'simple-import-sort/imports': 'warn',
       'simple-import-sort/exports': 'warn',
@@ -129,6 +134,20 @@ export default tseslint.config(
       // Suppress unused images in <img> (will be fixed later)
       '@next/next/no-img-element': 'warn',
     },
+  },
+
+  // console.* is legitimate in client error boundaries (browser console is the only
+  // sink there), dev/CLI scripts, e2e, and tests — the structured logger is Node-only.
+  {
+    files: [
+      'apps/web/app/**/error.tsx',
+      'apps/web/app/**/global-error.tsx',
+      'scripts/**/*.{ts,tsx,js,jsx,mjs,cjs}',
+      'e2e/**/*.{ts,tsx,js,jsx,mjs,cjs}',
+      '**/*.test.{ts,tsx,js,jsx}',
+      '**/__tests__/**/*.{ts,tsx,js,jsx}',
+    ],
+    rules: { 'no-console': 'off' },
   },
 
   // Disable formatting rules (prettier handles those)

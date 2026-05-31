@@ -1,18 +1,13 @@
-const workerId = process.env['BRIDGE_WORKER_ID'] ?? 'bridge'
+// Bridge logger — delegates to the shared structured JSON logger so web + bridge
+// share one shape, redaction, and LOG_LEVEL behavior. The log(level, event, fields)
+// signature is kept for existing call sites; `logger` (with .child({ run_id })) is
+// exported for per-run correlation.
+import { createLogger, type LogLevel } from '@agentroom/shared'
 
-type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+const logger = createLogger({
+  base: { worker_id: process.env['BRIDGE_WORKER_ID'] ?? 'bridge' },
+})
 
 export function log(level: LogLevel, event: string, fields?: Record<string, unknown>): void {
-  const line = JSON.stringify({
-    ts: new Date().toISOString(),
-    level,
-    event,
-    worker_id: workerId,
-    ...fields,
-  })
-  if (level === 'error') {
-    process.stderr.write(line + '\n')
-  } else {
-    process.stdout.write(line + '\n')
-  }
+  logger[level](event, fields)
 }

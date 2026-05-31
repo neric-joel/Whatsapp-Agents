@@ -1,5 +1,8 @@
 export const AGENTROOM_VERSION = '0.1.0'
 
+export * from './logger.js'
+export * from './redact.js'
+
 export type DiscussionPhase = 'individual' | 'critique' | 'consensus'
 export type DiscussionMode = 'independent' | 'tag_turns'
 

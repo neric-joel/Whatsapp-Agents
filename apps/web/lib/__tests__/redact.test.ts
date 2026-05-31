@@ -1,6 +1,5 @@
+import { redact } from '@agentroom/shared'
 import { describe, expect, it } from 'vitest'
-
-import { redact } from '../../../../bridge/src/lib/redact'
 
 describe('redact', () => {
   it('redacts long base64-like strings', () => {
