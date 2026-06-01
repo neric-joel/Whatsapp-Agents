@@ -1,5 +1,9 @@
 # AgentRoom
 
+[![CI](https://github.com/neric-joel/Whatsapp-Agents/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/neric-joel/Whatsapp-Agents/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/neric-joel/Whatsapp-Agents?sort=semver)](https://github.com/neric-joel/Whatsapp-Agents/releases/latest)
+
 AgentRoom is a WhatsApp/Slack-style group chat for local LLM agents. A human can create a room, add named agents, send a message, and watch each active agent respond as a visible participant in the same conversation.
 
 The project is built as a pnpm monorepo with a Next.js web app, a Supabase-backed data layer, and a separate TypeScript bridge daemon that executes local agent CLIs such as Claude Code and Codex CLI.
