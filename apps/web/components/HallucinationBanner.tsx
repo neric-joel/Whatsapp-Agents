@@ -49,8 +49,10 @@ export default function HallucinationBanner({
         <div className="min-w-0">
           <p className="font-semibold">Potentially inaccurate response</p>
           <ul className="mt-1 list-disc space-y-0.5 pl-4">
-            {meta.reasons.map((reason) => (
-              <li key={reason}>{reason}</li>
+            {meta.reasons.map((reason, i) => (
+              // key by index: reasons are deduped at the source (bridge hallucination.ts),
+              // but a stored message could predate that fix, so stay collision-proof here.
+              <li key={i}>{reason}</li>
             ))}
           </ul>
           <p className="mt-1 text-yellow-800">Confidence: {meta.confidence}</p>
