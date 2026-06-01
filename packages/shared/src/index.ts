@@ -1,6 +1,7 @@
 export const AGENTROOM_VERSION = '0.1.0'
 
 export * from './commands.js'
+export * from './credential-crypto.js'
 export * from './error-tracking.js'
 export * from './logger.js'
 export * from './memory-scan.js'
