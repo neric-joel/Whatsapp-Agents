@@ -194,7 +194,7 @@ export default function MessageBubble({
               <span className={`h-1 w-1 rounded-full ${providerStyle.dot}`} aria-hidden="true" />
               {agents?.name ?? 'Agent'}
             </span>
-            <span className="text-xs text-gray-400">{formatTime(created_at)}</span>
+            <span className="text-xs text-gray-500">{formatTime(created_at)}</span>
           </div>
           <div
             className={`rounded-2xl border px-4 py-3 text-sm leading-6 shadow-sm ${providerStyle.bubble} ${providerStyle.border} ${providerStyle.text} ${isHallucinationRejected ? 'line-through decoration-yellow-500 decoration-2' : ''}`}
@@ -235,7 +235,7 @@ export default function MessageBubble({
           {children}
           <div className="mt-1.5 flex items-center justify-end gap-2 text-right">
             {actionButtons}
-            <span className="text-xs text-gray-400">{formatTime(created_at)}</span>
+            <span className="text-xs text-gray-500">{formatTime(created_at)}</span>
           </div>
         </div>
         <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-blue-500 text-xs font-semibold text-white">

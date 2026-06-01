@@ -6,8 +6,16 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
-The pre-1.0 production-hardening effort (`docs/production-hardening/`) turns the MVP
-into a self-hostable, OSS-ready project. Highlights by phase:
+_Nothing yet._
+
+## [1.0.0] - 2026-05-31
+
+First production-ready release. The pre-1.0 production-hardening effort
+(`docs/production-hardening/`) turned the MVP into a self-hostable, OSS-ready
+project across eleven phases, each landed via a CI-green PR and a saved
+adversarial review (`docs/reviews/`). A final 10-dimension pre-v1.0 security +
+correctness sweep returned **GO** (0 Critical, 0 confirmed High;
+`docs/reviews/2026-05-31-pre-v1.0-adversarial-sweep.md`). Highlights by phase:
 
 ### Added
 
@@ -58,11 +66,29 @@ into a self-hostable, OSS-ready project. Highlights by phase:
   management, ARIA live regions, contrast), reduced-motion support, render-state
   coverage.
 
+### Fixed
+
+- **Realtime UPDATE propagation (R2).** Message UPDATE events (edits, soft-deletes,
+  hallucination accept/reject) are now upserted into the live timeline instead of
+  being dropped, so peers no longer keep rendering stale/"deleted" content until a
+  reload (`useMessages.ts`).
+- **Authenticated room-page accessibility.** Fixed three pre-existing WCAG 2.1 AA
+  violations surfaced by a new authenticated axe scan: a role-less `aria-label`
+  ("Active agents"), low-contrast message timestamps, and low-contrast agent-avatar
+  initials. axe now reports 0 serious/critical on `/auth` and the room page.
+
 ### Security
 
 - **Security hardening (Phase 1).** Subprocess sandbox (`shell:false`, stdin
   system-prompt, binary allowlist, minimized env, output cap); storage RLS scoped to
   room membership; CSRF/Origin checks + rate limiting + fail-closed middleware +
   security headers; error-message redaction; opt-in third-party image egress.
+- **Cross-tenant agent-column exposure (R1).** Restricted column-level SELECT on
+  `public.agents` so the browser (`authenticated`/`anon`) roles can no longer read
+  any tenant's `system_prompt` or `tool_permissions` (Phase 11 lets users author
+  `system_prompt`); the global agent roster keeps working via 13 safe columns. The
+  server/service-role path is unaffected. Verified against a live DB (pgTAP +
+  role-level SQL + real PostgREST HTTP); migration `20260531000004_agents_column_privs.sql`.
 
-[Unreleased]: https://github.com/neric-joel/Whatsapp-Agents/commits/main
+[Unreleased]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/neric-joel/Whatsapp-Agents/releases/tag/v1.0.0

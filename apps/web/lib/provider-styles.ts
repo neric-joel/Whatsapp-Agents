@@ -15,7 +15,9 @@ export const PROVIDER_STYLES: Record<AgentProvider, ProviderStyle> = {
     bubble: 'bg-[#fff7ed]',
     border: 'border-[#fdba74]/70',
     text: 'text-[#432818]',
-    avatar: 'bg-[#ea580c]',
+    // avatar bg darkened to orange-700 so white initials meet WCAG AA (5.18:1);
+    // orange-600 (#ea580c) was 3.55:1. (a11y, authenticated-room axe scan)
+    avatar: 'bg-[#c2410c]',
     nameColor: 'text-[#c2410c]',
     dot: 'bg-[#ea580c]',
     glow: 'shadow-[0_0_14px_rgba(234,88,12,0.16)]',
@@ -24,7 +26,9 @@ export const PROVIDER_STYLES: Record<AgentProvider, ProviderStyle> = {
     bubble: 'bg-[#ecfeff]',
     border: 'border-[#67e8f9]/70',
     text: 'text-[#083344]',
-    avatar: 'bg-[#0891b2]',
+    // avatar bg darkened to cyan-700 so white initials meet WCAG AA (5.35:1);
+    // cyan-600 (#0891b2) was 3.68:1. (a11y, authenticated-room axe scan)
+    avatar: 'bg-[#0e7490]',
     nameColor: 'text-[#0e7490]',
     dot: 'bg-[#0891b2]',
     glow: 'shadow-[0_0_14px_rgba(8,145,178,0.16)]',
