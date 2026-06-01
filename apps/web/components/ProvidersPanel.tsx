@@ -98,7 +98,19 @@ export default function ProvidersPanel() {
   }
 
   async function onDelete(id: string) {
+    // Destructive + irreversible — confirm before deleting (agents bound to this
+    // credential silently fall back to the host login afterward).
+    const target = rows.find((r) => r.id === id)
+    const name = target ? `“${target.label}”` : 'this credential'
+    if (
+      !globalThis.confirm(
+        `Delete ${name}? Agents using it will fall back to the host login. This cannot be undone.`,
+      )
+    ) {
+      return
+    }
     setNotice(null)
+    setError(null)
     const res = await fetch(`/api/credentials/${id}`, { method: 'DELETE' })
     if (res.ok) {
       setRows((prev) => prev.filter((r) => r.id !== id))
@@ -203,6 +215,7 @@ export default function ProvidersPanel() {
         <button
           type="submit"
           disabled={submitting || !label.trim() || !secret}
+          aria-busy={submitting}
           className="rounded-lg bg-[var(--accent-strong)] px-3 py-1.5 text-sm font-medium text-white transition-opacity disabled:opacity-50"
         >
           {submitting ? 'Saving…' : 'Add credential'}

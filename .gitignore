@@ -28,7 +28,7 @@ coverage/
 playwright-report/
 test-results/
 
-# Lighthouse / authed user-flow scratch (local dev only)
+# Lighthouse / authed user-flow + UX-audit scratch (local dev only)
 .lh-profile/
 lh-*.json
-._lh-*.mjs
+._*.mjs
