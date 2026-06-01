@@ -62,7 +62,11 @@ Respond directly and specifically to the CURRENT MESSAGE above as ${packet.agent
     try {
       obj = JSON.parse(line) as Record<string, unknown>
     } catch {
-      return { type: 'visible_message', run_id: '', content: line }
+      // `codex exec --json` emits structured JSON events for all real content, so a
+      // non-JSON line is process noise — e.g. a Windows "SUCCESS: The process with
+      // PID … has been terminated." notice from a killed codex helper — and must NOT
+      // be surfaced as agent reply content (it would pollute the answer). Drop it.
+      return null
     }
 
     const content = this.extractMessageContent(obj)
