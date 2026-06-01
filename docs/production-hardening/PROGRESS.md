@@ -7,6 +7,27 @@ Dates are absolute. **Base of record: `origin/main` (`f780235`).**
 
 ---
 
+## 2026-06-01 — Product / UX / Hermes-credential campaign (autonomous, `feat/product-validation-v1`)
+
+Branch stacked on PR #40 tip. Report: `docs/reviews/2026-06-01-product-ux-campaign.md`.
+**WS1 core + WS2 (BYO credentials) done + secure; WS1-breadth, WS-UX, WS3 = pending.**
+- **WS1:** validated MVP fan-out (real Claude + Codex), RBAC, `/discuss` convergence
+  (individual→critique→consensus, bounded). Fixed: Codex reply pollution (`7a16fd1`),
+  `/debate` registry parity (`0d6e6a1`).
+- **WS2 (ADR-0010) — shipped end to end:** `user_credentials` (owner-RLS + secret-column
+  REVOKE) + `agents.credential_id`; AES-256-GCM crypto; `buildChildEnv` inject seam;
+  `resolveRuntimeProvider` (per-adapter env map, owner-scoped, fail-closed) + out-of-band
+  adapter injection; credentials API (write-only secret) + agent binding; **Settings →
+  Providers UI**. Security proven: e2e key-leak red-team + RLS pgTAP (30 total) + live
+  encrypt-at-rest / no-secret-in-response / 0 log hits. Commits `3086473`→`73ebb99`.
+- **Live-verified ready-to-use:** web :3000 + bridge :9090 + Supabase up; seeded room +
+  3 agents; `CREDENTIAL_ENCRYPTION_KEY` set so BYO is live. Gate: typecheck/lint/format ✓,
+  **test 311**, pgTAP 30. Real calls ~7/25.
+- **Deferred:** WS2 real-provider-reply (needs a real API key; host codex uses ChatGPT-login),
+  WS-UX (7-theme axe / authed Lighthouse / responsive / screenshots), WS1 breadth, WS3.
+
+---
+
 ## 2026-05-31 — Post-v1.0 stress + chaos hardening campaign (PR #40)
 
 Reliability campaign on the warm local stack (`harden/stress-chaos-v1` → PR **#40 → main**;
