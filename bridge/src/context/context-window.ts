@@ -2,7 +2,8 @@ export const DEFAULT_CONTEXT_MESSAGE_LIMIT = 6
 export const DEFAULT_CONTEXT_MESSAGE_MAX_CHARS = 1200
 // ADR-0011: a discussion run loads the whole thread (plan + every peer's per-phase reply), so it
 // needs a larger window than the rolling default. Bounded so it can never blow up the prompt.
-export const DEFAULT_DISCUSSION_CONTEXT_LIMIT = 24
+// Local (not exported) — only readDiscussionContextLimit() below consumes it.
+const DEFAULT_DISCUSSION_CONTEXT_LIMIT = 24
 
 export function readContextMessageLimit(env: NodeJS.ProcessEnv = process.env): number {
   return readBoundedInt(env.AGENTROOM_CONTEXT_MESSAGE_LIMIT, DEFAULT_CONTEXT_MESSAGE_LIMIT, 0, 20)
