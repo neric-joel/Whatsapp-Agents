@@ -33,7 +33,9 @@ describe('discussion slash command', () => {
       phase: 'converge',
       target: 'coordinator',
     })
-    expect(buildDiscussionStagePrompt('discuss', 'plan', 'math')).toContain('COMPLEMENTARY sub-tasks')
+    expect(buildDiscussionStagePrompt('discuss', 'plan', 'math')).toContain(
+      'COMPLEMENTARY sub-tasks',
+    )
     expect(buildDiscussionStagePrompt('discuss', 'converge', 'math')).toContain('Contributions:')
     // debate is a genuinely different (adversarial) machine
     expect(nextDiscussionStage('debate', 'assign', false)).toEqual({

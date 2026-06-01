@@ -164,7 +164,12 @@ export function parseTaskList(
     const id = bySlug.get(slug)
     if (!id || seen.has(slug) || !task.trim()) return
     seen.add(slug)
-    out.push({ agent_slug: slug, agent_id: id, task: task.trim().slice(0, 400), ...(position ? { position } : {}) })
+    out.push({
+      agent_slug: slug,
+      agent_id: id,
+      task: task.trim().slice(0, 400),
+      ...(position ? { position } : {}),
+    })
   }
 
   // 1) fenced JSON array of {agent_slug|slug, task, position?}
@@ -177,7 +182,11 @@ export function parseTaskList(
           const slug = String(it.agent_slug ?? it.slug ?? it.agent ?? '')
           const task = String(it.task ?? it.subtask ?? it.description ?? '')
           const pos = it.position
-          push(slug, task, pos === 'for' || pos === 'against' || pos === 'alternative' ? pos : undefined)
+          push(
+            slug,
+            task,
+            pos === 'for' || pos === 'against' || pos === 'alternative' ? pos : undefined,
+          )
         }
       }
     } catch {
@@ -209,7 +218,8 @@ export function buildCrossReviewPairs(slugs: string[]): CrossReviewPair[] {
 
 /** Render the blackboard (assignments) as DATA for inclusion in a phase prompt. */
 export function formatBlackboard(assignments: Assignment[]): string {
-  if (assignments.length === 0) return '(no explicit assignments — work the part that fits your capability)'
+  if (assignments.length === 0)
+    return '(no explicit assignments — work the part that fits your capability)'
   return assignments
     .map((a) => `- @${a.agent_slug}${a.position ? ` [${a.position}]` : ''}: ${a.task}`)
     .join('\n')
@@ -279,18 +289,20 @@ export function buildDiscussionStagePrompt(
       )
     case 'integrate':
       return head(
-        'Discussion — phase 3: integrate & cross-review.' + bb +
+        'Discussion — phase 3: integrate & cross-review.' +
+          bb +
           (opts.reviewee ? `\n\nYou are reviewing @${opts.reviewee}'s contribution.` : ''),
         "Cross-review your assigned teammate's contribution (named above): confirm what is correct, flag at least one concrete gap, mistake, or risk (name them by @slug), and propose how to MERGE their part with yours into the team answer. A genuine challenge is required — do not rubber-stamp.",
       )
     case 'dissent':
       return head(
         'Discussion — phase 3b: dissent (the team agreed too easily).' + bb,
-        'No one has substantively challenged the emerging answer. Name the SINGLE weakest point in the team\'s current solution and propose a concrete fix. Reference the responsible part by @slug. Do not rubber-stamp.',
+        "No one has substantively challenged the emerging answer. Name the SINGLE weakest point in the team's current solution and propose a concrete fix. Reference the responsible part by @slug. Do not rubber-stamp.",
       )
     case 'converge':
       return head(
-        'Discussion — phase 4: converge (you are the coordinator).' + bb +
+        'Discussion — phase 4: converge (you are the coordinator).' +
+          bb +
           (opts.attributionHeader ? `\n\n${opts.attributionHeader}` : ''),
         'Compose ONE final team answer from the contributions above. Do NOT introduce new substance that is not on the blackboard. Begin with a short "Contributions:" block attributing who did what by @slug, then give the unified answer and any caveats the team agreed matter. Do not @mention another agent in a way that starts a new turn.',
       )

@@ -25,7 +25,8 @@ function makeSupabase(cfg) {
         if (containsArg.phase)
           return { data: cfg.existingNextPhase ? [{ id: 'e' }] : [], error: null }
         const sel = ops.find((o) => o[0] === 'select')?.[1]?.[0] ?? ''
-        if (sel.includes('content')) return { data: cfg.planReply ? [cfg.planReply] : [], error: null }
+        if (sel.includes('content'))
+          return { data: cfg.planReply ? [cfg.planReply] : [], error: null }
         return { data: [], error: null }
       }
       return { data: [], error: null }
@@ -104,7 +105,10 @@ test('plan→execute: parses the plan reply into assignments and fans to all age
     memberRows: MEMBERS,
     challengePresent: false,
     existingNextPhase: false,
-    planReply: { content: '@alpha: design API\n@bravo: implement\n@charlie: tests', sender_agent_id: 'a' },
+    planReply: {
+      content: '@alpha: design API\n@bravo: implement\n@charlie: tests',
+      sender_agent_id: 'a',
+    },
   })
   await maybeScheduleDiscussionContinuation({
     supabase: sb,

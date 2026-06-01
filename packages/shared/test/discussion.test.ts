@@ -14,7 +14,10 @@ import {
 } from '../src/discussion.js'
 
 test('discuss DAG: plan→execute→integrate→(dissent if no challenge)→converge→null', () => {
-  assert.deepEqual(nextDiscussionStage('discuss', 'plan', false), { phase: 'execute', target: 'all' })
+  assert.deepEqual(nextDiscussionStage('discuss', 'plan', false), {
+    phase: 'execute',
+    target: 'all',
+  })
   assert.deepEqual(nextDiscussionStage('discuss', 'execute', false), {
     phase: 'integrate',
     target: 'all',
@@ -37,7 +40,10 @@ test('discuss DAG: plan→execute→integrate→(dissent if no challenge)→conv
 })
 
 test('debate DAG: assign→argue→rebut→adjudicate→null, dissent never inserted', () => {
-  assert.deepEqual(nextDiscussionStage('debate', 'assign', false), { phase: 'argue', target: 'all' })
+  assert.deepEqual(nextDiscussionStage('debate', 'assign', false), {
+    phase: 'argue',
+    target: 'all',
+  })
   assert.deepEqual(nextDiscussionStage('debate', 'argue', false), { phase: 'rebut', target: 'all' })
   assert.deepEqual(nextDiscussionStage('debate', 'rebut', false), {
     phase: 'adjudicate',
@@ -82,7 +88,10 @@ test('selectCoordinatorIndex: codex-first, then longest capabilities, then first
 
 test('detectChallenge: substantive challenge vs rubber-stamp', () => {
   assert.equal(detectChallenge('I disagree with @planner — we should use a queue instead.'), true)
-  assert.equal(detectChallenge('This misses the empty-input edge case; we need to add a guard.'), true)
+  assert.equal(
+    detectChallenge('This misses the empty-input edge case; we need to add a guard.'),
+    true,
+  )
   assert.equal(detectChallenge('Great work everyone, I fully agree with the plan.'), false)
   assert.equal(detectChallenge('Looks good to me.'), false)
   // a risk cue alone, without a proposed change or peer ref, is not enough
@@ -139,7 +148,9 @@ test('buildDiscussionStagePrompt: discuss vs debate are genuinely different', ()
   const bAdj = buildDiscussionStagePrompt('debate', 'adjudicate', 'X')
   assert.match(bAdj, /do not merge/i)
   // execute prompt embeds the blackboard
-  const exec = buildDiscussionStagePrompt('discuss', 'execute', 'X', { blackboard: '- @coder: build' })
+  const exec = buildDiscussionStagePrompt('discuss', 'execute', 'X', {
+    blackboard: '- @coder: build',
+  })
   assert.match(exec, /@coder: build/)
 })
 
