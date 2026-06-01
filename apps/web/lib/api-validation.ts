@@ -149,6 +149,9 @@ export const createAgentSchema = z.object({
   // Accepted for forward-compat but does NOT grant tool auto-approval: the bridge
   // gates tools through the live approval flow, never this field.
   tool_permissions: z.record(z.string(), z.unknown()).optional(),
+  // BYO credential (ADR-0010) — the caller's own credential to fuel this agent. The
+  // create route verifies it belongs to the caller; the secret never touches this row.
+  credential_id: z.string().uuid().nullable().optional(),
 })
 
 export const updateAgentSchema = z
@@ -160,5 +163,22 @@ export const updateAgentSchema = z
     capabilities: z.string().max(500).nullable().optional(),
     reply_policy: z.enum(['always', 'reply_when_invoked', 'never']).optional(),
     is_active: z.boolean().optional(),
+    credential_id: z.string().uuid().nullable().optional(),
   })
   .refine((d) => Object.keys(d).length > 0, 'At least one field required')
+
+// WS2 (ADR-0010) — register a BYO provider credential. The secret is encrypted
+// server-side before storage and never returned to the browser.
+export const createCredentialSchema = z.object({
+  provider: z.enum(AGENT_PROVIDERS),
+  label: z.string().min(1).max(80),
+  secret: z.string().min(1).max(8000),
+  // Optional custom endpoint (e.g. Azure/compatible). https-only to avoid SSRF/mixed-content.
+  base_url: z
+    .string()
+    .url()
+    .max(2000)
+    .refine((u) => u.startsWith('https://'), 'base_url must be an https URL')
+    .optional(),
+  is_default: z.boolean().optional(),
+})

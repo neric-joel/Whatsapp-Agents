@@ -76,6 +76,20 @@ export async function POST(req: NextRequest) {
     return apiError('CONFLICT', 'An agent with that slug is already in this room', 409)
   }
 
+  // BYO credential (ADR-0010): if the agent binds a credential, it MUST be the caller's
+  // own — verify ownership before linking (the secret never touches the agent row).
+  if (input.credential_id) {
+    const { data: cred } = await supabase
+      .from('user_credentials')
+      .select('id')
+      .eq('id', input.credential_id)
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (!cred) {
+      return apiError('VALIDATION_ERROR', 'credential_id not found or not owned by you', 400)
+    }
+  }
+
   const { data: agent, error: agentErr } = await supabase
     .from('agents')
     .insert({
@@ -89,6 +103,7 @@ export async function POST(req: NextRequest) {
       capabilities: input.capabilities ?? null,
       reply_policy: input.reply_policy ?? 'reply_when_invoked',
       tool_permissions: {},
+      credential_id: input.credential_id ?? null,
       created_by_user_id: user.id,
       is_active: true,
     })
