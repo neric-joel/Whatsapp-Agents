@@ -1,4 +1,5 @@
 import type { AgentEvent } from '@agentroom/shared'
+import { detectChallenge, readDiscussionMetadata } from '@agentroom/shared'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 import { getAdapter as defaultGetAdapter } from '../adapters/registry.js'
@@ -313,6 +314,11 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
       flagged: hallucination.flagged,
       confidence: hallucination.confidence,
     })
+    // ADR-0011: when this run is part of a discussion, copy the discussion blackboard onto the
+    // reply and stamp whether it substantively challenged a peer. The scoped peer query
+    // (build-context-packet) matches replies by this metadata, so later phases can see this
+    // agent's contribution; the challenge flag drives the anti-sycophancy / dissent gate.
+    const disc = readDiscussionMetadata(triggerMsg.metadata)
     const metadata = {
       agent_loop: {
         is_conclusion: isConclusion,
@@ -324,6 +330,18 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
         reasons: hallucination.reasons,
         checked_at: new Date().toISOString(),
       },
+      ...(disc
+        ? {
+            discussion: {
+              enabled: true as const,
+              command: disc.command,
+              phase: disc.phase,
+              original_message_id: disc.original_message_id,
+              original_prompt: disc.original_prompt,
+              challenge: detectChallenge(replyContent),
+            },
+          }
+        : {}),
     }
     const { data: insertedMessage, error: insertMessageError } = await supabase
       .from('messages')

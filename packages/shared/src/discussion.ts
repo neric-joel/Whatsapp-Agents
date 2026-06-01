@@ -299,6 +299,66 @@ export function buildDiscussionStagePrompt(
   }
 }
 
+/** The `metadata.discussion` blackboard carried on every discussion message. */
+export interface DiscussionMetadata {
+  enabled: true
+  command: DiscussCommand
+  phase: DiscussionPhase
+  original_message_id: string
+  original_prompt: string
+  coordinator_agent_id?: string
+  assignments?: Assignment[]
+  cross_review_pairs?: CrossReviewPair[]
+  /** Stamped per agent reply: did this reply substantively challenge a peer? */
+  challenge?: boolean
+  /** Audit flag set on converge when the team never produced a challenge even after dissent. */
+  anti_sycophancy?: string
+}
+
+const ALL_PHASES = new Set<DiscussionPhase>([
+  'plan',
+  'execute',
+  'integrate',
+  'dissent',
+  'converge',
+  'assign',
+  'argue',
+  'rebut',
+  'adjudicate',
+  'individual',
+  'critique',
+  'consensus',
+])
+
+/** Validate + read the discussion blackboard from a message's metadata. Null when absent/invalid. */
+export function readDiscussionMetadata(
+  metadata: Record<string, unknown> | null | undefined,
+): DiscussionMetadata | null {
+  const d = (metadata as { discussion?: unknown } | null | undefined)?.discussion
+  if (!d || typeof d !== 'object' || Array.isArray(d)) return null
+  const v = d as Record<string, unknown>
+  if (v.enabled !== true) return null
+  if (typeof v.phase !== 'string' || !ALL_PHASES.has(v.phase as DiscussionPhase)) return null
+  if (typeof v.original_message_id !== 'string') return null
+  if (typeof v.original_prompt !== 'string' || v.original_prompt.trim().length === 0) return null
+  return {
+    enabled: true,
+    command: v.command === 'debate' ? 'debate' : 'discuss',
+    phase: v.phase as DiscussionPhase,
+    original_message_id: v.original_message_id,
+    original_prompt: v.original_prompt,
+    ...(typeof v.coordinator_agent_id === 'string'
+      ? { coordinator_agent_id: v.coordinator_agent_id }
+      : {}),
+    ...(Array.isArray(v.assignments) ? { assignments: v.assignments as Assignment[] } : {}),
+    ...(Array.isArray(v.cross_review_pairs)
+      ? { cross_review_pairs: v.cross_review_pairs as CrossReviewPair[] }
+      : {}),
+    ...(v.challenge === true ? { challenge: true } : {}),
+    ...(typeof v.anti_sycophancy === 'string' ? { anti_sycophancy: v.anti_sycophancy } : {}),
+  }
+}
+
 /** Map a stage to its 1-based number within its command sequence (for budget/diagnostics). */
 export function discussionStageNumber(command: DiscussCommand, phase: DiscussionPhase): number {
   const discuss: DiscussionPhase[] = ['plan', 'execute', 'integrate', 'dissent', 'converge']
