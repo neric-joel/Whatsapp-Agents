@@ -65,9 +65,10 @@ export function parseSlashCommand(input: string): SlashCommand | null {
   if (!extracted) return null
   const { name, rest } = extracted
 
-  // `/discuss` is owned by @agentroom/shared + the messages route — let it pass
-  // through as a normal message rather than intercepting it here.
-  if (name === 'discuss') return null
+  // `/discuss` (and its `/debate` synonym) are owned by @agentroom/shared + the
+  // messages route — let them pass through as a normal message rather than
+  // intercepting here. Both are registered so /help lists them and RBAC applies.
+  if (name === 'discuss' || name === 'debate') return null
 
   const spec = getCommandSpec(name)
   if (!spec) return { command: 'unknown', name }
