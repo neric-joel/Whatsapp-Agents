@@ -49,7 +49,11 @@ end and security-proven). **NOT yet done:** WS1 breadth (full difficulty/file/co
 | WS2 | agent binding (credential_id, owner-checked) | **PASS** | agents route verifies ownership before link |
 | WS2 | Settings → Providers UI | **PASS** | /settings (auth-protected 307); add/list/delete; write-only secret; states + a11y labels |
 | WS2 | real reply from a registered provider | **COULD-NOT-RUN** | no spare provider API key; host codex uses ChatGPT-login. Injection path proven by the e2e test instead. |
-| WS-UX | 7-theme axe / authed Lighthouse / responsive / screenshots | **PENDING** | not started |
+| WS-UX | authed axe on all 7 themes + Settings | **PASS** | 0 serious/critical each; fixed 2 real `--muted` AA fails (solarized-light, one-dark-pro) |
+| WS-UX | authed Lighthouse user-flow ≥95 (ADR-0009 gate #1) | **PASS (100)** | login-first CDP flow on the real room: a11y 100, best-practices 100 |
+| WS-UX | brand fonts actually render | **PASS (fixed)** | found via `/critique`: self-host loaded but `.font-sans` beat `body{}`; Tailwind fontFamily→next/font vars; `DM_SANS_PAINTS=true` |
+| WS-UX | responsive 320→1440 + keyboard + focus | **PASS** | 0px horizontal overflow at 320/375/768/1024/1440; compose reachable, Enter sends, focus ring visible |
+| WS-UX | `/critique ux` adversarial + a11y panel | **PASS** | 1 Critical (font-paint) + 1 Medium (delete confirm) found & fixed; CSP/secret/contrast attacks SURVIVED |
 | WS3 | cold-clone onboarding | **PENDING** | not started (runs last) |
 
 ## 5. Multi-agent `/discuss` transcript (proof of convergence)
@@ -69,23 +73,56 @@ while a `process.env` service-role secret is NOT forwarded; no-inject → absent
 (4) **logs** — the secret canary appears 0× in web/bridge logs. (5) **RLS pgTAP** — owner-only
 reads, secret columns 42501 to the browser, cross-user denied, service-role decrypts.
 
-## 7. UI/UX — PENDING (WS-UX)
+## 7. UI/UX — DONE (WS-UX)
 
-The new Settings UI was built to the states/labels contract; the full WS-UX pass (per-theme
-authed axe on all 7 themes, authed Lighthouse user-flow ≥95, responsive 320→1440, keyboard
-walkthrough, before/after screenshots — ADR-0009 gates) is **not yet run**.
+Run authenticated, login-first, against the live seeded app (the gap ADR-0009 flagged).
+
+- **Per-theme a11y (axe-core, WCAG 2.1 AA):** authenticated room scanned on **all 7 themes**
+  + the Settings page → **0 serious/critical** each. The scan caught two *real* contrast
+  bugs — `--muted` failed AA on `solarized-light` (4.39:1) and `one-dark-pro` (3.72:1);
+  darkened/lightened to ≥5.1:1 / ≥5.5:1 (`globals.css`). Tests added to `e2e/a11y.spec.ts`.
+- **Authed Lighthouse user-flow (ADR-0009 gate #1):** a Playwright login populates a
+  persistent profile; lighthouse attaches over CDP `--port` so it navigates the room
+  *authenticated* (the old extra-headers approach bounced to `/auth`). **a11y 100,
+  best-practices 100** on the real room.
+- **Brand fonts — found + fixed via `/critique`:** the app loaded DM Sans/JetBrains Mono
+  from `fonts.googleapis.com`, which the tight CSP correctly blocked → silent system-font
+  fallback. Migrated to `next/font/google` (self-hosted, CSP stays `'self'`). The adversarial
+  critic then caught that `<body className="font-sans">` (Tailwind utility, specificity 0,1,0)
+  still beat the `body{}` rule (0,0,1) — so DM Sans loaded but never *painted*. Fixed by
+  pointing Tailwind `fontFamily.sans/.mono` at the next/font CSS vars; verified
+  `DM_SANS_PAINTS=true` (computed font-family on body/h1/code = `__DM_Sans_*`/`__JetBrains_Mono_*`).
+- **Responsive / keyboard / focus:** 0px horizontal overflow at 320/375/768/1024/1440;
+  compose reachable by keyboard, Enter sends; visible focus ring. Screenshots in
+  `docs/reviews/ux-screenshots/` (5 widths + focus state + Settings).
+- **`/critique ux`** (adversarial + a11y panel): reports in
+  `docs/reviews/2026-06-01-ux-{adversarial-critic,accessibility-reviewer}.md`. Findings:
+  1 Critical (font-paint) + 1 Medium (credential delete had no confirm) → **fixed**; CSP
+  completeness, secret-never-to-browser, and the two changed contrast values all **SURVIVED**.
+
+**Honest caveats (accepted):** (a) the authed axe tests are gated on `E2E_LIVE` and currently
+run **locally only** — CI runs the unauthed `/auth` tier; promoting the Tier-2 Supabase-in-CI
+block (stubbed in `e2e.yml`) is a tracked follow-up. (b) `next/font/google` fetches the font
+files at **build time**; a fully air-gapped `next build` would fail (a clone already needs the
+network for `pnpm install`, so impact is marginal) — migrate to `next/font/local` with committed
+woff2 if offline builds are ever required.
 
 ## 8. Fixes shipped / deferred
 
-**Shipped (commits `7a16fd1`→`73ebb99`):** Codex reply pollution; `/debate` parity; the full
+**Shipped (commits `7a16fd1`→`fe94586`):** Codex reply pollution; `/debate` parity; the full
 WS2 stack (foundation, crypto, inject seam, resolution+wiring, e2e red-team, API+binding+RLS,
-Settings UI). **Deferred:** WS2 real-provider reply (needs a real key); WS1 breadth; WS-UX; WS3;
+Settings UI); **WS-UX** — `node:crypto` client-bundle recovery (subpath export), 2 theme
+contrast fixes, per-theme + Settings authed axe tests, authed Lighthouse 100, self-hosted fonts
++ the font-paint Critical, credential-delete confirmation. **Deferred:** WS2 real-provider reply
+(needs a real key); WS1 breadth; WS3; Tier-2 a11y CI promotion; `next/font/local` offline build;
 WS2 v1.1 (custom-CLI bin-path/env-name columns, Vault, key rotation, default-by-provider auto-resolve).
 
 ## 9. WS3 onboarding — PENDING (runs last).
 
 ## 10. Next `/goal`
 
-Finish **WS-UX** (authed Lighthouse user-flow + per-theme axe + responsive + screenshots,
-closing ADR-0009 gates), then **WS1 breadth** (difficulty/file/command matrices) and **WS3**
-cold-clone onboarding; when a real provider key is available, run the WS2 real-reply checkpoint.
+WS-UX is **DONE** (commits through `fe94586`; ADR-0009 gate #1 closed at Lighthouse a11y 100).
+Remaining, in order: **WS1 breadth** (difficulty matrix EASY→EXTRA_HARD × domains, file-MIME
+matrix, tool-approval gate, full slash-command sweep, hallucination-flag→reject) → **WS3**
+cold-clone onboarding (last) → final regression + cleanup. When a real provider key is
+available, run the deferred WS2 real-reply checkpoint.
