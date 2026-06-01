@@ -14,7 +14,7 @@ function initials(name: string) {
     .toUpperCase()
 }
 
-export interface AgentRunCardProps {
+interface AgentRunCardProps {
   run: {
     id: string
     status: RunStatus
@@ -51,9 +51,13 @@ export default function AgentRunCard({ run, onRetry, onCancel }: AgentRunCardPro
   const isThinking = status === 'queued' || status === 'claimed' || status === 'running'
 
   return (
-    <div className={`mx-5 my-2 max-w-3xl rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-3 transition-shadow ${status === 'running' ? providerStyle.glow : ''}`}>
+    <div
+      className={`mx-5 my-2 max-w-3xl rounded-lg border border-[var(--border)] bg-[var(--panel)] px-4 py-3 transition-shadow ${status === 'running' ? providerStyle.glow : ''}`}
+    >
       <div className="flex items-start gap-3">
-        <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border ${providerStyle.avatar} ${providerStyle.border}`}>
+        <div
+          className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border ${providerStyle.avatar} ${providerStyle.border}`}
+        >
           <span className="text-[11px] font-semibold text-white">
             {agents ? initials(agents.name) : 'AG'}
           </span>
@@ -63,14 +67,28 @@ export default function AgentRunCard({ run, onRetry, onCancel }: AgentRunCardPro
             <span className={`truncate text-sm font-medium ${providerStyle.nameColor}`}>
               {agents?.name ?? 'Agent'}
             </span>
-            <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${statusClass[status]}`}>
+            <span
+              className={`rounded-full px-2 py-1 text-[11px] font-medium ${statusClass[status]}`}
+            >
               {statusLabel[status]}
             </span>
           </div>
-          <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+          {/*
+            No nested live region here: this card is rendered inside the
+            MessageTimeline role="log" (aria-live), which announces the card when
+            it appears. A nested role="status"/aria-live would double-announce.
+          */}
+          <div className="mt-1 flex items-center gap-2 text-xs text-[var(--muted)]">
             {isThinking ? (
               <>
-                <span>{status === 'queued' ? 'Waiting to respond' : status === 'claimed' ? 'Starting' : 'Thinking'}</span>
+                <span>
+                  {agents?.name ?? 'Agent'}{' '}
+                  {status === 'queued'
+                    ? 'is waiting to respond'
+                    : status === 'claimed'
+                      ? 'is starting'
+                      : 'is thinking'}
+                </span>
                 <span className="flex gap-1" aria-hidden="true">
                   {[0, 1, 2].map((i) => (
                     <div

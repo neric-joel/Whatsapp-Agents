@@ -1,0 +1,17 @@
+node_modules/
+.next/
+dist/
+build/
+pnpm-lock.yaml
+*.md
+supabase/.temp/
+.worktrees/
+*.diff
+.turbo/
+
+coverage
+.nyc_output
+
+# Playwright e2e artifacts
+playwright-report
+test-results

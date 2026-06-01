@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import type { AgentEvent, ContextPacketV1 } from '@agentroom/shared'
+
 import { CodexCliAdapter } from '../src/adapters/codex-cli-adapter.js'
 import { SubprocessAdapter } from '../src/adapters/subprocess-adapter.js'
-import type { AgentEvent, ContextPacketV1 } from '@agentroom/shared'
 
 const packet: ContextPacketV1 = {
   schema_version: 1,
@@ -55,9 +56,15 @@ const packet: ContextPacketV1 = {
 class TestSubprocessAdapter extends SubprocessAdapter {
   readonly name = 'test'
 
-  protected resolveCommand(): string { return 'node' }
-  protected buildArgs(_packet: ContextPacketV1): string[] { return [] }
-  protected envVarName(): string { return 'TEST_BIN' }
+  protected resolveCommand(): string {
+    return 'node'
+  }
+  protected buildArgs(_packet: ContextPacketV1): string[] {
+    return []
+  }
+  protected envVarName(): string {
+    return 'TEST_BIN'
+  }
 
   stdin(packet: ContextPacketV1): string {
     return this.buildStdin(packet)
@@ -73,7 +80,9 @@ class TimeoutSubprocessAdapter extends TestSubprocessAdapter {
     return ['-e', 'setInterval(() => {}, 1000)']
   }
 
-  protected getTimeoutMs(): number { return 25 }
+  protected getTimeoutMs(): number {
+    return 25
+  }
 }
 
 class TestCodexCliAdapter extends CodexCliAdapter {
@@ -99,21 +108,26 @@ test('subprocess adapter defaults stdin to the serialized packet', () => {
 test('subprocess adapter parses AgentResponseV1 stdout lines', () => {
   const adapter = new TestSubprocessAdapter()
 
-  assert.deepEqual(adapter.parse(JSON.stringify({
-    schema_version: 1,
-    run_id: 'run-1',
-    content: 'hello',
-    content_type: 'text',
-  })), {
-    type: 'final_response',
-    run_id: 'run-1',
-    response: {
-      schema_version: 1,
+  assert.deepEqual(
+    adapter.parse(
+      JSON.stringify({
+        schema_version: 1,
+        run_id: 'run-1',
+        content: 'hello',
+        content_type: 'text',
+      }),
+    ),
+    {
+      type: 'final_response',
       run_id: 'run-1',
-      content: 'hello',
-      content_type: 'text',
+      response: {
+        schema_version: 1,
+        run_id: 'run-1',
+        content: 'hello',
+        content_type: 'text',
+      },
     },
-  })
+  )
 })
 
 test('subprocess adapter returns a timeout error instead of hanging', async () => {
@@ -146,7 +160,10 @@ test('codex adapter builds a prompt that highlights the current user message', (
   assert.match(prompt, /Relevant recent context only\./)
   assert.match(prompt, /Agent: Previous reply/)
   assert.match(prompt, /-----\nCURRENT MESSAGE YOU MUST RESPOND TO:\nPlease fix this\n-----/)
-  assert.match(prompt, /Respond directly and specifically to the CURRENT MESSAGE above as CodexAgent\./)
+  assert.match(
+    prompt,
+    /Respond directly and specifically to the CURRENT MESSAGE above as CodexAgent\./,
+  )
   assert.throws(() => JSON.parse(prompt))
 })
 
@@ -205,24 +222,32 @@ test('codex adapter uses the last user message as the current message', () => {
 test('codex adapter parses actual codex agent_message JSONL events', () => {
   const adapter = new TestCodexCliAdapter()
 
-  assert.deepEqual(adapter.parse(JSON.stringify({
-    type: 'item.completed',
-    item: { id: 'item_0', type: 'agent_message', text: 'Hello!' },
-  })), {
-    type: 'visible_message',
-    run_id: '',
-    content: 'Hello!',
-  })
+  assert.deepEqual(
+    adapter.parse(
+      JSON.stringify({
+        type: 'item.completed',
+        item: { id: 'item_0', type: 'agent_message', text: 'Hello!' },
+      }),
+    ),
+    {
+      type: 'visible_message',
+      run_id: '',
+      content: 'Hello!',
+    },
+  )
 })
 
 test('codex adapter parses top-level content and text JSONL events', () => {
   const adapter = new TestCodexCliAdapter()
 
-  assert.deepEqual(adapter.parse(JSON.stringify({ type: 'agent_message', content: 'Top-level content' })), {
-    type: 'visible_message',
-    run_id: '',
-    content: 'Top-level content',
-  })
+  assert.deepEqual(
+    adapter.parse(JSON.stringify({ type: 'agent_message', content: 'Top-level content' })),
+    {
+      type: 'visible_message',
+      run_id: '',
+      content: 'Top-level content',
+    },
+  )
   assert.deepEqual(adapter.parse(JSON.stringify({ type: 'message', text: 'Top-level text' })), {
     type: 'visible_message',
     run_id: '',

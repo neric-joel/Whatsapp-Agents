@@ -9,4 +9,3 @@ export function getImageFilesFromClipboardItems(items: DataTransferItemList | nu
   }
   return files
 }
-

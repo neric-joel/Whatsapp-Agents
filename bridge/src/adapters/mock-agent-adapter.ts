@@ -1,4 +1,4 @@
-import type { AgentAdapter, ContextPacketV1, AgentEvent } from '@agentroom/shared'
+import type { AgentAdapter, AgentEvent, ContextPacketV1 } from '@agentroom/shared'
 
 export class MockAgentAdapter implements AgentAdapter {
   async *run(packet: ContextPacketV1, signal: AbortSignal): AsyncGenerator<AgentEvent> {

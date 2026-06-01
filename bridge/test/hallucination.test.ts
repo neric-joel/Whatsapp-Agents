@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { detectHallucination } from '../src/lib/hallucination.js'
 
 test('detects hedging language', () => {
-  const result = detectHallucination("I think this might be the right answer.")
+  const result = detectHallucination('I think this might be the right answer.')
 
   assert.equal(result.flagged, true)
   assert.deepEqual(result.reasons, ['Contains hedging language without grounding'])
@@ -25,7 +25,9 @@ test('detects unqualified absolute claims', () => {
 })
 
 test('does not flag clean content', () => {
-  const result = detectHallucination('The next step is to inspect the worker and add metadata to the inserted reply.')
+  const result = detectHallucination(
+    'The next step is to inspect the worker and add metadata to the inserted reply.',
+  )
 
   assert.equal(result.flagged, false)
   assert.equal(result.confidence, 'low')

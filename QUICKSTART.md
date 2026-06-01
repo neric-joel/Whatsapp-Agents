@@ -2,12 +2,16 @@
 
 ## Prerequisites
 
-- Node.js 20+
-- pnpm 9+
+- Node.js 22.13+ (see `.nvmrc`)
+- pnpm 11+ (`npm install -g pnpm@11.0.8` or `corepack enable`)
 - Docker Desktop
 - Supabase CLI
 - Claude CLI
 - Codex CLI
+
+> **macOS / Linux / WSL:** `make bootstrap` does this entire local setup in one
+> command. Running in containers or self-hosting? See
+> [`docs/SELF_HOSTING.md`](docs/SELF_HOSTING.md).
 
 ## First-Time Setup
 

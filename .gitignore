@@ -12,3 +12,18 @@ agentroom_graph_*.html
 .claude/do-tasks/*/
 apps/web/.claude/
 bridge/.tmp-test/
+
+# hardening: stale worktrees, graphify output, runner stop-flag + live heartbeat, local settings
+.worktrees/
+graphify-out/
+docs/production-hardening/DONE.flag
+docs/production-hardening/STATUS.md
+.claude/settings.local.json
+
+# Coverage output
+coverage/
+.nyc_output/
+
+# Playwright e2e artifacts
+playwright-report/
+test-results/

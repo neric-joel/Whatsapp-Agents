@@ -1,18 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
 import { notifyChatCleared, subscribeToChatCleared } from '../chat-events'
 
 describe('chat cleared events', () => {
   beforeEach(() => {
     const target = new EventTarget()
     vi.stubGlobal('window', target)
-    vi.stubGlobal('CustomEvent', class<T = unknown> extends Event {
-      detail: T
+    vi.stubGlobal(
+      'CustomEvent',
+      class<T = unknown> extends Event {
+        detail: T
 
-      constructor(type: string, init?: CustomEventInit<T>) {
-        super(type)
-        this.detail = init?.detail as T
-      }
-    })
+        constructor(type: string, init?: CustomEventInit<T>) {
+          super(type)
+          this.detail = init?.detail as T
+        }
+      },
+    )
   })
 
   afterEach(() => {

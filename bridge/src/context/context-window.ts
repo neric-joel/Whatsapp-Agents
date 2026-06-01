@@ -6,24 +6,40 @@ export function readContextMessageLimit(env: NodeJS.ProcessEnv = process.env): n
 }
 
 export function readContextMessageMaxChars(env: NodeJS.ProcessEnv = process.env): number {
-  return readBoundedInt(env.AGENTROOM_CONTEXT_MESSAGE_MAX_CHARS, DEFAULT_CONTEXT_MESSAGE_MAX_CHARS, 200, 8000)
+  return readBoundedInt(
+    env.AGENTROOM_CONTEXT_MESSAGE_MAX_CHARS,
+    DEFAULT_CONTEXT_MESSAGE_MAX_CHARS,
+    200,
+    8000,
+  )
 }
 
-export function trimContextContent(content: string, maxChars = DEFAULT_CONTEXT_MESSAGE_MAX_CHARS): string {
+export function trimContextContent(
+  content: string,
+  maxChars = DEFAULT_CONTEXT_MESSAGE_MAX_CHARS,
+): string {
   if (content.length <= maxChars) return content
 
   const omitted = content.length - maxChars
   return `${content.slice(0, maxChars).trimEnd()}\n[...truncated ${omitted} chars]`
 }
 
-export function trimContextMessages<T extends { content: string }>(messages: T[], maxChars = DEFAULT_CONTEXT_MESSAGE_MAX_CHARS): T[] {
+export function trimContextMessages<T extends { content: string }>(
+  messages: T[],
+  maxChars = DEFAULT_CONTEXT_MESSAGE_MAX_CHARS,
+): T[] {
   return messages.map((message) => ({
     ...message,
     content: trimContextContent(message.content, maxChars),
   }))
 }
 
-function readBoundedInt(value: string | undefined, fallback: number, min: number, max: number): number {
+function readBoundedInt(
+  value: string | undefined,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
   const parsed = Number.parseInt(value ?? '', 10)
   if (!Number.isFinite(parsed)) return fallback
   return Math.min(max, Math.max(min, parsed))

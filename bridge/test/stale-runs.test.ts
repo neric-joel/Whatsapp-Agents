@@ -66,4 +66,3 @@ test('recoverStaleRuns marks stale claimed and running runs as failed', async ()
     },
   ])
 })
-

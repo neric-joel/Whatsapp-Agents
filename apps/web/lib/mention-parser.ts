@@ -7,7 +7,7 @@ export interface ParsedMention {
 
 export function parseMentions(
   content: string,
-  agents: ReadonlyArray<{ id: string; slug: string }>
+  agents: ReadonlyArray<{ id: string; slug: string }>,
 ): ParsedMention[] {
   const mentions: ParsedMention[] = []
   const seen = new Set<string>()

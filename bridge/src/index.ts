@@ -1,19 +1,28 @@
 import 'dotenv/config'
+
+import { loadBridgeEnv } from './lib/env.js'
+import { errorTrackingEnabled } from './lib/error-tracking.js'
+import { createHealthServer } from './lib/health-server.js'
 import { log } from './lib/logger.js'
-import { createServiceClient } from './lib/supabase.js'
 import { recoverStaleRuns } from './lib/stale-runs.js'
+import { createServiceClient } from './lib/supabase.js'
 import { processRun } from './workers/run-worker.js'
 
-const WORKER_ID    = process.env.BRIDGE_WORKER_ID               ?? 'bridge-local-1'
-const POLL_MS      = +(process.env.BRIDGE_POLL_INTERVAL_MS      ?? 2000)
-const MAX_CONC     = +(process.env.BRIDGE_MAX_CONCURRENT_RUNS   ?? 3)
-const HEARTBEAT_MS = +(process.env.BRIDGE_HEARTBEAT_INTERVAL_MS ?? 5000)
-const STALE_MS     = +(process.env.BRIDGE_STALE_RUN_TIMEOUT_MS  ?? 60000)
+// Fail fast on a bad environment, naming the offending var(s).
+const env = loadBridgeEnv()
+const POLL_MS = env.BRIDGE_POLL_INTERVAL_MS
+const MAX_CONC = env.BRIDGE_MAX_CONCURRENT_RUNS
+const HEARTBEAT_MS = env.BRIDGE_HEARTBEAT_INTERVAL_MS
+const STALE_MS = env.BRIDGE_STALE_RUN_TIMEOUT_MS
 const STALE_SWEEP_MS = Math.max(HEARTBEAT_MS, Math.min(STALE_MS, 30000))
+const HEALTH_PORT = env.BRIDGE_HEALTH_PORT
 
 const activeRuns = new Set<string>()
+const startedAt = Date.now()
+let lastPollAt: string | null = null
 
 async function pollOnce() {
+  lastPollAt = new Date().toISOString()
   if (activeRuns.size >= MAX_CONC) return
   log('debug', 'poll.start')
   const supabase = createServiceClient()
@@ -32,7 +41,12 @@ async function pollOnce() {
     if (activeRuns.has(id)) continue
     activeRuns.add(id)
     processRun(id)
-      .catch(err => log('error', 'run.process.error', { run_id: id, error: err instanceof Error ? err.message : String(err) }))
+      .catch((err) =>
+        log('error', 'run.process.error', {
+          run_id: id,
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      )
       .finally(() => activeRuns.delete(id))
   }
 }
@@ -63,15 +77,83 @@ async function sendHeartbeat() {
   }
 }
 
-async function main() {
-  log('info', 'bridge.start', { poll_interval_ms: POLL_MS, max_concurrent: MAX_CONC, stale_sweep_ms: STALE_SWEEP_MS })
-  await recoverStaleRunsOnce('stale: recovered on startup')
-  setInterval(() => { pollOnce().catch(err => log('error', 'poll.error', { error: err instanceof Error ? err.message : String(err) })) }, POLL_MS)
-  setInterval(() => { sendHeartbeat().catch(err => log('error', 'heartbeat.error', { error: err instanceof Error ? err.message : String(err) })) }, HEARTBEAT_MS)
-  setInterval(() => { recoverStaleRunsOnce('stale: recovered by periodic sweep').catch(err => log('error', 'stale.recovery.error', { error: err instanceof Error ? err.message : String(err) })) }, STALE_SWEEP_MS)
+async function countQueuedRuns(): Promise<number | null> {
+  try {
+    const supabase = createServiceClient()
+    const { count } = await supabase
+      .from('agent_runs')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'queued')
+    return count ?? 0
+  } catch {
+    return null
+  }
 }
 
-main().catch(err => {
+async function main() {
+  log('info', 'bridge.start', {
+    poll_interval_ms: POLL_MS,
+    max_concurrent: MAX_CONC,
+    stale_sweep_ms: STALE_SWEEP_MS,
+    health_port: HEALTH_PORT,
+    error_tracking: errorTrackingEnabled,
+  })
+
+  const healthServer = createHealthServer(HEALTH_PORT, {
+    workerId: env.BRIDGE_WORKER_ID,
+    startedAt,
+    getActiveRuns: () => activeRuns.size,
+    getQueuedRuns: countQueuedRuns,
+    getLastPollAt: () => lastPollAt,
+  })
+  if (healthServer) {
+    // Surface a bind failure (e.g. EADDRINUSE) instead of failing silently — the
+    // container HEALTHCHECK would otherwise restart-loop with no diagnostic.
+    healthServer.on('error', (err: NodeJS.ErrnoException) =>
+      log('error', 'health.listen.error', { port: HEALTH_PORT, error: err.message }),
+    )
+    healthServer.listen(HEALTH_PORT, () => log('info', 'health.listening', { port: HEALTH_PORT }))
+  }
+
+  await recoverStaleRunsOnce('stale: recovered on startup')
+  const pollTimer = setInterval(() => {
+    pollOnce().catch((err) =>
+      log('error', 'poll.error', { error: err instanceof Error ? err.message : String(err) }),
+    )
+  }, POLL_MS)
+  const heartbeatTimer = setInterval(() => {
+    sendHeartbeat().catch((err) =>
+      log('error', 'heartbeat.error', { error: err instanceof Error ? err.message : String(err) }),
+    )
+  }, HEARTBEAT_MS)
+  const staleTimer = setInterval(() => {
+    recoverStaleRunsOnce('stale: recovered by periodic sweep').catch((err) =>
+      log('error', 'stale.recovery.error', {
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    )
+  }, STALE_SWEEP_MS)
+
+  // Graceful shutdown for `docker stop` (SIGTERM) / Ctrl-C (SIGINT): stop the loops
+  // so no new runs are claimed, then exit. An in-flight run is NOT drained — on the
+  // next startup stale-run recovery marks it `failed` (it is not auto-retried), so a
+  // user can re-send. A multi-worker deploy keeps serving during one worker's restart.
+  let shuttingDown = false
+  const shutdown = (signal: NodeJS.Signals) => {
+    if (shuttingDown) return
+    shuttingDown = true
+    log('info', 'bridge.shutdown', { signal, active_runs: activeRuns.size })
+    clearInterval(pollTimer)
+    clearInterval(heartbeatTimer)
+    clearInterval(staleTimer)
+    healthServer?.close()
+    setTimeout(() => process.exit(0), 100).unref()
+  }
+  process.on('SIGTERM', () => shutdown('SIGTERM'))
+  process.on('SIGINT', () => shutdown('SIGINT'))
+}
+
+main().catch((err) => {
   log('error', 'bridge.fatal', { error: err instanceof Error ? err.message : String(err) })
   process.exitCode = 1
 })

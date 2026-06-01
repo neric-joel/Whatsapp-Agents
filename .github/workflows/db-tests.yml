@@ -1,0 +1,31 @@
+name: DB Tests (RLS)
+
+# Runs the pgTAP policy tests in supabase/tests/ against a fresh local Supabase
+# database with all migrations + seed applied. Gates the core RLS invariants
+# (membership-scoped reads; browser cannot write agent_runs/messages; room-scoped
+# file access) so a migration/policy change can't silently break isolation.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rls:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      # Spin up only the local Postgres (applies migrations under supabase/migrations).
+      - run: supabase db start
+      # Run every pgTAP suite in supabase/tests/ via pg_prove.
+      - run: supabase test db

@@ -1,0 +1,31 @@
+{
+  "name": "AgentRoom",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:22-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers-contrib/features/supabase-cli:1": {}
+  },
+  "forwardPorts": [3000, 54321, 54323],
+  "portsAttributes": {
+    "3000": { "label": "web" },
+    "54321": { "label": "supabase-api" },
+    "54323": { "label": "supabase-studio" }
+  },
+  "onCreateCommand": "npm install -g pnpm@11.0.8",
+  "postCreateCommand": "pnpm install",
+  "remoteUser": "node",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+      }
+    }
+  }
+}

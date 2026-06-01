@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+
 import type { HallucinationMeta } from '@/lib/hallucination-detector'
 
 interface HallucinationBannerProps {
@@ -9,7 +10,11 @@ interface HallucinationBannerProps {
   onDismiss: () => void
 }
 
-export default function HallucinationBanner({ meta, messageId, onDismiss }: HallucinationBannerProps) {
+export default function HallucinationBanner({
+  meta,
+  messageId,
+  onDismiss,
+}: HallucinationBannerProps) {
   const [submitting, setSubmitting] = useState<'accept' | 'reject' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -25,7 +30,7 @@ export default function HallucinationBanner({ meta, messageId, onDismiss }: Hall
       })
 
       if (!res.ok) {
-        const json = await res.json().catch(() => null) as { error?: { message?: string } } | null
+        const json = (await res.json().catch(() => null)) as { error?: { message?: string } } | null
         setError(json?.error?.message ?? 'Failed to update review')
         return
       }

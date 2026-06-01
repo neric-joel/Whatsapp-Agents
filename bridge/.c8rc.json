@@ -1,0 +1,11 @@
+{
+  "src": ["src"],
+  "all": true,
+  "exclude": ["src/index.ts", "src/workers/**", "src/lib/supabase.ts", "**/*.test.ts"],
+  "reporter": ["text-summary", "html"],
+  "check-coverage": true,
+  "lines": 55,
+  "statements": 55,
+  "functions": 65,
+  "branches": 65
+}

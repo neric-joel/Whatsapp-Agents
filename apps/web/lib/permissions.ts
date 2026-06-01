@@ -1,7 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+
 import { apiError } from './api-error'
 
-export async function getRoomMembership(
+async function getRoomMembership(
   supabase: SupabaseClient,
   roomId: string,
   userId: string,
@@ -31,15 +32,6 @@ export async function requireRoomMember(
   if (!isMember) throw apiError('FORBIDDEN', 'Not a room member', 403)
 }
 
-export async function requireRoomAdmin(
-  supabase: SupabaseClient,
-  roomId: string,
-  userId: string,
-): Promise<void> {
-  const { isAdmin } = await getRoomMembership(supabase, roomId, userId)
-  if (!isAdmin) throw apiError('FORBIDDEN', 'Admin required', 403)
-}
-
 export async function requireRoomOwner(
   supabase: SupabaseClient,
   roomId: string,
@@ -47,4 +39,18 @@ export async function requireRoomOwner(
 ): Promise<void> {
   const { isOwner } = await getRoomMembership(supabase, roomId, userId)
   if (!isOwner) throw apiError('FORBIDDEN', 'Owner required', 403)
+}
+
+/**
+ * Admin+ gate (admin or owner). Used by RBAC-gated commands (`/reset`) and by
+ * user-created-agent management — server-side enforcement, never UI-only.
+ */
+export async function requireRoomAdmin(
+  supabase: SupabaseClient,
+  roomId: string,
+  userId: string,
+): Promise<void> {
+  const { isMember, isAdmin } = await getRoomMembership(supabase, roomId, userId)
+  if (!isMember) throw apiError('FORBIDDEN', 'Not a room member', 403)
+  if (!isAdmin) throw apiError('FORBIDDEN', 'Admin required', 403)
 }

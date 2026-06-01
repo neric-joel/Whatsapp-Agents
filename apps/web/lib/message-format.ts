@@ -1,9 +1,9 @@
-export type MessageBlock =
+type MessageBlock =
   | { type: 'paragraph'; text: string }
   | { type: 'list'; items: string[] }
   | { type: 'code'; text: string }
 
-export type InlineSegment =
+type InlineSegment =
   | { type: 'text'; text: string }
   | { type: 'bold'; text: string }
   | { type: 'italic'; text: string }
@@ -55,7 +55,7 @@ export function splitMessageBlocks(content: string): MessageBlock[] {
     const listMatch = line.match(/^\s*(?:[-*]|\d+\.)\s+(.+)$/)
     if (listMatch) {
       flushParagraph()
-      list.push(listMatch[1])
+      list.push(listMatch[1] ?? '')
       continue
     }
 

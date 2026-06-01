@@ -1,11 +1,14 @@
 'use client'
-import { useState, useCallback, useEffect } from 'react'
-import RoomHeader from '@/components/RoomHeader'
-import MessageTimeline from '@/components/MessageTimeline'
+import { useCallback, useEffect, useState } from 'react'
+
+import AgentsPanel from '@/components/AgentsPanel'
 import ComposeBox from '@/components/ComposeBox'
-import PinnedItemsPanel from '@/components/PinnedItemsPanel'
-import { subscribeToChatCleared } from '@/lib/chat-events'
+import MemoryPanel from '@/components/MemoryPanel'
 import type { OptimisticMessage, ReplyingMessage } from '@/components/MessageTimeline'
+import MessageTimeline from '@/components/MessageTimeline'
+import PinnedItemsPanel from '@/components/PinnedItemsPanel'
+import RoomHeader from '@/components/RoomHeader'
+import { subscribeToChatCleared } from '@/lib/chat-events'
 
 export default function RoomPage({ params }: { params: { roomId: string } }) {
   const { roomId } = params
@@ -26,7 +29,7 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
 
   return (
     <div className="flex min-h-0 flex-1">
-      <div className="flex min-w-0 flex-1 flex-col">
+      <main className="flex min-w-0 flex-1 flex-col">
         <RoomHeader roomId={roomId} />
         <MessageTimeline
           roomId={roomId}
@@ -41,12 +44,23 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
           replyingTo={replyingTo}
           onCancelReply={() => setReplyingTo(null)}
         />
-      </div>
-      <aside className="hidden w-72 flex-shrink-0 border-l border-[var(--border)] bg-[var(--right-panel)] lg:block">
+      </main>
+      <aside
+        className="hidden w-72 flex-shrink-0 overflow-y-auto border-l border-[var(--border)] bg-[var(--right-panel)] lg:block"
+        aria-label="Pinned items and memory"
+      >
         <div className="border-b border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm font-medium text-[var(--text)]">
           Pinned
         </div>
         <PinnedItemsPanel roomId={roomId} />
+        <div className="border-y border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm font-medium text-[var(--text)]">
+          Memory
+        </div>
+        <MemoryPanel roomId={roomId} />
+        <div className="border-y border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm font-medium text-[var(--text)]">
+          Agents
+        </div>
+        <AgentsPanel roomId={roomId} />
       </aside>
     </div>
   )

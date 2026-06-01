@@ -1,6 +1,9 @@
-import { SubprocessAdapter } from './subprocess-adapter.js'
-import { formatFilesForPrompt } from '../context/file-context.js'
 import type { AgentEvent, ContextPacketV1, SenderType } from '@agentroom/shared'
+
+import { formatRosterForPrompt } from '../agents/format-roster.js'
+import { formatFilesForPrompt } from '../context/file-context.js'
+import { formatMemoryForPrompt } from '../memory/format-memory.js'
+import { SubprocessAdapter } from './subprocess-adapter.js'
 
 export class CodexCliAdapter extends SubprocessAdapter {
   readonly name = 'codex-cli'
@@ -13,7 +16,9 @@ export class CodexCliAdapter extends SubprocessAdapter {
     return ['exec', '--json', '-']
   }
 
-  protected envVarName(): string { return 'CODEX_BIN' }
+  protected envVarName(): string {
+    return 'CODEX_BIN'
+  }
 
   protected buildStdin(packet: ContextPacketV1): string {
     const triggerMessage = packet.trigger_message
@@ -27,8 +32,16 @@ export class CodexCliAdapter extends SubprocessAdapter {
     ]
 
     if (history) {
-      sections.push(`Relevant recent context only. Use it as background, but prioritize the current message if there is any conflict:\n${history}`)
+      sections.push(
+        `Relevant recent context only. Use it as background, but prioritize the current message if there is any conflict:\n${history}`,
+      )
     }
+
+    const rosterContext = formatRosterForPrompt(packet.roster)
+    if (rosterContext) sections.push(rosterContext)
+
+    const memoryContext = formatMemoryForPrompt(packet.memory)
+    if (memoryContext) sections.push(memoryContext)
 
     const fileContext = formatFilesForPrompt(packet.files)
     if (fileContext) sections.push(fileContext)
@@ -57,7 +70,8 @@ Respond directly and specifically to the CURRENT MESSAGE above as ${packet.agent
       return { type: 'visible_message', run_id: '', content }
     }
 
-    return null
+    // Defer to the base parser for control envelopes (memory_op / handoff_requested).
+    return super.parseStdoutLine(line)
   }
 
   private senderLabel(senderType: SenderType): string {

@@ -1,4 +1,4 @@
-export interface ParsedMention {
+interface ParsedMention {
   type: 'agent' | 'everyone'
   slug?: string
   agent_id?: string
@@ -25,7 +25,10 @@ export function parseMentions(
     const name = agent.name as string
     const pattern = new RegExp(`@${escapeRegExp(name).replace(/\\ /g, '\\s+')}(?![\\w-])`, 'gi')
     for (const match of content.matchAll(pattern)) {
-      addMention({ type: 'agent', slug: agent.slug, agent_id: agent.id, raw: match[0] }, normalizeMentionToken(agent.name ?? agent.slug))
+      addMention(
+        { type: 'agent', slug: agent.slug, agent_id: agent.id, raw: match[0] },
+        normalizeMentionToken(agent.name ?? agent.slug),
+      )
     }
   }
 
@@ -42,10 +45,13 @@ export function parseMentions(
     }
 
     const agent = agents.find((item) => {
-      return normalizeMentionToken(item.slug) === normalizedToken
-        || normalizeMentionToken(item.name ?? '') === normalizedToken
+      return (
+        normalizeMentionToken(item.slug) === normalizedToken ||
+        normalizeMentionToken(item.name ?? '') === normalizedToken
+      )
     })
-    if (agent) addMention({ type: 'agent', slug: agent.slug, agent_id: agent.id, raw }, normalizedToken)
+    if (agent)
+      addMention({ type: 'agent', slug: agent.slug, agent_id: agent.id, raw }, normalizedToken)
   }
 
   return mentions
@@ -53,6 +59,11 @@ export function parseMentions(
 
 function normalizeMentionToken(token: string): string {
   return token.toLowerCase().replace(/[_\-\s]/g, '')
+}
+
+/** Normalize a slug/name for case- and separator-insensitive matching (Phase 10). */
+export function normalizeSlug(token: string): string {
+  return normalizeMentionToken(token)
 }
 
 function escapeRegExp(value: string): string {

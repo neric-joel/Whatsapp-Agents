@@ -1,0 +1,15 @@
+# Normalize line endings: LF in the repo for everything; CRLF only for Windows scripts.
+* text=auto eol=lf
+
+*.ps1  text eol=crlf
+*.psm1 text eol=crlf
+*.psd1 text eol=crlf
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+# Treat lockfiles/binaries appropriately
+pnpm-lock.yaml -diff
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary

@@ -1,16 +1,17 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+
 import {
-  PROBLEMS,
+  type AgentRunResult,
   assertRequiredAgents,
   buildEvaluationPrompt,
   buildStressRoomName,
   filterAgentsForStress,
   formatProblemReport,
+  type Problem,
+  PROBLEMS,
   selectProblemsForStress,
   summarizeProblemResults,
-  type AgentRunResult,
-  type Problem,
 } from './stress-test-agents.ts'
 
 const problem: Problem = {
@@ -73,14 +74,20 @@ describe('stress test report helpers', () => {
   it('selects specific problem indexes for scheduled evaluations', () => {
     const selected = selectProblemsForStress(PROBLEMS, '9,14')
 
-    assert.deepEqual(selected.map(({ problemIndex, problem }) => [problemIndex, problem.cat, problem.level]), [
-      [9, 'MATH', 'MEDIUM'],
-      [14, 'PHILOSOPHY', 'HARD'],
-    ])
+    assert.deepEqual(
+      selected.map(({ problemIndex, problem }) => [problemIndex, problem.cat, problem.level]),
+      [
+        [9, 'MATH', 'MEDIUM'],
+        [14, 'PHILOSOPHY', 'HARD'],
+      ],
+    )
   })
 
   it('builds a fresh room name when requested', () => {
-    assert.match(buildStressRoomName({ prefix: 'Scheduled Eval', fresh: true }), /^Scheduled Eval - \d{4}-\d{2}-\d{2}T/)
+    assert.match(
+      buildStressRoomName({ prefix: 'Scheduled Eval', fresh: true }),
+      /^Scheduled Eval - \d{4}-\d{2}-\d{2}T/,
+    )
     assert.equal(buildStressRoomName({ prefix: 'Scheduled Eval', fresh: false }), 'Scheduled Eval')
   })
 

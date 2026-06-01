@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+import { log } from '../lib/logger.js'
+
 export interface ContextFilePreview {
   id: string
   filename: string
@@ -31,7 +33,9 @@ export function formatFilesForPrompt(files?: ContextFilePreview[]): string | nul
   ]
 
   files.forEach((file, index) => {
-    lines.push(`${index + 1}. ${file.filename} (${file.mime_type}, ${formatBytes(file.size_bytes)})`)
+    lines.push(
+      `${index + 1}. ${file.filename} (${file.mime_type}, ${formatBytes(file.size_bytes)})`,
+    )
     if (file.extracted_text_preview?.trim()) {
       lines.push('Extracted image/file text:')
       lines.push(file.extracted_text_preview.trim())
@@ -50,7 +54,7 @@ export async function hydrateFilePreviews(
   const hydrated: ContextFilePreview[] = []
 
   for (const file of fileRows) {
-    const extractedText = file.extracted_text ?? await extractAndPersistImageText(supabase, file)
+    const extractedText = file.extracted_text ?? (await extractAndPersistImageText(supabase, file))
     hydrated.push({
       id: file.id,
       filename: file.filename,
@@ -63,10 +67,23 @@ export async function hydrateFilePreviews(
   return hydrated
 }
 
+/**
+ * Whether to send image attachments to OpenAI for text/OCR extraction.
+ *
+ * This egresses user-uploaded image bytes to a third party (OpenAI), so it is
+ * OFF by default and must be explicitly opted into: set
+ * ENABLE_IMAGE_TEXT_EXTRACTION=true AND provide OPENAI_API_KEY. Documented in
+ * bridge/.env.example.
+ */
+function imageExtractionEnabled(): boolean {
+  return process.env.ENABLE_IMAGE_TEXT_EXTRACTION === 'true' && Boolean(process.env.OPENAI_API_KEY)
+}
+
 async function extractAndPersistImageText(
   supabase: SupabaseClient,
   file: FilePreviewRow,
 ): Promise<string | null> {
+  if (!imageExtractionEnabled()) return null
   if (!file.mime_type.startsWith('image/')) return null
   if (file.size_bytes > MAX_IMAGE_BYTES) return null
 
@@ -95,14 +112,20 @@ async function extractAndPersistImageText(
         extracted_text: extractedText,
         metadata: {
           ...(file.metadata ?? {}),
-          extraction: { provider: 'openai', model: process.env.OPENAI_VISION_MODEL ?? DEFAULT_VISION_MODEL },
+          extraction: {
+            provider: 'openai',
+            model: process.env.OPENAI_VISION_MODEL ?? DEFAULT_VISION_MODEL,
+          },
         },
       })
       .eq('id', file.id)
 
     return extractedText
   } catch (error) {
-    console.warn(`File text extraction failed for ${file.id}: ${error instanceof Error ? error.message : String(error)}`)
+    log('warn', 'file.text_extraction.failed', {
+      file_id: file.id,
+      error: error instanceof Error ? error.message : String(error),
+    })
     return null
   }
 }
@@ -149,7 +172,7 @@ async function extractImageTextWithOpenAI({
     throw new Error(`OpenAI vision extraction failed for ${filename}: HTTP ${response.status}`)
   }
 
-  const json = await response.json() as { output_text?: unknown; output?: unknown }
+  const json = (await response.json()) as { output_text?: unknown; output?: unknown }
   if (typeof json.output_text === 'string') return json.output_text.trim() || null
 
   return extractTextFromResponsesOutput(json.output)

@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { ClaudeCodeAdapter } from '../src/adapters/claude-code-adapter.js'
 import type { ContextPacketV1 } from '@agentroom/shared'
+
+import { ClaudeCodeAdapter } from '../src/adapters/claude-code-adapter.js'
 
 class TestClaudeCodeAdapter extends ClaudeCodeAdapter {
   stdin(packet: ContextPacketV1) {
@@ -91,13 +92,15 @@ test('claude prompt includes extracted attachment text', () => {
 
 test('extracts visible message content from claude result output', () => {
   const adapter = new TestClaudeCodeAdapter()
-  const event = adapter.parse(JSON.stringify({
-    type: 'result',
-    subtype: 'success',
-    is_error: false,
-    result: 'Hello from Claude Thinker!',
-    stop_reason: 'end_turn',
-  }))
+  const event = adapter.parse(
+    JSON.stringify({
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      result: 'Hello from Claude Thinker!',
+      stop_reason: 'end_turn',
+    }),
+  )
 
   assert.deepEqual(event, {
     type: 'visible_message',

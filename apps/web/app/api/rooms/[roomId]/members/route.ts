@@ -1,10 +1,14 @@
 import { NextRequest } from 'next/server'
+
 import { apiError, apiSuccess } from '@/lib/api-error'
+import { internalError } from '@/lib/api-security'
 import { addRoomAgentSchema } from '@/lib/api-validation'
 import { requireRoomMember } from '@/lib/permissions'
 import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
 
-interface RouteParams { params: { roomId: string } }
+interface RouteParams {
+  params: { roomId: string }
+}
 
 type AgentRow = {
   id: string
@@ -44,7 +48,10 @@ const memberSelect = `
 `
 
 async function requireAuthenticatedRoomMember(req: NextRequest, roomId: string) {
-  const { data: { user }, error: authErr } = await getAuthenticatedUser(req)
+  const {
+    data: { user },
+    error: authErr,
+  } = await getAuthenticatedUser(req)
   if (authErr || !user) return { error: apiError('UNAUTHORIZED', 'Unauthorized', 401) }
 
   const supabase = createSupabaseServiceClient()
@@ -73,7 +80,7 @@ async function addLatestRunStatus(
     .order('created_at', { ascending: false })
 
   const latestStatusByAgent = new Map<string, string>()
-  for (const run of ((data ?? []) as AgentRunStatusRow[])) {
+  for (const run of (data ?? []) as AgentRunStatusRow[]) {
     if (!latestStatusByAgent.has(run.agent_id)) latestStatusByAgent.set(run.agent_id, run.status)
   }
 
@@ -103,7 +110,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     .eq('member_type', 'agent')
     .order('joined_at')
 
-  if (error) return apiError('INTERNAL_ERROR', error.message, 500)
+  if (error) return internalError('room members list', error)
 
   const members = await addLatestRunStatus(
     auth.supabase,
@@ -146,14 +153,12 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   if (error) {
     if (error.code === '23505') return apiError('CONFLICT', 'Agent is already in the room', 409)
-    return apiError('INTERNAL_ERROR', error.message, 500)
+    return internalError('room members add agent', error)
   }
 
-  const members = await addLatestRunStatus(
-    auth.supabase,
-    params.roomId,
-    [data as unknown as RoomAgentMemberRow],
-  )
+  const members = await addLatestRunStatus(auth.supabase, params.roomId, [
+    data as unknown as RoomAgentMemberRow,
+  ])
 
   return apiSuccess(members[0], 201)
 }

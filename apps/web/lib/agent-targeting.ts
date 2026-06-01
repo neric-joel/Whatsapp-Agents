@@ -1,6 +1,6 @@
 import type { ParsedMention } from './mention-parser'
 
-export interface TargetableAgent {
+interface TargetableAgent {
   agent_id: string
 }
 

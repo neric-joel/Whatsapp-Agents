@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
 
-export type ApiErrorCode =
+type ApiErrorCode =
   | 'VALIDATION_ERROR'
   | 'UNAUTHORIZED'
   | 'FORBIDDEN'
   | 'NOT_FOUND'
   | 'CONFLICT'
+  | 'RATE_LIMITED'
   | 'INTERNAL_ERROR'
 
 export function apiError(
@@ -14,7 +15,10 @@ export function apiError(
   status: number,
   details?: unknown,
 ): NextResponse {
-  return NextResponse.json({ ok: false, error: { code, message, ...(details !== undefined ? { details } : {}) } }, { status })
+  return NextResponse.json(
+    { ok: false, error: { code, message, ...(details !== undefined ? { details } : {}) } },
+    { status },
+  )
 }
 
 export function apiSuccess<T>(data: T, status = 200): NextResponse {

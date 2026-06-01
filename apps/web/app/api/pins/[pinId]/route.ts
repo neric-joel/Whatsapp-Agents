@@ -1,14 +1,21 @@
 import { NextRequest } from 'next/server'
+
 import { apiError, apiSuccess } from '@/lib/api-error'
+import { internalError } from '@/lib/api-security'
 import { updatePinSchema } from '@/lib/api-validation'
 import { requireRoomMember } from '@/lib/permissions'
 import { createSupabaseServerClient, createSupabaseServiceClient } from '@/lib/supabase/server'
 
-interface RouteParams { params: { pinId: string } }
+interface RouteParams {
+  params: { pinId: string }
+}
 
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
   const supabaseUser = createSupabaseServerClient()
-  const { data: { user }, error: authErr } = await supabaseUser.auth.getUser()
+  const {
+    data: { user },
+    error: authErr,
+  } = await supabaseUser.auth.getUser()
   if (authErr || !user) return apiError('UNAUTHORIZED', 'Unauthorized', 401)
 
   const supabase = createSupabaseServiceClient()
@@ -38,7 +45,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     .eq('id', params.pinId)
     .select()
     .single()
-  if (error || !data) return apiError('INTERNAL_ERROR', error?.message ?? 'Failed to update pin', 500)
+  if (error || !data) return internalError('pins update', error)
 
   return apiSuccess(data)
 }

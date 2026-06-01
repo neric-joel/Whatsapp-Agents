@@ -1,9 +1,26 @@
 'use client'
-import { useState, useEffect, useRef, useMemo, KeyboardEvent, ChangeEvent, ClipboardEvent } from 'react'
+import { formatHelp, getCommandSpec, type MemberRole, roleAllows } from '@agentroom/shared'
+import {
+  ChangeEvent,
+  ClipboardEvent,
+  KeyboardEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
+
 import { useRooms } from '@/hooks/useRooms'
-import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+import { ALLOWED_UPLOAD_MIME_TYPES, MAX_UPLOAD_BYTES } from '@/lib/api-validation'
 import { getImageFilesFromClipboardItems } from '@/lib/pasted-files'
+import { parseSlashCommand, type SlashCommand } from '@/lib/slash-commands'
+import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+
+import { AGENTS_EVENT } from './AgentsPanel'
+import { RECALL_EVENT, type RecallEventDetail } from './MemoryPanel'
 import type { OptimisticMessage } from './MessageTimeline'
+
+const ACCEPTED_UPLOAD_TYPES = ALLOWED_UPLOAD_MIME_TYPES.join(',')
 
 interface Props {
   roomId: string
@@ -26,16 +43,25 @@ interface SlimAgent {
 
 const EVERYONE: SlimAgent = { id: '__everyone__', slug: 'everyone', name: 'Everyone' }
 
-export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo, onCancelReply }: Props) {
+export default function ComposeBox({
+  roomId,
+  onOptimistic,
+  onRefetch,
+  replyingTo,
+  onCancelReply,
+}: Props) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [fileError, setFileError] = useState<string | null>(null)
   const [attachedFile, setAttachedFile] = useState<{ id: string; name: string } | null>(null)
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
   const [mentionStart, setMentionStart] = useState(-1)
   const [roomAgents, setRoomAgents] = useState<SlimAgent[]>([])
+  const [userRole, setUserRole] = useState<MemberRole>('member')
+  const [roleLoaded, setRoleLoaded] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropdownRef = useRef<HTMLUListElement>(null)
@@ -60,6 +86,31 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
   }, [roomId])
 
   useEffect(() => {
+    const supabase = createSupabaseBrowserClient()
+    let cancelled = false
+    void (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase
+        .from('room_members')
+        .select('role')
+        .eq('room_id', roomId)
+        .eq('user_id', user.id)
+        .maybeSingle()
+      const role = (data?.role as MemberRole | undefined) ?? 'member'
+      if (!cancelled) {
+        setUserRole(role)
+        setRoleLoaded(true)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [roomId])
+
+  useEffect(() => {
     if (mentionQuery === null) return
     function onMouseDown(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -75,20 +126,18 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
     if (mentionQuery === null) return []
     const q = mentionQuery.toLowerCase()
     const filtered = roomAgents.filter((a) => a.slug.toLowerCase().startsWith(q))
-    return [
-      ...('everyone'.startsWith(q) ? [EVERYONE] : []),
-      ...filtered,
-    ]
+    return [...('everyone'.startsWith(q) ? [EVERYONE] : []), ...filtered]
   }, [mentionQuery, roomAgents])
 
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const val = e.target.value
     const cursor = e.target.selectionStart ?? val.length
     setText(val)
+    if (notice) setNotice(null)
     const before = val.slice(0, cursor)
     const match = before.match(/@([\w-]*)$/)
     if (match) {
-      setMentionQuery(match[1])
+      setMentionQuery(match[1] ?? '')
       setMentionStart(before.length - match[0].length)
     } else {
       setMentionQuery(null)
@@ -106,8 +155,19 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
   }
 
   async function uploadAttachment(file: File) {
-    setUploading(true)
     setFileError(null)
+    // Client-side guard mirroring the server allowlist for a clear message.
+    if (!(ALLOWED_UPLOAD_MIME_TYPES as readonly string[]).includes(file.type)) {
+      setFileError(
+        `File type not supported${file.type ? ` (${file.type})` : ''}. Allowed: images, PDF, text, CSV, JSON, zip.`,
+      )
+      return
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setFileError(`File too large. Max ${Math.floor(MAX_UPLOAD_BYTES / (1024 * 1024))} MB.`)
+      return
+    }
+    setUploading(true)
     try {
       const res = await fetch(`/api/rooms/${roomId}/files/signed-upload`, {
         method: 'POST',
@@ -118,7 +178,7 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
           size_bytes: file.size,
         }),
       })
-      const json = await res.json().catch(() => ({})) as {
+      const json = (await res.json().catch(() => ({}))) as {
         ok?: boolean
         data?: { signed_url: string; file_id: string }
         error?: { message?: string }
@@ -156,12 +216,150 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
     const [file] = getImageFilesFromClipboardItems(e.clipboardData?.items ?? null)
     if (!file || uploading || sending) return
     e.preventDefault()
-    void uploadAttachment(file.name ? file : new File([file], `pasted-screenshot-${Date.now()}.png`, { type: file.type || 'image/png' }))
+    void uploadAttachment(
+      file.name
+        ? file
+        : new File([file], `pasted-screenshot-${Date.now()}.png`, {
+            type: file.type || 'image/png',
+          }),
+    )
+  }
+
+  async function handleSlashCommand(cmd: SlashCommand) {
+    if (cmd.command === 'unknown') {
+      setSendError(`Unknown command: /${cmd.name}. Type /help to see what you can run.`)
+      return
+    }
+    // Server re-enforces RBAC; this is a friendly pre-check so over-privileged
+    // commands are not sent at all. Skip it until the role has loaded so an
+    // admin is never falsely blocked by the default 'member' (the server is the
+    // real gate either way).
+    const spec = getCommandSpec(cmd.command)
+    if (roleLoaded && spec && !roleAllows(userRole, spec.minRole)) {
+      setSendError(`/${spec.name} requires the ${spec.minRole} role.`)
+      return
+    }
+    if (cmd.command === 'help') {
+      setText('')
+      setSendError(null)
+      setNotice(formatHelp(userRole))
+      return
+    }
+    if (cmd.command === 'pin') {
+      if (!replyingTo) {
+        setSendError('Reply to a message first, then /pin to pin it.')
+        return
+      }
+      setSending(true)
+      try {
+        const res = await fetch(`/api/rooms/${roomId}/pins`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source_message_id: replyingTo.id, pin_type: 'message' }),
+        })
+        if (!res.ok) {
+          const json = (await res.json().catch(() => ({}))) as { error?: { message?: string } }
+          setSendError(json.error?.message ?? 'Failed to pin')
+          return
+        }
+        setText('')
+        setSendError(null)
+        setNotice('Pinned — see the Pinned panel.')
+        onCancelReply?.()
+      } finally {
+        setSending(false)
+      }
+      return
+    }
+    if (cmd.command === 'reset') {
+      setSending(true)
+      try {
+        const res = await fetch(`/api/rooms/${roomId}/reset`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        })
+        if (!res.ok) {
+          const json = (await res.json().catch(() => ({}))) as { error?: { message?: string } }
+          setSendError(json.error?.message ?? 'Failed to reset agent context')
+          return
+        }
+        setText('')
+        setSendError(null)
+        setNotice('Agent context reset. Agents start fresh from here.')
+        onRefetch()
+      } finally {
+        setSending(false)
+      }
+      return
+    }
+    if (cmd.command === 'recall') {
+      window.dispatchEvent(
+        new CustomEvent<RecallEventDetail>(RECALL_EVENT, { detail: { roomId, query: cmd.query } }),
+      )
+      setText('')
+      setSendError(null)
+      setNotice(
+        cmd.query ? `Recalling “${cmd.query}” — see the Memory panel.` : 'Showing recent memory.',
+      )
+      return
+    }
+    if (cmd.command === 'agents') {
+      window.dispatchEvent(new CustomEvent(AGENTS_EVENT))
+      setText('')
+      setSendError(null)
+      setNotice('Showing room agents — see the Agents panel.')
+      return
+    }
+    if (cmd.command === 'handoff') return // handled inline in submit() (sent as a targeted message)
+    // /remember
+    if (!cmd.text) {
+      setSendError('Usage: /remember <note>  (add --global for a personal cross-room note)')
+      return
+    }
+    setSending(true)
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/memory`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: cmd.text, scope: cmd.global ? 'global' : 'room' }),
+      })
+      if (!res.ok) {
+        const json = (await res.json().catch(() => ({}))) as { error?: { message?: string } }
+        setSendError(json.error?.message ?? 'Failed to save memory')
+        return
+      }
+      setText('')
+      setSendError(null)
+      setNotice(cmd.global ? 'Saved to your global memory.' : 'Saved to room memory.')
+      // Refresh the Memory panel — room-scoped notes also arrive via realtime, but
+      // global notes (room_id IS NULL) are not covered by the panel's room filter.
+      window.dispatchEvent(
+        new CustomEvent<RecallEventDetail>(RECALL_EVENT, { detail: { roomId, query: '' } }),
+      )
+    } finally {
+      setSending(false)
+    }
   }
 
   async function submit() {
-    const content = text.trim() || attachedFile?.name
-    if (!content || sending || uploading) return
+    if (sending || uploading) return
+    // Intercept slash commands. /remember, /recall, /agents are handled out of
+    // band; /handoff rewrites to a targeted @mention message and sends normally
+    // (the messages route creates the targeted peer run).
+    const slash = parseSlashCommand(text)
+    if (slash && slash.command !== 'handoff') {
+      await handleSlashCommand(slash)
+      return
+    }
+    if (slash && slash.command === 'handoff' && !slash.toSlug) {
+      setSendError('Usage: /handoff @agent <task>')
+      return
+    }
+    const content =
+      slash && slash.command === 'handoff'
+        ? `@${slash.toSlug} ${slash.task}`.trim()
+        : text.trim() || attachedFile?.name
+    if (!content) return
     setSending(true)
     const metadata = attachedFile ? { file_ids: [attachedFile.id] } : {}
     try {
@@ -171,7 +369,7 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
         body: JSON.stringify({ content, metadata, reply_to_id: replyingTo?.id }),
       })
       if (!res.ok) {
-        const json = await res.json().catch(() => ({})) as { error?: { message?: string } }
+        const json = (await res.json().catch(() => ({}))) as { error?: { message?: string } }
         setSendError(json.error?.message ?? 'Failed to send message')
         return
       }
@@ -214,11 +412,12 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
   }
 
   const showDropdown = mentionQuery !== null && mentionOptions.length > 0
-  const replySender = replyingTo?.sender_type === 'agent'
-    ? replyingTo.agents?.name ?? 'Agent'
-    : replyingTo?.sender_type === 'user'
-      ? 'You'
-      : 'System'
+  const replySender =
+    replyingTo?.sender_type === 'agent'
+      ? (replyingTo.agents?.name ?? 'Agent')
+      : replyingTo?.sender_type === 'user'
+        ? 'You'
+        : 'System'
   const replyPreview = replyingTo
     ? replyingTo.content.length > 80
       ? `${replyingTo.content.slice(0, 80)}...`
@@ -252,7 +451,10 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
             {mentionOptions.map((opt) => (
               <li
                 key={opt.id}
-                onMouseDown={(e) => { e.preventDefault(); selectMention(opt.slug) }}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  selectMention(opt.slug)
+                }}
                 className="flex cursor-pointer items-center gap-2 px-4 py-2 hover:bg-gray-50"
               >
                 <span className="text-sm font-medium text-purple-700">@{opt.slug}</span>
@@ -274,10 +476,18 @@ export default function ComposeBox({ roomId, onOptimistic, onRefetch, replyingTo
         {sendError && (
           <p className="absolute left-1 top-full mt-1 px-1 text-xs text-red-600">{sendError}</p>
         )}
+        {!sendError && notice && (
+          <p
+            role="status"
+            className="absolute bottom-full left-1 right-1 mb-1 max-h-48 overflow-y-auto whitespace-pre-line rounded-lg border border-[var(--border)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--muted)] shadow-sm"
+          >
+            {notice}
+          </p>
+        )}
         <input
           ref={fileInputRef}
           type="file"
-          accept="*/*"
+          accept={ACCEPTED_UPLOAD_TYPES}
           className="hidden"
           onChange={handleFileSelect}
         />

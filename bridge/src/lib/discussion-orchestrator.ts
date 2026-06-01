@@ -69,15 +69,19 @@ export function buildDiscussionPhasePrompt(phase: DiscussionPhase, originalPromp
   ].join('\n')
 }
 
-export function readDiscussionMetadata(metadata: Record<string, unknown> | undefined): DiscussionMetadata | null {
+export function readDiscussionMetadata(
+  metadata: Record<string, unknown> | undefined,
+): DiscussionMetadata | null {
   const discussion = metadata?.discussion
   if (!discussion || typeof discussion !== 'object' || Array.isArray(discussion)) return null
 
   const value = discussion as Record<string, unknown>
   if (value.enabled !== true) return null
-  if (value.phase !== 'individual' && value.phase !== 'critique' && value.phase !== 'consensus') return null
+  if (value.phase !== 'individual' && value.phase !== 'critique' && value.phase !== 'consensus')
+    return null
   if (typeof value.original_message_id !== 'string') return null
-  if (typeof value.original_prompt !== 'string' || value.original_prompt.trim().length === 0) return null
+  if (typeof value.original_prompt !== 'string' || value.original_prompt.trim().length === 0)
+    return null
 
   return {
     enabled: true,
@@ -88,9 +92,13 @@ export function readDiscussionMetadata(metadata: Record<string, unknown> | undef
 }
 
 export function selectConsensusAgent(members: AgentMemberRow[]): AgentMemberRow | null {
-  return members.find((member) => member.agents.slug.includes('codex') || member.agents.provider === 'codex_cli')
-    ?? members[0]
-    ?? null
+  return (
+    members.find(
+      (member) => member.agents.slug.includes('codex') || member.agents.provider === 'codex_cli',
+    ) ??
+    members[0] ??
+    null
+  )
 }
 
 export async function maybeScheduleDiscussionContinuation({
@@ -151,12 +159,16 @@ export async function maybeScheduleDiscussionContinuation({
     .eq('reply_enabled', true)
     .eq('muted', false)
 
-  const activeMembers = ((rawMembers ?? []) as unknown as AgentMemberRow[])
-    .filter((member) => member.agents?.is_active)
+  const activeMembers = ((rawMembers ?? []) as unknown as AgentMemberRow[]).filter(
+    (member) => member.agents?.is_active,
+  )
 
-  const targetMembers = nextPhase === 'consensus'
-    ? [selectConsensusAgent(activeMembers)].filter((member): member is AgentMemberRow => Boolean(member))
-    : activeMembers
+  const targetMembers =
+    nextPhase === 'consensus'
+      ? [selectConsensusAgent(activeMembers)].filter((member): member is AgentMemberRow =>
+          Boolean(member),
+        )
+      : activeMembers
 
   if (targetMembers.length === 0) return
 
@@ -169,16 +181,20 @@ export async function maybeScheduleDiscussionContinuation({
     },
   }
 
-  const { data: nextMessage, error: nextMessageError } = await supabase.from('messages').insert({
-    room_id: roomId,
-    sender_type: 'system',
-    content: buildDiscussionPhasePrompt(nextPhase, discussion.original_prompt),
-    content_type: 'text',
-    mentions: [],
-    target_agent_ids: targetMembers.map((member) => member.agent_id),
-    round_index: nextRoundIndex,
-    metadata,
-  }).select('id').single()
+  const { data: nextMessage, error: nextMessageError } = await supabase
+    .from('messages')
+    .insert({
+      room_id: roomId,
+      sender_type: 'system',
+      content: buildDiscussionPhasePrompt(nextPhase, discussion.original_prompt),
+      content_type: 'text',
+      mentions: [],
+      target_agent_ids: targetMembers.map((member) => member.agent_id),
+      round_index: nextRoundIndex,
+      metadata,
+    })
+    .select('id')
+    .single()
 
   if (nextMessageError) {
     if (nextMessageError.code === '23505') return
@@ -187,14 +203,16 @@ export async function maybeScheduleDiscussionContinuation({
 
   if (!nextMessage) return
 
-  await supabase.from('agent_runs').insert(targetMembers.map((member) => ({
-    room_id: roomId,
-    agent_id: member.agent_id,
-    trigger_msg_id: nextMessage.id,
-    status: 'queued',
-    round_index: nextRoundIndex,
-    discussion_mode: 'tag_turns',
-    deliberation_depth: 0,
-    deliberation_root_id: null,
-  })))
+  await supabase.from('agent_runs').insert(
+    targetMembers.map((member) => ({
+      room_id: roomId,
+      agent_id: member.agent_id,
+      trigger_msg_id: nextMessage.id,
+      status: 'queued',
+      round_index: nextRoundIndex,
+      discussion_mode: 'tag_turns',
+      deliberation_depth: 0,
+      deliberation_root_id: null,
+    })),
+  )
 }

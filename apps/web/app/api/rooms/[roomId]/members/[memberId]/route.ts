@@ -1,10 +1,14 @@
 import { NextRequest } from 'next/server'
+
 import { apiError, apiSuccess } from '@/lib/api-error'
+import { internalError } from '@/lib/api-security'
 import { updateRoomAgentMemberSchema } from '@/lib/api-validation'
 import { requireRoomMember } from '@/lib/permissions'
 import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
 
-interface RouteParams { params: { roomId: string; memberId: string } }
+interface RouteParams {
+  params: { roomId: string; memberId: string }
+}
 
 const memberSelect = `
   id,
@@ -18,7 +22,10 @@ const memberSelect = `
 `
 
 async function requireAuthenticatedRoomMember(req: NextRequest, roomId: string) {
-  const { data: { user }, error: authErr } = await getAuthenticatedUser(req)
+  const {
+    data: { user },
+    error: authErr,
+  } = await getAuthenticatedUser(req)
   if (authErr || !user) return { error: apiError('UNAUTHORIZED', 'Unauthorized', 401) }
 
   const supabase = createSupabaseServiceClient()
@@ -50,7 +57,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
     .eq('room_id', params.roomId)
     .eq('member_type', 'agent')
 
-  if (error) return apiError('INTERNAL_ERROR', error.message, 500)
+  if (error) return internalError('room member delete', error)
 
   return apiSuccess({ deleted: true })
 }

@@ -1,0 +1,97 @@
+name: Release
+
+# Fires ONLY when a human pushes a semver tag (e.g. `v1.0.0`). It never tags or
+# releases on its own — pushing the tag is the explicit, human gate. On a tag it
+# re-runs the full quality gate, proves both container images build, and publishes a
+# GitHub Release with auto-generated notes. No registry push, no external secrets
+# (only the auto-provisioned GITHUB_TOKEN, scoped to this repo's releases).
+#
+# To cut a release (human, after the v1.0 decision):
+#   git tag v1.0.0 && git push origin v1.0.0
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read # least privilege; only the `release` job escalates to write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      # Dummy build-time env so `next build` runs without secrets. NOT real values.
+      NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-dummy-publishable-key
+      SUPABASE_SERVICE_ROLE_KEY: ci-dummy-service-role-key
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm exec knip
+      - run: pnpm test:coverage
+      - run: pnpm --filter web build
+
+  images:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build web image (proves the tag builds; no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: false
+          tags: agentroom-web:${{ github.ref_name }}
+          build-args: |
+            NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321
+            NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=ci-dummy-publishable-key
+            NEXT_PUBLIC_APP_URL=http://localhost:3000
+          cache-from: type=gha,scope=web
+      - name: Build bridge image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: bridge/Dockerfile
+          push: false
+          tags: agentroom-bridge:${{ github.ref_name }}
+          cache-from: type=gha,scope=bridge
+
+  release:
+    needs: [verify, images]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Verify tag is strict semver (vMAJOR.MINOR.PATCH[-prerelease])
+        run: |
+          if [[ ! "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} is not a valid release tag (expected vMAJOR.MINOR.PATCH)"
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so release notes can diff from the previous tag
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            --verify-tag

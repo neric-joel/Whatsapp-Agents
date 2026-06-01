@@ -1,10 +1,17 @@
 import { NextRequest } from 'next/server'
+
+import {
+  type AgentRunStatus,
+  buildCancelledRunPatch,
+  isCancellableRunStatus,
+} from '@/lib/agent-run-cancellation'
 import { apiError, apiSuccess } from '@/lib/api-error'
-import { buildCancelledRunPatch, isCancellableRunStatus, type AgentRunStatus } from '@/lib/agent-run-cancellation'
 import { requireRoomMember } from '@/lib/permissions'
 import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
 
-interface RouteParams { params: { runId: string } }
+interface RouteParams {
+  params: { runId: string }
+}
 
 interface AgentRunRow {
   id: string
@@ -13,7 +20,10 @@ interface AgentRunRow {
 }
 
 export async function POST(req: NextRequest, { params }: RouteParams) {
-  const { data: { user }, error: authErr } = await getAuthenticatedUser(req)
+  const {
+    data: { user },
+    error: authErr,
+  } = await getAuthenticatedUser(req)
   if (authErr || !user) return apiError('UNAUTHORIZED', 'Unauthorized', 401)
 
   const supabase = createSupabaseServiceClient()

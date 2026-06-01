@@ -1,7 +1,24 @@
+import type {
+  AgentProvider,
+  ContextPacketV1,
+  DiscussionMode,
+  PinnedItem,
+  ReplyMode,
+  SenderType,
+} from '@agentroom/shared'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { AgentProvider, ContextPacketV1, DiscussionMode, PinnedItem, ReplyMode, SenderType } from '@agentroom/shared'
-import { readContextMessageLimit, readContextMessageMaxChars, trimContextMessages } from './context-window.js'
-import { hydrateFilePreviews, type ContextFilePreview, type FilePreviewRow } from './file-context.js'
+
+import { recallMemory } from '../memory/recall.js'
+import {
+  readContextMessageLimit,
+  readContextMessageMaxChars,
+  trimContextMessages,
+} from './context-window.js'
+import {
+  type ContextFilePreview,
+  type FilePreviewRow,
+  hydrateFilePreviews,
+} from './file-context.js'
 
 interface BuildContextArgs {
   supabase: SupabaseClient
@@ -24,6 +41,7 @@ interface BuildContextArgs {
     id: string
     content: string
     sender_type: string
+    sender_user_id?: string | null
     created_at: string
   }
 }
@@ -45,18 +63,10 @@ export async function buildContextPacket({
 }: BuildContextArgs): Promise<ContextPacketV1> {
   const contextMessageLimit = readContextMessageLimit()
   const contextMessageMaxChars = readContextMessageMaxChars()
-  const { data: recentRaw } = await supabase
-    .from('messages')
-    .select('id, content, sender_type, sender_agent_id, created_at, metadata')
-    .eq('room_id', run.room_id)
-    .lte('created_at', triggerMsg.created_at)
-    .order('created_at', { ascending: false })
-    .limit(contextMessageLimit)
-  const recentMessages = trimContextMessages(((recentRaw ?? []) as RecentMsg[]).reverse(), contextMessageMaxChars)
 
   const { data: roomRaw } = await supabase
     .from('rooms')
-    .select('id, name, reply_mode, max_agent_rounds, discussion_mode')
+    .select('id, name, reply_mode, max_agent_rounds, discussion_mode, context_reset_at')
     .eq('id', run.room_id)
     .single()
   if (!roomRaw) throw new Error(`Room ${run.room_id} not found`)
@@ -66,7 +76,26 @@ export async function buildContextPacket({
     reply_mode: string
     max_agent_rounds: number
     discussion_mode: DiscussionMode
+    context_reset_at: string | null
   }
+
+  // `/reset` (admin+) stamps a watermark: agents only see messages at/after it,
+  // so their rolling context starts fresh while the transcript stays intact.
+  let recentQuery = supabase
+    .from('messages')
+    .select('id, content, sender_type, sender_agent_id, created_at, metadata')
+    .eq('room_id', run.room_id)
+    .lte('created_at', triggerMsg.created_at)
+  if (room.context_reset_at) {
+    recentQuery = recentQuery.gte('created_at', room.context_reset_at)
+  }
+  const { data: recentRaw } = await recentQuery
+    .order('created_at', { ascending: false })
+    .limit(contextMessageLimit)
+  const recentMessages = trimContextMessages(
+    ((recentRaw ?? []) as RecentMsg[]).reverse(),
+    contextMessageMaxChars,
+  )
 
   const { data: pinnedItems } = await supabase
     .from('pinned_items')
@@ -85,10 +114,35 @@ export async function buildContextPacket({
     const uniqueFileIds = [...new Set(fileIds)].slice(0, 10)
     const { data: fileRows } = await supabase
       .from('files')
-      .select('id, filename, mime_type, size_bytes, storage_path, storage_bucket, extracted_text, metadata')
+      .select(
+        'id, filename, mime_type, size_bytes, storage_path, storage_bucket, extracted_text, metadata',
+      )
       .in('id', uniqueFileIds)
     files = await hydrateFilePreviews(supabase, (fileRows ?? []) as FilePreviewRow[])
   }
+
+  // Roster of OTHER active room agents (Phase 10) — name, slug, capability blurb.
+  const { data: rosterRaw } = await supabase
+    .from('room_members')
+    .select('agent_id, agents!inner(id, name, slug, capabilities, is_active)')
+    .eq('room_id', run.room_id)
+    .eq('member_type', 'agent')
+    .eq('muted', false)
+    // Only advertise peers that are actually addressable — matches the hand-off
+    // resolver + the mention path (both require reply_enabled).
+    .eq('reply_enabled', true)
+  const roster = ((rosterRaw ?? []) as unknown as Array<{ agents: RosterAgentRow | null }>)
+    .map((r) => r.agents)
+    .filter((a): a is RosterAgentRow => Boolean(a && a.is_active && a.id !== agentInfo.id))
+    .map((a) => ({ id: a.id, name: a.name, slug: a.slug, capabilities: a.capabilities ?? null }))
+
+  // Recall ranked memory (Phase 9). Resilient — never breaks the run.
+  const memory = await recallMemory(supabase, {
+    agentId: agentInfo.id,
+    roomId: run.room_id,
+    queryText: triggerMsg.content,
+    userId: triggerMsg.sender_type === 'user' ? (triggerMsg.sender_user_id ?? null) : null,
+  })
 
   return {
     schema_version: 1,
@@ -127,5 +181,15 @@ export async function buildContextPacket({
     discussion_mode: run.discussion_mode,
     deliberation_depth: run.deliberation_depth,
     deliberation_root_id: run.deliberation_root_id,
+    ...(roster.length > 0 ? { roster } : {}),
+    ...(memory ? { memory } : {}),
   }
+}
+
+interface RosterAgentRow {
+  id: string
+  name: string
+  slug: string
+  capabilities: string | null
+  is_active: boolean
 }

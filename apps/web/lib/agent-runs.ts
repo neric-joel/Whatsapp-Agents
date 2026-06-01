@@ -4,7 +4,7 @@ interface TargetAgent {
   agent_id: string
 }
 
-export interface InitialAgentRunRow {
+interface InitialAgentRunRow {
   room_id: string
   agent_id: string
   trigger_msg_id: string

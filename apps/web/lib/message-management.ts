@@ -1,6 +1,6 @@
 export const DELETED_MESSAGE_CONTENT = 'This message was deleted.'
 
-export interface DeletableMessage {
+interface DeletableMessage {
   sender_type: string
   sender_user_id: string | null
 }

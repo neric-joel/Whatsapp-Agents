@@ -1,6 +1,7 @@
 import path from 'node:path'
-import { config as loadDotenv } from 'dotenv'
+
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { config as loadDotenv } from 'dotenv'
 
 const ROOM_NAME = 'Stress Test Room'
 const DEFAULT_TIMEOUT_MS = 120_000
@@ -58,26 +59,102 @@ export type AgentRunResult = {
 }
 
 export const PROBLEMS: Problem[] = [
-  { cat: 'CODING', level: 'EASY', q: 'Write a Python function to check if a given string is a palindrome.' },
-  { cat: 'CODING', level: 'MEDIUM', q: 'Implement a thread-safe LRU (Least Recently Used) Cache in C++ or Rust.' },
-  { cat: 'CODING', level: 'HARD', q: 'Design the architecture and write the core consensus logic for a distributed, fault-tolerant key-value store using the Raft algorithm. Handle network partitions.' },
-  { cat: 'CODING', level: 'EXTRA_HARD', q: 'Write a custom compiler frontend in C that takes a novel, Turing-complete functional programming language and compiles it down to optimized LLVM IR. Include custom garbage collection logic.' },
-  { cat: 'PHYSICS', level: 'EASY', q: 'A car accelerates from 0 to 60 mph in 5 seconds. What is its average acceleration in meters per second squared?' },
-  { cat: 'PHYSICS', level: 'MEDIUM', q: 'Calculate the trajectory of a projectile launched at 45 degrees, accounting for quadratic air resistance (drag) and varying air density with altitude.' },
-  { cat: 'PHYSICS', level: 'HARD', q: 'Derive the Hawking radiation temperature for a Kerr (rotating) black hole, explaining the role of the ergosphere.' },
-  { cat: 'PHYSICS', level: 'EXTRA_HARD', q: 'Reconcile the Black Hole Information Paradox by synthesizing the Holographic Principle and the Firewall Paradox. Provide a mathematical justification for how unitarity is preserved.' },
+  {
+    cat: 'CODING',
+    level: 'EASY',
+    q: 'Write a Python function to check if a given string is a palindrome.',
+  },
+  {
+    cat: 'CODING',
+    level: 'MEDIUM',
+    q: 'Implement a thread-safe LRU (Least Recently Used) Cache in C++ or Rust.',
+  },
+  {
+    cat: 'CODING',
+    level: 'HARD',
+    q: 'Design the architecture and write the core consensus logic for a distributed, fault-tolerant key-value store using the Raft algorithm. Handle network partitions.',
+  },
+  {
+    cat: 'CODING',
+    level: 'EXTRA_HARD',
+    q: 'Write a custom compiler frontend in C that takes a novel, Turing-complete functional programming language and compiles it down to optimized LLVM IR. Include custom garbage collection logic.',
+  },
+  {
+    cat: 'PHYSICS',
+    level: 'EASY',
+    q: 'A car accelerates from 0 to 60 mph in 5 seconds. What is its average acceleration in meters per second squared?',
+  },
+  {
+    cat: 'PHYSICS',
+    level: 'MEDIUM',
+    q: 'Calculate the trajectory of a projectile launched at 45 degrees, accounting for quadratic air resistance (drag) and varying air density with altitude.',
+  },
+  {
+    cat: 'PHYSICS',
+    level: 'HARD',
+    q: 'Derive the Hawking radiation temperature for a Kerr (rotating) black hole, explaining the role of the ergosphere.',
+  },
+  {
+    cat: 'PHYSICS',
+    level: 'EXTRA_HARD',
+    q: 'Reconcile the Black Hole Information Paradox by synthesizing the Holographic Principle and the Firewall Paradox. Provide a mathematical justification for how unitarity is preserved.',
+  },
   { cat: 'MATH', level: 'EASY', q: 'Solve for x: 3x + 7 = 22.' },
-  { cat: 'MATH', level: 'MEDIUM', q: 'Provide a rigorous mathematical proof that the square root of 2 is irrational.' },
-  { cat: 'MATH', level: 'HARD', q: "Find the general solution to the non-linear differential equation: y'' - y' + y^3 = 0." },
-  { cat: 'MATH', level: 'EXTRA_HARD', q: 'Propose a novel heuristic or topological framework that could create a new pathway toward proving or disproving the Riemann Hypothesis. Evaluate the immediate failure points of your proposed framework.' },
-  { cat: 'PHILOSOPHY', level: 'EASY', q: 'Explain the core difference between "right" and "wrong" in Utilitarianism.' },
-  { cat: 'PHILOSOPHY', level: 'MEDIUM', q: "Apply Kant's Categorical Imperative to the modern dilemma of utilizing AI-generated art for commercial profit." },
-  { cat: 'PHILOSOPHY', level: 'HARD', q: 'Deconstruct Martin Heidegger\'s concept of Dasein. Can an Artificial General Intelligence (AGI) possess Dasein? Why or why not?' },
-  { cat: 'PHILOSOPHY', level: 'EXTRA_HARD', q: 'Resolve the "Hard Problem of Consciousness" by synthesizing Panpsychism with Quantum Information Theory. Do not rely on mystical concepts; ground the argument in formal epistemology and ontology.' },
-  { cat: 'LIFE', level: 'EASY', q: 'What is the most efficient way to organize a weekly grocery shopping trip for a family of four?' },
-  { cat: 'LIFE', level: 'MEDIUM', q: 'How should a mid-level manager handle a situation where their two best-performing employees absolutely despise working with each other?' },
-  { cat: 'LIFE', level: 'HARD', q: 'Design a comprehensive, multi-year psychological and financial recovery plan for a family that has just lost their home and business to a natural disaster, assuming no government aid.' },
-  { cat: 'LIFE', level: 'EXTRA_HARD', q: 'Design the societal, political, and psychological framework for a "Generation Ship" traveling for 500 years to a new star system. The framework must guarantee the prevention of civil war, genetic stagnation, and loss of ultimate purpose over 20 generations of humans who will live and die entirely in transit.' },
+  {
+    cat: 'MATH',
+    level: 'MEDIUM',
+    q: 'Provide a rigorous mathematical proof that the square root of 2 is irrational.',
+  },
+  {
+    cat: 'MATH',
+    level: 'HARD',
+    q: "Find the general solution to the non-linear differential equation: y'' - y' + y^3 = 0.",
+  },
+  {
+    cat: 'MATH',
+    level: 'EXTRA_HARD',
+    q: 'Propose a novel heuristic or topological framework that could create a new pathway toward proving or disproving the Riemann Hypothesis. Evaluate the immediate failure points of your proposed framework.',
+  },
+  {
+    cat: 'PHILOSOPHY',
+    level: 'EASY',
+    q: 'Explain the core difference between "right" and "wrong" in Utilitarianism.',
+  },
+  {
+    cat: 'PHILOSOPHY',
+    level: 'MEDIUM',
+    q: "Apply Kant's Categorical Imperative to the modern dilemma of utilizing AI-generated art for commercial profit.",
+  },
+  {
+    cat: 'PHILOSOPHY',
+    level: 'HARD',
+    q: "Deconstruct Martin Heidegger's concept of Dasein. Can an Artificial General Intelligence (AGI) possess Dasein? Why or why not?",
+  },
+  {
+    cat: 'PHILOSOPHY',
+    level: 'EXTRA_HARD',
+    q: 'Resolve the "Hard Problem of Consciousness" by synthesizing Panpsychism with Quantum Information Theory. Do not rely on mystical concepts; ground the argument in formal epistemology and ontology.',
+  },
+  {
+    cat: 'LIFE',
+    level: 'EASY',
+    q: 'What is the most efficient way to organize a weekly grocery shopping trip for a family of four?',
+  },
+  {
+    cat: 'LIFE',
+    level: 'MEDIUM',
+    q: 'How should a mid-level manager handle a situation where their two best-performing employees absolutely despise working with each other?',
+  },
+  {
+    cat: 'LIFE',
+    level: 'HARD',
+    q: 'Design a comprehensive, multi-year psychological and financial recovery plan for a family that has just lost their home and business to a natural disaster, assuming no government aid.',
+  },
+  {
+    cat: 'LIFE',
+    level: 'EXTRA_HARD',
+    q: 'Design the societal, political, and psychological framework for a "Generation Ship" traveling for 500 years to a new star system. The framework must guarantee the prevention of civil war, genetic stagnation, and loss of ultimate purpose over 20 generations of humans who will live and die entirely in transit.',
+  },
 ]
 
 export function buildEvaluationPrompt(problem: Problem): string {
@@ -166,13 +243,7 @@ function createServiceClientFromBridgeEnv(): SupabaseClient {
   })
 }
 
-export function buildStressRoomName({
-  prefix,
-  fresh,
-}: {
-  prefix: string
-  fresh: boolean
-}): string {
+export function buildStressRoomName({ prefix, fresh }: { prefix: string; fresh: boolean }): string {
   return fresh ? `${prefix} - ${new Date().toISOString()}` : prefix
 }
 
@@ -199,7 +270,11 @@ async function findOrCreateRoom(
   return insertRoom(supabase, testUserId, roomName)
 }
 
-async function insertRoom(supabase: SupabaseClient, testUserId: string, roomName: string): Promise<Room> {
+async function insertRoom(
+  supabase: SupabaseClient,
+  testUserId: string,
+  roomName: string,
+): Promise<Room> {
   const { data: insertedRoom, error: insertError } = await supabase
     .from('rooms')
     .insert({
@@ -212,9 +287,10 @@ async function insertRoom(supabase: SupabaseClient, testUserId: string, roomName
     .select('id, name')
     .single()
 
-
   if (insertError || !insertedRoom) {
-    throw new Error(`Failed to create stress test room: ${insertError?.message ?? 'no row returned'}`)
+    throw new Error(
+      `Failed to create stress test room: ${insertError?.message ?? 'no row returned'}`,
+    )
   }
 
   return insertedRoom as Room
@@ -253,7 +329,12 @@ export function assertRequiredAgents(agents: Agent[], rawRequiredSlugs: string |
 export function filterAgentsForStress(agents: Agent[], rawSlugs: string | undefined): Agent[] {
   if (!rawSlugs) return agents
 
-  const allowedSlugs = new Set(rawSlugs.split(',').map((slug) => slug.trim()).filter(Boolean))
+  const allowedSlugs = new Set(
+    rawSlugs
+      .split(',')
+      .map((slug) => slug.trim())
+      .filter(Boolean),
+  )
   if (allowedSlugs.size === 0) return agents
 
   const filteredAgents = agents.filter((agent) => allowedSlugs.has(agent.slug))
@@ -264,7 +345,11 @@ export function filterAgentsForStress(agents: Agent[], rawSlugs: string | undefi
   return filteredAgents
 }
 
-async function ensureAgentRoomMembers(supabase: SupabaseClient, roomId: string, agents: Agent[]): Promise<void> {
+async function ensureAgentRoomMembers(
+  supabase: SupabaseClient,
+  roomId: string,
+  agents: Agent[],
+): Promise<void> {
   const rows = agents.map((agent) => ({
     room_id: roomId,
     member_type: 'agent',
@@ -288,7 +373,8 @@ async function findTestUserId(supabase: SupabaseClient): Promise<string> {
   if (error) throw new Error(`Failed to fetch auth.users: ${error.message}`)
 
   const firstUser = data.users[0]
-  if (!firstUser) throw new Error('No auth.users rows found; set TEST_USER_ID in bridge/.env or environment')
+  if (!firstUser)
+    throw new Error('No auth.users rows found; set TEST_USER_ID in bridge/.env or environment')
 
   return firstUser.id
 }
@@ -408,14 +494,18 @@ async function waitForRuns(
 
   while (Date.now() < deadline) {
     latestRuns = await fetchRunsSince(supabase, roomId, messageCreatedAt)
-    const sawInitialRuns = initialRunIds.every((runId) => latestRuns.some((run) => run.id === runId))
-    const allTerminal = latestRuns.length > 0 && latestRuns.every((run) => isTerminalStatus(run.status))
+    const sawInitialRuns = initialRunIds.every((runId) =>
+      latestRuns.some((run) => run.id === runId),
+    )
+    const allTerminal =
+      latestRuns.length > 0 && latestRuns.every((run) => isTerminalStatus(run.status))
 
     if (sawInitialRuns && allTerminal) {
       return { timedOut: false, runs: latestRuns }
     }
 
-    const missingInitialRuns = latestRuns.filter((run) => initialRunIdSet.has(run.id)).length < initialRunIds.length
+    const missingInitialRuns =
+      latestRuns.filter((run) => initialRunIdSet.has(run.id)).length < initialRunIds.length
     if (missingInitialRuns && latestRuns.length > 0) {
       throw new Error('Polling query did not return all initially inserted agent runs')
     }
@@ -441,15 +531,20 @@ function collectAgentResults(
     const agentRuns = runs.filter((run) => run.agent_id === agent.id)
     const agentMessages = messages.filter((message) => message.sender_agent_id === agent.id)
     const hasNonTerminalRun = agentRuns.some((run) => !isTerminalStatus(run.status))
-    const hasFailedRun = agentRuns.some((run) => run.status === 'failed' || run.status === 'cancelled')
+    const hasFailedRun = agentRuns.some(
+      (run) => run.status === 'failed' || run.status === 'cancelled',
+    )
     const completedRuns = agentRuns.filter((run) => run.status === 'completed')
-    const failedRuns = agentRuns.filter((run) => run.status === 'failed' || run.status === 'cancelled')
+    const failedRuns = agentRuns.filter(
+      (run) => run.status === 'failed' || run.status === 'cancelled',
+    )
     const timedOutRuns = timedOut ? agentRuns.filter((run) => !isTerminalStatus(run.status)) : []
-    const status = agentRuns.length === 0 || (timedOut && hasNonTerminalRun)
-      ? 'timed_out'
-      : hasFailedRun
-        ? 'failed'
-        : 'completed'
+    const status =
+      agentRuns.length === 0 || (timedOut && hasNonTerminalRun)
+        ? 'timed_out'
+        : hasFailedRun
+          ? 'failed'
+          : 'completed'
 
     return {
       agentId: agent.id,
@@ -460,7 +555,9 @@ function collectAgentResults(
       failedRunCount: failedRuns.length,
       timedOutRunCount: timedOutRuns.length,
       roundsCompleted: completedRuns.length,
-      hallucinationFlagged: agentMessages.some((message) => isHallucinationFlagged(message.metadata)),
+      hallucinationFlagged: agentMessages.some((message) =>
+        isHallucinationFlagged(message.metadata),
+      ),
       replyPreview: toReplyPreview(agentMessages[0]?.content),
     }
   })
@@ -496,7 +593,10 @@ function parseTimeoutMs(): number {
   return timeoutMs
 }
 
-export function selectProblemsForStress(problems: Problem[], rawIndexes: string | undefined): SelectedProblem[] {
+export function selectProblemsForStress(
+  problems: Problem[],
+  rawIndexes: string | undefined,
+): SelectedProblem[] {
   if (!rawIndexes) {
     return problems.map((problem, problemIndex) => ({ problemIndex, problem }))
   }
@@ -527,7 +627,12 @@ async function main(): Promise<void> {
     prefix: process.env.STRESS_ROOM_NAME_PREFIX ?? ROOM_NAME,
     fresh: process.env.STRESS_CREATE_FRESH_ROOM === 'true',
   })
-  const room = await findOrCreateRoom(supabase, testUserId, roomName, process.env.STRESS_CREATE_FRESH_ROOM === 'true')
+  const room = await findOrCreateRoom(
+    supabase,
+    testUserId,
+    roomName,
+    process.env.STRESS_CREATE_FRESH_ROOM === 'true',
+  )
   const agents = await getActiveAgents(supabase)
   assertRequiredAgents(agents, process.env.STRESS_REQUIRED_AGENT_SLUGS)
   await ensureAgentRoomMembers(supabase, room.id, agents)
@@ -542,7 +647,14 @@ async function main(): Promise<void> {
   console.log('')
 
   for (const { problemIndex, problem } of selectedProblems) {
-    const message = await insertUserMessage(supabase, room.id, testUserId, problem, problemIndex, stressRunId)
+    const message = await insertUserMessage(
+      supabase,
+      room.id,
+      testUserId,
+      problem,
+      problemIndex,
+      stressRunId,
+    )
     const initialRuns = await insertInitialAgentRuns(supabase, room.id, message.id, agents)
     const waitResult = await waitForRuns(
       supabase,
@@ -552,7 +664,12 @@ async function main(): Promise<void> {
       timeoutMs,
     )
     const agentMessages = await fetchAgentMessagesSince(supabase, room.id, message.created_at)
-    const problemResults = collectAgentResults(agents, waitResult.runs, agentMessages, waitResult.timedOut)
+    const problemResults = collectAgentResults(
+      agents,
+      waitResult.runs,
+      agentMessages,
+      waitResult.timedOut,
+    )
 
     allResults.push(...problemResults)
 

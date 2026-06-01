@@ -1,13 +1,20 @@
 import { NextRequest } from 'next/server'
+
 import { apiError, apiSuccess } from '@/lib/api-error'
+import { internalError } from '@/lib/api-security'
 import { updateRoomArchiveSchema } from '@/lib/api-validation'
 import { requireRoomOwner } from '@/lib/permissions'
 import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
 
-interface RouteParams { params: { roomId: string } }
+interface RouteParams {
+  params: { roomId: string }
+}
 
 async function requireAuthenticatedRoomOwner(req: NextRequest, roomId: string) {
-  const { data: { user }, error: authErr } = await getAuthenticatedUser(req)
+  const {
+    data: { user },
+    error: authErr,
+  } = await getAuthenticatedUser(req)
   if (authErr || !user) return { error: apiError('UNAUTHORIZED', 'Unauthorized', 401) }
 
   const supabase = createSupabaseServiceClient()
@@ -37,7 +44,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     .select()
     .single()
 
-  if (error || !data) return apiError('INTERNAL_ERROR', error?.message ?? 'Failed to update room', 500)
+  if (error || !data) return internalError('room update', error)
 
   return apiSuccess(data)
 }
@@ -46,12 +53,9 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
   const auth = await requireAuthenticatedRoomOwner(req, params.roomId)
   if ('error' in auth) return auth.error
 
-  const { error } = await auth.supabase
-    .from('rooms')
-    .delete()
-    .eq('id', params.roomId)
+  const { error } = await auth.supabase.from('rooms').delete().eq('id', params.roomId)
 
-  if (error) return apiError('INTERNAL_ERROR', error.message, 500)
+  if (error) return internalError('room delete', error)
 
   return apiSuccess({ deleted: true })
 }

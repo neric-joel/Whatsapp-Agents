@@ -3,14 +3,23 @@
 @tailwind utilities;
 
 body {
-  font-family: "DM Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family:
+    'DM Sans',
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
 }
 
 code,
 kbd,
 samp,
 pre {
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-family:
+    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+    monospace;
 }
 
 .message-markdown .katex-display {
@@ -24,8 +33,47 @@ pre {
   white-space: normal;
 }
 
+/*
+ * Theme-aware code rendering. Derived from the current theme's --text/--border
+ * via color-mix so inline code and code blocks stay legible on every theme
+ * (the previous bg-black/10 + bg-white/65 literals were illegible on light /
+ * inverted on dark themes). One definition, all 7 themes.
+ */
+.message-markdown :not(pre) > code {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  border-radius: 0.25rem;
+  padding: 0.05rem 0.3rem;
+  font-size: 0.92em;
+}
+
+.message-markdown pre {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  border: 1px solid var(--border);
+}
+
+.message-markdown pre > code {
+  background: transparent;
+  padding: 0;
+}
+
+/*
+ * Respect the user's reduced-motion preference (WCAG 2.3.3 / 2.2.2). Collapses
+ * the toast/message/thinking animations and any transition to near-instant
+ * without removing the end state.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 :root,
-:root[data-agentroom-theme="light-modern"] {
+:root[data-agentroom-theme='light-modern'] {
   --app-bg: #f4f4f5;
   --surface: #fafafa;
   --panel: #ffffff;
@@ -33,7 +81,8 @@ pre {
   --sidebar-hover: #e4e4e7;
   --sidebar-active: #d4d4d8;
   --text: #18181b;
-  --muted: #71717a;
+  /* #71717a was 4.39:1 on --app-bg (just below WCAG AA 4.5:1); darkened. */
+  --muted: #5d5d66;
   --border: #d4d4d8;
   --accent: #52525b;
   --accent-strong: #3f3f46;
@@ -44,7 +93,7 @@ pre {
   --right-panel: #f4f4f5;
 }
 
-:root[data-agentroom-theme="github-light"] {
+:root[data-agentroom-theme='github-light'] {
   --app-bg: #f6f8fa;
   --surface: #f6f8fa;
   --panel: #ffffff;
@@ -63,7 +112,7 @@ pre {
   --right-panel: #f6f8fa;
 }
 
-:root[data-agentroom-theme="solarized-light"] {
+:root[data-agentroom-theme='solarized-light'] {
   --app-bg: #fdf6e3;
   --surface: #fdf6e3;
   --panel: #fffaf0;
@@ -71,7 +120,8 @@ pre {
   --sidebar-hover: #e6dfc8;
   --sidebar-active: #d8d0b7;
   --text: #073642;
-  --muted: #657b83;
+  /* #657b83 was ~4.3:1 on the cream --app-bg; darkened for WCAG AA. */
+  --muted: #586e75;
   --border: #d8d0b7;
   --accent: #586e75;
   --accent-strong: #073642;
@@ -82,7 +132,7 @@ pre {
   --right-panel: #eee8d5;
 }
 
-:root[data-agentroom-theme="dark-modern"] {
+:root[data-agentroom-theme='dark-modern'] {
   --app-bg: #1e1e1e;
   --surface: #1e1e1e;
   --panel: #252526;
@@ -101,7 +151,7 @@ pre {
   --right-panel: #252526;
 }
 
-:root[data-agentroom-theme="github-dark"] {
+:root[data-agentroom-theme='github-dark'] {
   --app-bg: #0d1117;
   --surface: #0d1117;
   --panel: #161b22;
@@ -120,7 +170,7 @@ pre {
   --right-panel: #161b22;
 }
 
-:root[data-agentroom-theme="one-dark-pro"] {
+:root[data-agentroom-theme='one-dark-pro'] {
   --app-bg: #282c34;
   --surface: #282c34;
   --panel: #21252b;
@@ -139,7 +189,7 @@ pre {
   --right-panel: #21252b;
 }
 
-:root[data-agentroom-theme="dracula"] {
+:root[data-agentroom-theme='dracula'] {
   --app-bg: #282a36;
   --surface: #282a36;
   --panel: #21222c;
@@ -186,8 +236,14 @@ pre {
 }
 
 @keyframes messageIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .animate-message-in {
@@ -195,13 +251,24 @@ pre {
 }
 
 @keyframes thinkingPulse {
-  0%, 100% { opacity: 0.4; transform: scale(0.8); }
-  50% { opacity: 1; transform: scale(1); }
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .thinking-dot {
   animation: thinkingPulse 1.2s ease-in-out infinite;
 }
 
-.thinking-dot:nth-child(2) { animation-delay: 0.2s; }
-.thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+.thinking-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.thinking-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}

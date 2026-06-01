@@ -1,14 +1,21 @@
 import { NextRequest } from 'next/server'
+
 import { apiError, apiSuccess } from '@/lib/api-error'
+import { internalError } from '@/lib/api-security'
 import { createPinSchema } from '@/lib/api-validation'
 import { requireRoomMember } from '@/lib/permissions'
 import { createSupabaseServerClient, createSupabaseServiceClient } from '@/lib/supabase/server'
 
-interface RouteParams { params: { roomId: string } }
+interface RouteParams {
+  params: { roomId: string }
+}
 
 async function requireAuthenticatedRoomMember(roomId: string) {
   const supabaseUser = createSupabaseServerClient()
-  const { data: { user }, error: authErr } = await supabaseUser.auth.getUser()
+  const {
+    data: { user },
+    error: authErr,
+  } = await supabaseUser.auth.getUser()
   if (authErr || !user) return { error: apiError('UNAUTHORIZED', 'Unauthorized', 401) }
 
   const supabase = createSupabaseServiceClient()
@@ -31,7 +38,7 @@ export async function GET(_req: Request, { params }: RouteParams) {
     .eq('room_id', params.roomId)
     .eq('is_active', true)
     .order('sort_order', { ascending: true })
-  if (error) return apiError('INTERNAL_ERROR', error.message, 500)
+  if (error) return internalError('room pins list', error)
 
   return apiSuccess(data ?? [])
 }
@@ -60,7 +67,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     })
     .select()
     .single()
-  if (error || !data) return apiError('INTERNAL_ERROR', error?.message ?? 'Failed to create pin', 500)
+  if (error || !data) return internalError('room pins create', error)
 
   return apiSuccess(data, 201)
 }

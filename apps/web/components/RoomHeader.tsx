@@ -1,8 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+
 import { getProviderStyle } from '@/lib/provider-styles'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+
 import ThemeSwitcher from './ThemeSwitcher'
 
 interface Props {
@@ -51,9 +53,9 @@ export default function RoomHeader({ roomId }: Props) {
       fetch(`/api/rooms/${roomId}/members`)
         .then((res) => res.json().catch(() => ({})))
         .catch(() => ({})) as Promise<{
-          ok?: boolean
-          data?: RoomAgentMember[]
-        }>,
+        ok?: boolean
+        data?: RoomAgentMember[]
+      }>,
     ]).then(([roomRes, membersRes, roomMembersRes]) => {
       if (cancelled) return
       if (roomRes.data) setRoomName((roomRes.data as { name: string }).name)
@@ -82,12 +84,12 @@ export default function RoomHeader({ roomId }: Props) {
         fetch(`/api/rooms/${roomId}/members`),
         fetch('/api/agents'),
       ])
-      const membersJson = await membersRes.json().catch(() => ({})) as {
+      const membersJson = (await membersRes.json().catch(() => ({}))) as {
         ok?: boolean
         data?: RoomAgentMember[]
         error?: { message?: string }
       }
-      const agentsJson = await agentsRes.json().catch(() => ({})) as {
+      const agentsJson = (await agentsRes.json().catch(() => ({}))) as {
         ok?: boolean
         data?: AgentSummary[]
         error?: { message?: string }
@@ -125,7 +127,7 @@ export default function RoomHeader({ roomId }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ muted }),
       })
-      const json = await res.json().catch(() => ({})) as {
+      const json = (await res.json().catch(() => ({}))) as {
         ok?: boolean
         data?: RoomAgentMember
         error?: { message?: string }
@@ -135,7 +137,9 @@ export default function RoomHeader({ roomId }: Props) {
         return
       }
       const updated = json.data
-      setMembers((current) => current.map((item) => item.id === member.id ? { ...item, ...updated } : item))
+      setMembers((current) =>
+        current.map((item) => (item.id === member.id ? { ...item, ...updated } : item)),
+      )
     } finally {
       setBusyMemberId(null)
     }
@@ -146,7 +150,10 @@ export default function RoomHeader({ roomId }: Props) {
     setAgentError(null)
     try {
       const res = await fetch(`/api/rooms/${roomId}/members/${member.id}`, { method: 'DELETE' })
-      const json = await res.json().catch(() => ({})) as { ok?: boolean; error?: { message?: string } }
+      const json = (await res.json().catch(() => ({}))) as {
+        ok?: boolean
+        error?: { message?: string }
+      }
       if (!res.ok || !json.ok) {
         setAgentError(json.error?.message ?? 'Failed to remove agent')
         return
@@ -172,7 +179,7 @@ export default function RoomHeader({ roomId }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ agentId: selectedAgentId }),
       })
-      const json = await res.json().catch(() => ({})) as {
+      const json = (await res.json().catch(() => ({}))) as {
         ok?: boolean
         data?: RoomAgentMember
         error?: { message?: string }
@@ -201,7 +208,9 @@ export default function RoomHeader({ roomId }: Props) {
     <header className="relative flex min-h-[72px] flex-shrink-0 items-center border-b border-[var(--border)] bg-[var(--panel)] px-4 py-3">
       <div className="flex min-w-0 flex-1 flex-col gap-1 pr-4">
         <div className="flex min-w-0 items-center gap-3">
-          <h1 className="truncate text-lg font-semibold text-[var(--text)]"># {roomName ?? '...'}</h1>
+          <h1 className="truncate text-lg font-semibold text-[var(--text)]">
+            # {roomName ?? '...'}
+          </h1>
           <span className="h-5 w-px bg-[var(--border)]" aria-hidden="true" />
           <span className="text-sm text-[var(--muted)]">{agentCount} agents</span>
         </div>
@@ -217,7 +226,9 @@ export default function RoomHeader({ roomId }: Props) {
             )
           })}
           {activeAgentMembers.length > 10 && (
-            <span className="text-xs font-medium text-[var(--muted)]">+{activeAgentMembers.length - 10}</span>
+            <span className="text-xs font-medium text-[var(--muted)]">
+              +{activeAgentMembers.length - 10}
+            </span>
           )}
         </div>
       </div>
@@ -230,7 +241,14 @@ export default function RoomHeader({ roomId }: Props) {
         aria-label="Manage agents"
         aria-expanded={panelOpen}
       >
-        <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          className="h-4 w-4"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
           <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
           <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 1 1 4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1A2 2 0 1 1 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 .9-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 1 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5.9h.1a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
         </svg>
@@ -264,11 +282,18 @@ export default function RoomHeader({ roomId }: Props) {
                     ? 'bg-gray-400'
                     : 'bg-emerald-500'
                 return (
-                  <div key={member.id} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50">
+                  <div
+                    key={member.id}
+                    className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50"
+                  >
                     <span className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${statusClass}`} />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium text-gray-900">{member.agent.name}</div>
-                      <div className="truncate text-xs text-gray-500">@{member.agent.slug} / {member.agent.provider}</div>
+                      <div className="truncate text-sm font-medium text-gray-900">
+                        {member.agent.name}
+                      </div>
+                      <div className="truncate text-xs text-gray-500">
+                        @{member.agent.slug} / {member.agent.provider}
+                      </div>
                     </div>
                     <button
                       type="button"
@@ -294,7 +319,9 @@ export default function RoomHeader({ roomId }: Props) {
           </div>
 
           {agentError && (
-            <p className="border-t border-gray-200 px-3 py-2 text-xs text-red-600">{agentError}</p>
+            <p role="alert" className="border-t border-gray-200 px-3 py-2 text-xs text-red-600">
+              {agentError}
+            </p>
           )}
 
           <div className="flex items-center gap-2 border-t border-gray-200 p-3">
@@ -302,13 +329,16 @@ export default function RoomHeader({ roomId }: Props) {
               value={selectedAgentId}
               onChange={(event) => setSelectedAgentId(event.target.value)}
               disabled={availableAgents.length === 0 || busyMemberId === '__add__'}
+              aria-label="Select an agent to add to the room"
               className="min-w-0 flex-1 rounded-md border border-gray-300 bg-white px-2 py-2 text-sm text-gray-900 outline-none disabled:opacity-50"
             >
               {availableAgents.length === 0 ? (
                 <option value="">All active agents added</option>
               ) : (
                 availableAgents.map((agent) => (
-                  <option key={agent.id} value={agent.id}>{agent.name}</option>
+                  <option key={agent.id} value={agent.id}>
+                    {agent.name}
+                  </option>
                 ))
               )}
             </select>

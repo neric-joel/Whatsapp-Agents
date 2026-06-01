@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { MockAgentAdapter } from '../src/adapters/mock-agent-adapter.js'
 import type { ContextPacketV1 } from '@agentroom/shared'
+
+import { MockAgentAdapter } from '../src/adapters/mock-agent-adapter.js'
 
 const packet: ContextPacketV1 = {
   schema_version: 1,

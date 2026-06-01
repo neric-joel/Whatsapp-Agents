@@ -67,13 +67,16 @@ The browser never writes directly to `agent_runs`. User actions go through the N
 
 ## Prerequisites
 
-- Node.js 20+
-- pnpm
+- Node.js 22.13+ (see `.nvmrc`)
+- pnpm 11+ (`npm install -g pnpm@11.0.8` or `corepack enable`)
 - Docker Desktop
 - Supabase CLI
 - Claude CLI, if using Claude agents
 - Codex CLI, if using Codex agents
 - Ruflo CLI, if using Ruflo agents
+
+> **One-command local setup** (macOS / Linux / WSL): `make bootstrap`.
+> **Docker / containers / self-hosting:** see [`docs/SELF_HOSTING.md`](docs/SELF_HOSTING.md).
 
 ## Environment Setup
 
@@ -107,9 +110,17 @@ CLAUDE_BIN=claude
 CODEX_BIN=codex
 MYCLAUDE_BIN=myclaude
 RUFLO_BIN=ruflo
+# Optional image text/OCR extraction sends image bytes to OpenAI — OFF by default.
+# It activates only when the flag is true AND a key is set. See docs/SELF_HOSTING.md.
+ENABLE_IMAGE_TEXT_EXTRACTION=false
 OPENAI_API_KEY=
 OPENAI_VISION_MODEL=gpt-4.1-mini
 ```
+
+> The full, authoritative variable list (including `BRIDGE_HEALTH_PORT`, `LOG_LEVEL`,
+> and optional error-tracking DSNs) lives in
+> [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#environment-variables) and the
+> `.env.example` files.
 
 Keep real keys out of git. The project uses `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`; do not rename it to the deprecated anon key variable.
 
@@ -251,3 +262,23 @@ If a tagged agent does not respond, check that the agent is:
 ## Project Status
 
 The MVP is complete. Current work focuses on hardening the local developer experience, improving multi-agent deliberation quality, and making output rendering stable for real math and code-heavy answers.
+
+## Documentation
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — components, data-flow, the `agent_runs` queue contract, the adapter model, trust boundaries, and the full environment-variable reference.
+- [`docs/SELF_HOSTING.md`](docs/SELF_HOSTING.md) — local-Docker default, self-hosted Supabase, and the bridge trust model.
+- [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md) — logging, health/metrics endpoints, error tracking, and the run state machine + stale-run recovery.
+- [`docs/adr/`](docs/adr/) — architecture decision records.
+- [`QUICKSTART.md`](QUICKSTART.md) — the short startup guide.
+
+## Contributing
+
+Contributions are welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup, the
+quality gates, and the branch/commit/PR conventions, and
+[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md). For **security** issues, follow
+[`SECURITY.md`](SECURITY.md) (please don't open a public issue). Changes are tracked in
+[`CHANGELOG.md`](CHANGELOG.md).
+
+## License
+
+[MIT](LICENSE) © AgentRoom contributors.

@@ -23,4 +23,3 @@ describe('pasted files', () => {
     expect(getImageFilesFromClipboardItems(items)).toEqual([])
   })
 })
-

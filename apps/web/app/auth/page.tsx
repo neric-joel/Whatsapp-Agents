@@ -1,7 +1,8 @@
 'use client'
 
-import { FormEvent, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { FormEvent, useRef, useState } from 'react'
+
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 type Mode = 'signin' | 'signup'
@@ -13,6 +14,27 @@ export default function AuthPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const signinTabRef = useRef<HTMLButtonElement>(null)
+  const signupTabRef = useRef<HTMLButtonElement>(null)
+
+  function selectMode(next: Mode) {
+    setMode(next)
+    setError(null)
+  }
+
+  // WAI-ARIA tabs pattern: Left/Right/Home/End move between tabs and move focus
+  // (roving tabindex). The form below is the tabpanel.
+  function handleTabKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'ArrowRight' || e.key === 'End') {
+      e.preventDefault()
+      selectMode('signup')
+      signupTabRef.current?.focus()
+    } else if (e.key === 'ArrowLeft' || e.key === 'Home') {
+      e.preventDefault()
+      selectMode('signin')
+      signinTabRef.current?.focus()
+    }
+  }
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -24,10 +46,16 @@ export default function AuthPage() {
     try {
       if (mode === 'signup') {
         const { error: err } = await supabase.auth.signUp({ email, password })
-        if (err) { setError(err.message); return }
+        if (err) {
+          setError(err.message)
+          return
+        }
       } else {
         const { error: err } = await supabase.auth.signInWithPassword({ email, password })
-        if (err) { setError(err.message); return }
+        if (err) {
+          setError(err.message)
+          return
+        }
       }
       router.push('/')
     } finally {
@@ -44,10 +72,21 @@ export default function AuthPage() {
         </div>
 
         <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)] shadow-xl">
-          <div className="flex border-b border-[var(--border)] bg-[var(--surface)]">
+          <div
+            className="flex border-b border-[var(--border)] bg-[var(--surface)]"
+            role="tablist"
+            aria-label="Authentication mode"
+          >
             <button
+              ref={signinTabRef}
               type="button"
-              onClick={() => { setMode('signin'); setError(null) }}
+              role="tab"
+              id="tab-signin"
+              aria-selected={mode === 'signin'}
+              aria-controls="auth-form"
+              tabIndex={mode === 'signin' ? 0 : -1}
+              onClick={() => selectMode('signin')}
+              onKeyDown={handleTabKeyDown}
               className={`flex-1 py-3 text-sm font-medium transition-colors ${
                 mode === 'signin'
                   ? 'bg-[var(--accent)] text-[var(--accent-text)]'
@@ -57,8 +96,15 @@ export default function AuthPage() {
               Sign In
             </button>
             <button
+              ref={signupTabRef}
               type="button"
-              onClick={() => { setMode('signup'); setError(null) }}
+              role="tab"
+              id="tab-signup"
+              aria-selected={mode === 'signup'}
+              aria-controls="auth-form"
+              tabIndex={mode === 'signup' ? 0 : -1}
+              onClick={() => selectMode('signup')}
+              onKeyDown={handleTabKeyDown}
               className={`flex-1 py-3 text-sm font-medium transition-colors ${
                 mode === 'signup'
                   ? 'bg-[var(--accent)] text-[var(--accent-text)]'
@@ -69,9 +115,18 @@ export default function AuthPage() {
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <form
+            onSubmit={handleSubmit}
+            className="p-6 space-y-4"
+            id="auth-form"
+            role="tabpanel"
+            aria-labelledby={mode === 'signin' ? 'tab-signin' : 'tab-signup'}
+          >
             <div>
-              <label htmlFor="email" className="block text-xs font-medium text-[var(--muted)] mb-1.5">
+              <label
+                htmlFor="email"
+                className="block text-xs font-medium text-[var(--muted)] mb-1.5"
+              >
                 Email
               </label>
               <input
@@ -88,7 +143,10 @@ export default function AuthPage() {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-xs font-medium text-[var(--muted)] mb-1.5">
+              <label
+                htmlFor="password"
+                className="block text-xs font-medium text-[var(--muted)] mb-1.5"
+              >
                 Password
               </label>
               <input
@@ -105,7 +163,11 @@ export default function AuthPage() {
             </div>
 
             {error && (
-              <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+              <p
+                role="alert"
+                aria-live="assertive"
+                className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
+              >
                 {error}
               </p>
             )}
@@ -115,7 +177,13 @@ export default function AuthPage() {
               disabled={loading}
               className="w-full rounded-md bg-[var(--accent)] py-2.5 text-sm font-semibold text-[var(--accent-text)] transition-colors hover:bg-[var(--accent-strong)] disabled:opacity-50"
             >
-              {loading ? (mode === 'signup' ? 'Creating account...' : 'Signing in...') : (mode === 'signup' ? 'Create account' : 'Sign in')}
+              {loading
+                ? mode === 'signup'
+                  ? 'Creating account...'
+                  : 'Signing in...'
+                : mode === 'signup'
+                  ? 'Create account'
+                  : 'Sign in'}
             </button>
           </form>
         </div>

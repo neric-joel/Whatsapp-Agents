@@ -22,13 +22,19 @@ function formatBytes(n: number) {
 function mimeIcon(mime: string) {
   if (mime.startsWith('image/')) return 'IMG'
   if (mime === 'application/pdf') return 'PDF'
-  if (mime.startsWith('text/') || mime.includes('json') || mime.includes('javascript') || mime.includes('typescript')) return 'TXT'
+  if (
+    mime.startsWith('text/') ||
+    mime.includes('json') ||
+    mime.includes('javascript') ||
+    mime.includes('typescript')
+  )
+    return 'TXT'
   return 'FILE'
 }
 
 async function fetchSignedUrl(fileId: string) {
   const res = await fetch(`/api/files/${fileId}/signed-download`)
-  const json = await res.json() as { ok: boolean; data?: { signed_url: string } }
+  const json = (await res.json()) as { ok: boolean; data?: { signed_url: string } }
   if (!res.ok || !json.ok || !json.data) throw new Error('Failed to fetch signed URL')
   return json.data.signed_url
 }

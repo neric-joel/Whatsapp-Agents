@@ -1,8 +1,9 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
-export interface DbMessage {
+interface DbMessage {
   id: string
   content: string
   sender_type: string
@@ -23,7 +24,9 @@ export function useMessages(roomId: string, refreshSignal?: number) {
     const supabase = createSupabaseBrowserClient()
     supabase
       .from('messages')
-      .select('id, content, sender_type, sender_user_id, created_at, sender_agent_id, reply_to_id, metadata, agents(name, provider)')
+      .select(
+        'id, content, sender_type, sender_user_id, created_at, sender_agent_id, reply_to_id, metadata, agents(name, provider)',
+      )
       .eq('room_id', roomId)
       .order('created_at', { ascending: true })
       .then(({ data, error: err }) => {
@@ -38,7 +41,7 @@ export function useMessages(roomId: string, refreshSignal?: number) {
     refetch()
   }, [refetch, refreshSignal])
 
-  // Realtime: append INSERT events, dedup by id
+  // Realtime: upsert by id — append INSERTs, replace UPDATEs, remove DELETEs.
   useEffect(() => {
     const supabase = createSupabaseBrowserClient()
     const channel = supabase
@@ -57,19 +60,30 @@ export function useMessages(roomId: string, refreshSignal?: number) {
           // Fetch with agents join so we have the agent name
           const { data } = await supabase
             .from('messages')
-            .select('id, content, sender_type, sender_user_id, created_at, sender_agent_id, reply_to_id, metadata, agents(name, provider)')
+            .select(
+              'id, content, sender_type, sender_user_id, created_at, sender_agent_id, reply_to_id, metadata, agents(name, provider)',
+            )
             .eq('id', newId)
             .single()
           if (data) {
             const msg = data as unknown as DbMessage
-            setMessages((prev) =>
-              prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]
-            )
+            // Upsert by id: replace an existing row on UPDATE (edits, soft-deletes,
+            // hallucination accept/reject) so peers see the change live; otherwise
+            // append. A plain append-or-skip silently drops every UPDATE event.
+            setMessages((prev) => {
+              const idx = prev.findIndex((m) => m.id === msg.id)
+              if (idx === -1) return [...prev, msg]
+              const next = prev.slice()
+              next[idx] = msg
+              return next
+            })
           }
-        }
+        },
       )
       .subscribe()
-    return () => { void supabase.removeChannel(channel) }
+    return () => {
+      void supabase.removeChannel(channel)
+    }
   }, [roomId])
 
   return { messages, loading, error, refetch }

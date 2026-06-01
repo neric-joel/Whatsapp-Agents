@@ -4,7 +4,7 @@ export interface PinMessageRow {
   is_active: boolean
 }
 
-export type PinsByMessageId = Record<string, string>
+type PinsByMessageId = Record<string, string>
 
 export function buildPinsByMessageId(pins: PinMessageRow[]): PinsByMessageId {
   return pins.reduce<PinsByMessageId>((acc, pin) => {
@@ -15,7 +15,10 @@ export function buildPinsByMessageId(pins: PinMessageRow[]): PinsByMessageId {
   }, {})
 }
 
-export function applyPinnedItemChange(current: PinsByMessageId, pin: PinMessageRow): PinsByMessageId {
+export function applyPinnedItemChange(
+  current: PinsByMessageId,
+  pin: PinMessageRow,
+): PinsByMessageId {
   if (!pin.message_id) return current
 
   if (pin.is_active) {

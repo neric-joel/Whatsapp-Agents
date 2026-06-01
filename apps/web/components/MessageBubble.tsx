@@ -1,10 +1,12 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
+import { type ReactNode, useState } from 'react'
+
 import { useToast } from '@/contexts/ToastContext'
 import { extractHallucination } from '@/lib/hallucination-detector'
 import { DELETED_MESSAGE_CONTENT } from '@/lib/message-management'
 import { getProviderStyle } from '@/lib/provider-styles'
+
 import FormattedMessageContent from './FormattedMessageContent'
 import HallucinationBanner from './HallucinationBanner'
 
@@ -26,7 +28,7 @@ function avatarInitial(name: string | null | undefined) {
   return (name?.trim().charAt(0) || 'U').toUpperCase()
 }
 
-export interface MessageBubbleProps {
+interface MessageBubbleProps {
   message: {
     id: string
     content: string
@@ -67,7 +69,7 @@ export default function MessageBubble({
   const hallucinationMeta = sender_type === 'agent' ? extractHallucination(metadata ?? {}) : null
   const hallucinationState =
     metadata?.hallucination && typeof metadata.hallucination === 'object'
-      ? metadata.hallucination as { accepted?: boolean; flagged?: boolean }
+      ? (metadata.hallucination as { accepted?: boolean; flagged?: boolean })
       : null
   const isHallucinationRejected = hallucinationState?.accepted === false
   const showHallucinationBanner = Boolean(
@@ -111,7 +113,7 @@ export default function MessageBubble({
     try {
       const res = await fetch(`/api/rooms/${roomId}/messages/${message.id}`, { method: 'DELETE' })
       if (!res.ok) {
-        const json = await res.json().catch(() => ({})) as { error?: { message?: string } }
+        const json = (await res.json().catch(() => ({}))) as { error?: { message?: string } }
         showToast(json.error?.message ?? 'Failed to delete message', 'error')
         return
       }
@@ -177,20 +179,26 @@ export default function MessageBubble({
 
     return (
       <div className="group flex animate-message-in flex-row items-start gap-3 px-5 py-2">
-        <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border ${providerStyle.avatar} ${providerStyle.border}`}>
+        <div
+          className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border ${providerStyle.avatar} ${providerStyle.border}`}
+        >
           <span className="text-[11px] font-semibold text-white">
             {agents ? initials(agents.name) : 'AG'}
           </span>
         </div>
         <div className="flex max-w-[72%] flex-col">
           <div className="mb-1 flex items-center gap-2">
-            <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${providerStyle.nameColor}`}>
+            <span
+              className={`inline-flex items-center gap-1.5 text-xs font-semibold ${providerStyle.nameColor}`}
+            >
               <span className={`h-1 w-1 rounded-full ${providerStyle.dot}`} aria-hidden="true" />
               {agents?.name ?? 'Agent'}
             </span>
             <span className="text-xs text-gray-400">{formatTime(created_at)}</span>
           </div>
-          <div className={`rounded-2xl border px-4 py-3 text-sm leading-6 shadow-sm ${providerStyle.bubble} ${providerStyle.border} ${providerStyle.text} ${isHallucinationRejected ? 'line-through decoration-yellow-500 decoration-2' : ''}`}>
+          <div
+            className={`rounded-2xl border px-4 py-3 text-sm leading-6 shadow-sm ${providerStyle.bubble} ${providerStyle.border} ${providerStyle.text} ${isHallucinationRejected ? 'line-through decoration-yellow-500 decoration-2' : ''}`}
+          >
             {isDeleted ? (
               <span className="italic text-zinc-500">{DELETED_MESSAGE_CONTENT}</span>
             ) : (
@@ -205,9 +213,7 @@ export default function MessageBubble({
             />
           )}
           {children}
-          <div className="mt-1.5 flex items-center gap-2">
-            {actionButtons}
-          </div>
+          <div className="mt-1.5 flex items-center gap-2">{actionButtons}</div>
         </div>
       </div>
     )
@@ -217,7 +223,9 @@ export default function MessageBubble({
     return (
       <div className="group flex animate-message-in flex-row items-start justify-end gap-3 px-5 py-2">
         <div className="flex max-w-[72%] flex-col items-end">
-          <div className={`rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${isDeleted ? 'bg-[var(--surface)] text-[var(--muted)]' : 'bg-[var(--user-bubble)] text-[var(--user-text)]'}`}>
+          <div
+            className={`rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${isDeleted ? 'bg-[var(--surface)] text-[var(--muted)]' : 'bg-[var(--user-bubble)] text-[var(--user-text)]'}`}
+          >
             {isDeleted ? (
               <span className="italic">{DELETED_MESSAGE_CONTENT}</span>
             ) : (

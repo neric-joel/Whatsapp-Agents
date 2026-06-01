@@ -1,3 +1,2 @@
-import shared from '@agentroom/shared'
-
-export const conclusionDetected = (shared as typeof import('@agentroom/shared')).conclusionDetected
+// Re-export the shared conclusion detector under a bridge-local path.
+export { conclusionDetected } from '@agentroom/shared'

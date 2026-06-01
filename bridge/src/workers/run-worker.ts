@@ -1,19 +1,39 @@
-import { createServiceClient } from '../lib/supabase.js'
-import { isDeniedCommand } from '../lib/denylist.js'
-import { log } from '../lib/logger.js'
-import { redact } from '../lib/redact.js'
-import { getAdapter } from '../adapters/registry.js'
-import { buildContextPacket } from '../context/build-context-packet.js'
-import { conclusionDetected } from '../lib/conclusion.js'
-import { detectHallucination } from '../lib/hallucination.js'
-import { sanitizeAgentOutput } from '../lib/agent-output.js'
-import { maybeScheduleDiscussionContinuation } from '../lib/discussion-orchestrator.js'
-import { maybeScheduleAgentMentionFollowUps } from '../lib/agent-follow-up.js'
+import type { AgentEvent } from '@agentroom/shared'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+import { getAdapter as defaultGetAdapter } from '../adapters/registry.js'
+import { handleHandoffRequest } from '../agents/handoff.js'
+import { buildContextPacket } from '../context/build-context-packet.js'
+import { maybeScheduleAgentMentionFollowUps } from '../lib/agent-follow-up.js'
+import { sanitizeAgentOutput } from '../lib/agent-output.js'
+import { conclusionDetected } from '../lib/conclusion.js'
+import { isDeniedCommand } from '../lib/denylist.js'
+import { maybeScheduleDiscussionContinuation } from '../lib/discussion-orchestrator.js'
+import { captureError } from '../lib/error-tracking.js'
+import { detectHallucination } from '../lib/hallucination.js'
+import { log } from '../lib/logger.js'
+import {
+  recordRunCancelled,
+  recordRunCompleted,
+  recordRunFailed,
+  recordRunStarted,
+} from '../lib/metrics.js'
+import { redact } from '../lib/redact.js'
+import { createServiceClient } from '../lib/supabase.js'
+import { persistMemoryOp } from '../memory/persist-memory-op.js'
+
+/** Injectable dependencies — defaults are the real Supabase client + adapter registry. */
+interface ProcessRunDeps {
+  supabase?: SupabaseClient
+  getAdapter?: typeof defaultGetAdapter
+}
+
 type DiscussionMode = 'independent' | 'tag_turns'
+type HandoffRequestedEvent = Extract<AgentEvent, { type: 'handoff_requested' }>
 
 const WORKER_ID = process.env.BRIDGE_WORKER_ID ?? 'bridge-local-1'
+/** Max distinct hand-offs honored per run — bounds fan-out amplification. */
+const MAX_HANDOFFS_PER_RUN = 4
 const CANCEL_POLL_MS = 1000
 
 class RunCancelledError extends Error {
@@ -46,14 +66,21 @@ interface AgentRunRow {
   agents: AgentInfo | null
 }
 
-export async function processRun(runId: string): Promise<void> {
-  const supabase = createServiceClient()
+export async function processRun(runId: string, deps: ProcessRunDeps = {}): Promise<void> {
+  const supabase = deps.supabase ?? createServiceClient()
+  const getAdapter = deps.getAdapter ?? defaultGetAdapter
   const startedAt = Date.now()
+  // Gates the terminal metrics: only count an outcome for a run we actually moved
+  // into `running`. Otherwise a claim/running-transition error or a cancel-in-the-gap
+  // would skew the counters (started without terminal, or terminal without started).
+  let started = false
 
   // a. Fetch run with agent data
   const { data: runRaw } = await supabase
     .from('agent_runs')
-    .select('id, room_id, agent_id, trigger_msg_id, status, round_index, discussion_mode, deliberation_depth, deliberation_root_id, agents!agent_id(id, name, slug, system_prompt, provider, adapter_type, tool_permissions)')
+    .select(
+      'id, room_id, agent_id, trigger_msg_id, status, round_index, discussion_mode, deliberation_depth, deliberation_root_id, agents!agent_id(id, name, slug, system_prompt, provider, adapter_type, tool_permissions)',
+    )
     .eq('id', runId)
     .single()
 
@@ -88,14 +115,24 @@ export async function processRun(runId: string): Promise<void> {
       log('debug', 'run.skipped', { run_id: runId, reason: 'cancelled_before_running' })
       return
     }
+    // The run is now truly in flight — count it exactly once, here.
+    recordRunStarted()
+    started = true
 
     // d. Fetch trigger message
-    const fallbackMsg = { id: runId, content: '(no trigger)', sender_type: 'user', created_at: new Date().toISOString(), metadata: {} as Record<string, unknown> }
+    const fallbackMsg = {
+      id: runId,
+      content: '(no trigger)',
+      sender_type: 'user',
+      sender_user_id: null as string | null,
+      created_at: new Date().toISOString(),
+      metadata: {} as Record<string, unknown>,
+    }
     let triggerMsg = fallbackMsg
     if (runRow.trigger_msg_id) {
       const { data: tm } = await supabase
         .from('messages')
-        .select('id, content, sender_type, created_at, metadata')
+        .select('id, content, sender_type, sender_user_id, created_at, metadata')
         .eq('id', runRow.trigger_msg_id)
         .single()
       if (tm) triggerMsg = tm as typeof triggerMsg
@@ -124,6 +161,7 @@ export async function processRun(runId: string): Promise<void> {
     const controller = new AbortController()
     const stopCancellationWatcher = watchRunCancellation(supabase, runId, controller)
     let finalContent = ''
+    const handoffEvents: HandoffRequestedEvent[] = []
 
     try {
       for await (const event of adapter.run(packet, controller.signal)) {
@@ -135,25 +173,36 @@ export async function processRun(runId: string): Promise<void> {
         } else if (event.type === 'tool_call_requested') {
           const requiresApproval = event.requires_approval
 
-          const { data: tc } = await supabase.from('tool_calls').insert({
-            room_id: runRow.room_id,
-            run_id: runRow.id,
-            agent_id: agentInfo.id,
-            tool_name: event.tool_name,
-            tool_category: event.tool_category ?? null,
-            input_args: event.arguments,
-            status: requiresApproval ? 'waiting_approval' : 'queued',
-            requires_approval: requiresApproval,
-          }).select().single()
+          const { data: tc } = await supabase
+            .from('tool_calls')
+            .insert({
+              room_id: runRow.room_id,
+              run_id: runRow.id,
+              agent_id: agentInfo.id,
+              tool_name: event.tool_name,
+              tool_category: event.tool_category ?? null,
+              input_args: event.arguments,
+              status: requiresApproval ? 'waiting_approval' : 'queued',
+              requires_approval: requiresApproval,
+            })
+            .select()
+            .single()
 
           if (tc) {
             const commandArg = (event.arguments['command'] as string | undefined) ?? ''
             if (isDeniedCommand(commandArg)) {
-              await supabase.from('tool_calls').update({
-                status: 'denied',
-                error: 'Command blocked by denylist',
-              }).eq('id', tc.id)
-              log('warn', 'tool.denied', { run_id: runId, tool_name: event.tool_name, reason: 'denylist' })
+              await supabase
+                .from('tool_calls')
+                .update({
+                  status: 'denied',
+                  error: 'Command blocked by denylist',
+                })
+                .eq('id', tc.id)
+              log('warn', 'tool.denied', {
+                run_id: runId,
+                tool_name: event.tool_name,
+                reason: 'denylist',
+              })
               throw new Error('Command blocked by denylist')
             }
           }
@@ -164,30 +213,71 @@ export async function processRun(runId: string): Promise<void> {
             for (let i = 0; i < 15; i++) {
               if (controller.signal.aborted) throw new RunCancelledError()
               await new Promise<void>((r) => setTimeout(r, 2000))
-              const { data: updated } = await supabase.from('tool_calls').select('status').eq('id', tc.id).single()
-              if (updated?.status === 'approved') { finalStatus = 'approved'; break }
-              if (updated?.status === 'denied') { finalStatus = 'denied'; break }
+              const { data: updated } = await supabase
+                .from('tool_calls')
+                .select('status')
+                .eq('id', tc.id)
+                .single()
+              if (updated?.status === 'approved') {
+                finalStatus = 'approved'
+                break
+              }
+              if (updated?.status === 'denied') {
+                finalStatus = 'denied'
+                break
+              }
             }
             if (finalStatus === 'approved') {
-              log('info', 'tool.approval.received', { run_id: runId, tool_name: event.tool_name, approved: true })
-              await supabase.from('tool_calls').update({ status: 'running' }).eq('id', tc.id)
-              const result = { ok: true, stdout: 'approved' }
-              await supabase.from('tool_calls').update({ status: 'succeeded', output: redact(JSON.stringify(result)) }).eq('id', tc.id)
-            } else {
-              log(finalStatus === 'denied' ? 'info' : 'warn', finalStatus === 'denied' ? 'tool.approval.received' : 'tool.approval.timeout', {
+              log('info', 'tool.approval.received', {
                 run_id: runId,
                 tool_name: event.tool_name,
-                ...(finalStatus === 'denied' ? { approved: false } : {}),
+                approved: true,
               })
-              await supabase.from('tool_calls').update({
-                status: finalStatus === 'denied' ? 'denied' : 'failed',
-                error: finalStatus === 'denied' ? null : 'approval timeout',
-              }).eq('id', tc.id)
+              await supabase.from('tool_calls').update({ status: 'running' }).eq('id', tc.id)
+              const result = { ok: true, stdout: 'approved' }
+              await supabase
+                .from('tool_calls')
+                .update({ status: 'succeeded', output: redact(JSON.stringify(result)) })
+                .eq('id', tc.id)
+            } else {
+              log(
+                finalStatus === 'denied' ? 'info' : 'warn',
+                finalStatus === 'denied' ? 'tool.approval.received' : 'tool.approval.timeout',
+                {
+                  run_id: runId,
+                  tool_name: event.tool_name,
+                  ...(finalStatus === 'denied' ? { approved: false } : {}),
+                },
+              )
+              await supabase
+                .from('tool_calls')
+                .update({
+                  status: finalStatus === 'denied' ? 'denied' : 'failed',
+                  error: finalStatus === 'denied' ? null : 'approval timeout',
+                })
+                .eq('id', tc.id)
             }
           } else if (tc) {
             const result = { ok: true, stdout: 'executed' }
-            await supabase.from('tool_calls').update({ status: 'succeeded', output: redact(JSON.stringify(result)) }).eq('id', tc.id)
+            await supabase
+              .from('tool_calls')
+              .update({ status: 'succeeded', output: redact(JSON.stringify(result)) })
+              .eq('id', tc.id)
           }
+        } else if (event.type === 'memory_op') {
+          // Agent-curated memory: the bridge validates, injection-scans, and
+          // persists (the agent never writes the DB). A bad op is logged + skipped
+          // — it must never fail the run.
+          await persistMemoryOp(event, {
+            supabase,
+            agentId: runRow.agent_id,
+            roomId: runRow.room_id,
+            triggerMessageId: runRow.trigger_msg_id ?? null,
+          })
+        } else if (event.type === 'handoff_requested') {
+          // Defer hand-offs until the reply is inserted (it becomes the targeted
+          // peer run's trigger message). Processed below, before mention follow-ups.
+          handoffEvents.push(event)
         }
       }
     } finally {
@@ -218,15 +308,19 @@ export async function processRun(runId: string): Promise<void> {
         checked_at: new Date().toISOString(),
       },
     }
-    const { data: insertedMessage, error: insertMessageError } = await supabase.from('messages').insert({
-      room_id: runRow.room_id,
-      sender_type: 'agent',
-      sender_agent_id: runRow.agent_id,
-      content: replyContent,
-      content_type: 'text',
-      round_index: runRow.round_index,
-      metadata,
-    }).select('id').single()
+    const { data: insertedMessage, error: insertMessageError } = await supabase
+      .from('messages')
+      .insert({
+        room_id: runRow.room_id,
+        sender_type: 'agent',
+        sender_agent_id: runRow.agent_id,
+        content: replyContent,
+        content_type: 'text',
+        round_index: runRow.round_index,
+        metadata,
+      })
+      .select('id')
+      .single()
 
     if (insertMessageError || !insertedMessage) {
       throw new Error(insertMessageError?.message ?? 'Failed to insert agent reply')
@@ -237,6 +331,33 @@ export async function processRun(runId: string): Promise<void> {
       .from('agent_runs')
       .update({ status: 'completed', completed_at: new Date().toISOString() })
       .eq('id', runId)
+    // Agent-to-agent hand-offs (Phase 10) — create targeted peer runs under the
+    // loop guards + cycle detection. Processed BEFORE mention follow-ups so the
+    // follow-up dedup sees any hand-off runs already created at the next round.
+    // Cap the count per run to bound fan-out amplification (each is still
+    // round/hop/cycle-guarded); drop + log the excess.
+    if (handoffEvents.length > MAX_HANDOFFS_PER_RUN) {
+      log('warn', 'handoff.capped', {
+        run_id: runId,
+        requested: handoffEvents.length,
+        cap: MAX_HANDOFFS_PER_RUN,
+      })
+    }
+    for (const handoff of handoffEvents.slice(0, MAX_HANDOFFS_PER_RUN)) {
+      await handleHandoffRequest(handoff, {
+        supabase,
+        roomId: runRow.room_id,
+        sourceAgentId: runRow.agent_id,
+        sourceMessageId: insertedMessage.id,
+        currentRun: {
+          id: runRow.id,
+          round_index: runRow.round_index,
+          deliberation_depth: runRow.deliberation_depth,
+          deliberation_root_id: runRow.deliberation_root_id,
+          discussion_mode: runRow.discussion_mode,
+        },
+      })
+    }
     await maybeScheduleAgentMentionFollowUps({
       supabase,
       currentRun: {
@@ -257,15 +378,20 @@ export async function processRun(runId: string): Promise<void> {
       currentRoundIndex: runRow.round_index,
       triggerMessage: triggerMsg,
     })
+    recordRunCompleted(Date.now() - startedAt)
     log('info', 'run.complete', { run_id: runId, duration_ms: Date.now() - startedAt })
-
   } catch (err) {
     const message = redact(err instanceof Error ? err.message : String(err))
     if (err instanceof RunCancelledError) {
       await supabase
         .from('agent_runs')
-        .update({ status: 'cancelled', error_message: message, completed_at: new Date().toISOString() })
+        .update({
+          status: 'cancelled',
+          error_message: message,
+          completed_at: new Date().toISOString(),
+        })
         .eq('id', runId)
+      if (started) recordRunCancelled()
       log('warn', 'run.cancelled', { run_id: runId })
       return
     }
@@ -273,6 +399,8 @@ export async function processRun(runId: string): Promise<void> {
       .from('agent_runs')
       .update({ status: 'failed', error_message: message })
       .eq('id', runId)
+    if (started) recordRunFailed()
+    captureError(err, { run_id: runId, where: 'processRun' })
     log('error', 'run.failed', { run_id: runId, error: message })
     throw err
   }
@@ -288,11 +416,7 @@ function watchRunCancellation(
 
     void (async () => {
       try {
-        const { data } = await supabase
-          .from('agent_runs')
-          .select('status')
-          .eq('id', runId)
-          .single()
+        const { data } = await supabase.from('agent_runs').select('status').eq('id', runId).single()
         if ((data as { status?: string } | null)?.status === 'cancelled') {
           controller.abort()
         }

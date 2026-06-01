@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { APP_THEMES, DEFAULT_APP_THEME, isAppThemeId, type AppThemeId } from '@/lib/themes'
+
+import { APP_THEMES, type AppThemeId, DEFAULT_APP_THEME, isAppThemeId } from '@/lib/themes'
 
 const STORAGE_KEY = 'agentroom-theme'
 
@@ -32,7 +33,9 @@ export default function ThemeSwitcher() {
         className="h-9 rounded-md border border-[var(--border)] bg-[var(--panel)] px-2 text-xs text-[var(--text)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--focus-ring)]"
       >
         {APP_THEMES.map((item) => (
-          <option key={item.id} value={item.id}>{item.label}</option>
+          <option key={item.id} value={item.id}>
+            {item.label}
+          </option>
         ))}
       </select>
     </label>

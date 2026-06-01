@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest'
 import {
   buildDiscussionPhasePrompt,
   nextDiscussionPhase,
   parseDiscussionCommand,
   parseDiscussionRequest,
 } from '@agentroom/shared'
+import { describe, expect, it } from 'vitest'
 
 describe('discussion slash command', () => {
   it('parses /discuss prompts', () => {
@@ -26,7 +26,9 @@ describe('discussion slash command', () => {
   it('builds critique and consensus prompts', () => {
     expect(nextDiscussionPhase('individual')).toBe('critique')
     expect(buildDiscussionPhasePrompt('individual', 'math')).toContain('not a full final answer')
-    expect(buildDiscussionPhasePrompt('critique', 'math')).toContain('Do not restart as a solo solution')
+    expect(buildDiscussionPhasePrompt('critique', 'math')).toContain(
+      'Do not restart as a solo solution',
+    )
     expect(buildDiscussionPhasePrompt('consensus', 'math')).toContain('one clear final consensus')
   })
 })

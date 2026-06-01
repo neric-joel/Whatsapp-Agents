@@ -1,4 +1,4 @@
-export const CHAT_CLEARED_EVENT = 'agentroom:chat-cleared'
+const CHAT_CLEARED_EVENT = 'agentroom:chat-cleared'
 
 export function notifyChatCleared(roomId: string) {
   window.dispatchEvent(new CustomEvent(CHAT_CLEARED_EVENT, { detail: { roomId } }))

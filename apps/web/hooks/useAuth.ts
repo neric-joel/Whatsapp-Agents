@@ -1,8 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
+import { useRouter } from 'next/navigation'
+import { useCallback, useEffect, useState } from 'react'
+
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 export function useAuth() {
@@ -18,7 +19,9 @@ export function useAuth() {
       setLoading(false)
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
       setLoading(false)
     })

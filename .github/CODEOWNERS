@@ -1,0 +1,14 @@
+# Code owners — requested for review automatically on matching PRs.
+# Order matters; the last matching pattern wins. See
+# https://docs.github.com/articles/about-code-owners
+
+# Default owner for everything in the repo.
+*                       @neric-joel
+
+# Security-sensitive areas (subprocess execution, auth/RLS, CI/security).
+/bridge/src/adapters/   @neric-joel
+/bridge/src/lib/        @neric-joel
+/supabase/              @neric-joel
+/apps/web/lib/          @neric-joel
+/.github/               @neric-joel
+/docs/production-hardening/ @neric-joel

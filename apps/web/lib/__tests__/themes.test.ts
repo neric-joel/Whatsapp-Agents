@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+
 import { APP_THEMES, DEFAULT_APP_THEME, isAppThemeId } from '../themes'
 
 describe('app themes', () => {

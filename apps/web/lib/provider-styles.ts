@@ -1,6 +1,6 @@
-export type AgentProvider = 'claude_code' | 'codex_cli' | 'ruflo' | 'mock'
+import type { AgentProvider } from '@agentroom/shared'
 
-export interface ProviderStyle {
+interface ProviderStyle {
   bubble: string
   border: string
   text: string
