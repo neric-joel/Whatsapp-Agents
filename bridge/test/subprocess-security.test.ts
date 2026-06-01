@@ -102,6 +102,34 @@ test('buildChildEnv honors BRIDGE_CHILD_ENV_ALLOW passthrough but never secrets'
   assert.equal(env['BRIDGE_SECRET_THING'], undefined)
 })
 
+test('buildChildEnv inject seam (ADR-0010): exactly one resolved credential var, secrets still stripped', () => {
+  const env = buildChildEnv(
+    {
+      PATH: '/usr/bin',
+      SUPABASE_SERVICE_ROLE_KEY: 'service-role-must-stay-hidden',
+      SOME_API_SECRET: 'env-secret-must-stay-hidden',
+    },
+    { inject: { name: 'OPENAI_API_KEY', value: 'sk-resolved-byo-key' } },
+  )
+  // The resolved BYO credential is injected into exactly its one var...
+  assert.equal(env['OPENAI_API_KEY'], 'sk-resolved-byo-key')
+  // ...while process.env secrets are STILL stripped (injection doesn't widen the env).
+  assert.equal(env['SUPABASE_SERVICE_ROLE_KEY'], undefined)
+  assert.equal(env['SOME_API_SECRET'], undefined)
+})
+
+test('buildChildEnv inject is opt-in and name-validated (no injection by default / on bad name)', () => {
+  // No inject → no extra var (a different adapter/run gets no leaked secret).
+  const plain = buildChildEnv({ PATH: '/usr/bin' })
+  assert.equal(plain['OPENAI_API_KEY'], undefined)
+  // An invalid env name is ignored (fail-closed) — never injected as-is.
+  const bad = buildChildEnv(
+    { PATH: '/usr/bin' },
+    { inject: { name: 'bad name; rm -rf', value: 'x' } },
+  )
+  assert.equal(bad['bad name; rm -rf'], undefined)
+})
+
 // --- resolveBinaryPath ---
 
 test('resolveBinaryPath resolves a bare command from PATH', () => {
