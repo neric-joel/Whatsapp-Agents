@@ -265,7 +265,9 @@ test('codex adapter ignores non-message JSONL events and drops non-JSON process 
   // Regression: a real Windows helper-termination notice once leaked into a codex
   // reply ("2 + 2 = 4.\nSUCCESS: The process with PID … has been terminated.").
   assert.equal(
-    adapter.parse('SUCCESS: The process with PID 33920 (child process of PID 27508) has been terminated.'),
+    adapter.parse(
+      'SUCCESS: The process with PID 33920 (child process of PID 27508) has been terminated.',
+    ),
     null,
   )
 })
