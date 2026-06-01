@@ -77,6 +77,53 @@ Local Docker is wedged (needs a reboot) — rely on CI for image/e2e/db verifica
 
 ---
 
+## 2026-05-31 — Interactive pre-v1.0 verification session (Docker up, seeded live DB)
+
+Owner re-engaged interactively after a reboot fixed Docker; **runner NOT restarted**.
+Re-grounded from PROGRESS + CLAUDE.md + the sweep report + git. Verified `main` untouched
+at `f780235`, **no tags**, integrated tip = `fix/pre-v1-agents-rls-and-realtime` (PR #17,
+R1+R2 on the Phase-11 stack). Stood up **this** project's own Supabase stack (temporarily
+stopped the stale sibling `agent-room` containers to free ports — reversible, volumes
+preserved; the sibling stack was at migration `20260516000002`, missing Phases 9–11 + R1).
+`supabase db reset` applied all 10 migrations clean + seed. Work + fixes on branch
+**`chore/pre-v1-verification-and-ship-kit`** (off #17; → PR #18). No merge/tag/push to `main`.
+
+**TASK 1 — R1 verdict: PASS** (see the RESOLVED bullet under "## For morning review" for
+the full three-layer evidence: pgTAP + role-level SQL + real PostgREST HTTP).
+
+**TASK 2 — runtime gate scorecard (on the integrated tip):**
+
+| Gate | Verdict | Evidence |
+|---|---|---|
+| `typecheck` | **PASS** | `pnpm -r typecheck` clean (web + bridge + shared) |
+| `lint` | **PASS** | `eslint .` 0 errors (10 known warnings, Phase-4 deferrals) |
+| `format:check` | **PASS** | `prettier --check` clean |
+| `test` | **PASS** | web 149 + bridge 140 = **289**, 0 fail; cov web 91.7% / bridge 83.3% (≥ floors) |
+| `pnpm --filter web build` | **PASS** | "Compiled successfully", 0 Edge warnings (self-healed a stale-`.next` Windows `EPERM` by clearing the dir — env, not code) |
+| db / RLS pgTAP | **PASS** | `supabase test db` → Files=4, Tests=24, Result: PASS |
+| Playwright e2e (seed + mock) | **PASS** | 11/11 incl. live chat journey (sign in → room → send → user msg → mock reply) |
+| Authenticated axe a11y | **PASS (after self-heal)** | 0 serious/critical on `/auth` + room page; **found+fixed 3 pre-existing WCAG-AA bugs** (role-less `aria-label`, timestamp + avatar contrast) |
+| Lighthouse a11y — `/auth` | **PASS (99)** | `lighthouse --only-categories=accessibility` = 99 |
+| Lighthouse a11y — authed page | **COULD-NOT-RUN (CLI)** | CLI can't seed the client-side session (cookie store, not request headers) → redirects to `/auth`. **Mitigated: authed axe = 0 serious/critical** (stricter). v1.0.1 task: Lighthouse puppeteer user-flow. |
+| Clean-clone install + boot | **PASS** | fresh clone → `pnpm install` (frozen, ~7 s) → typecheck → boot → `/auth` 200 + `/api/health` `db:up` (≪ 15 min) |
+
+Self-heal committed (`0d2ffb2`): `fix(a11y): meet WCAG AA on the authenticated room page
++ scan it in CI` (RoomHeader role, MessageBubble timestamp `gray-400→gray-500`,
+provider-styles avatars `#ea580c→#c2410c` / `#0891b2→#0e7490`, new E2E_LIVE authed axe test).
+All gates re-verified green after the fix.
+
+**TASK 3 — ship kit (drafted, NOT merged/tagged):** `CHANGELOG.md` v1.0.0 section (Keep a
+Changelog; R1/R2/a11y recorded); `docs/production-hardening/MERGE_PLAN.md` (verified
+topology + recommended retarget-#17→main / close #4–#8; `#8`-DIRTY → retarget-not-rebase);
+`docs/adr/0009-v1.0.1-deferred-gates.md` (+ index). **Key finding:** the #17 tip is a
+**complete superset** (full `.github`/CI + LICENSE + all phases); `main` ⊆ tip;
+PRs #4–#8 carry nothing the tip lacks except an obsolete `apps/web/.eslintrc.json`.
+
+**What's left for the owner to tag v1.0.0** (none autonomously-completable): see the
+updated "## Next-goal boundary" + MERGE_PLAN §5.
+
+---
+
 ## PIVOT to origin/main — 2026-05-30 (night)
 
 **Discovery:** the local checkout was **45 commits stale** (`7833573`); real
@@ -191,6 +238,7 @@ Already exists: list global agents; add/remove/mute **seeded** agents per room (
 ---
 
 ## For morning review
+- **[R1 — RESOLVED ✅ 2026-05-31 (live-DB verified, interactive session)]** The deferred `agents.system_prompt`/`tool_permissions` column-visibility fix is **applied (migration `20260531000004_agents_column_privs.sql`) and VERIFIED PASS against a freshly-reset live local DB** (all 10 migrations applied clean + seed). Evidence at three layers: (1) **pgTAP** `agents_column_privs_test.sql` green within the full suite (`supabase test db` → Files=4, Tests=24, **Result: PASS**); (2) **role-level SQL** as `authenticated` with an RLS-passing JWT — cross-tenant reads of `system_prompt`, `tool_permissions`, and `SELECT *` all raise `42501 permission denied for table agents`, while the **13 safe columns** + the AgentsPanel `agents!inner(...)` embed shape return rows, and the **service-role path still reads** the sensitive columns; (3) **real PostgREST HTTP** with a genuine GoTrue-minted authenticated session — `GET /rest/v1/agents?select=id,system_prompt` → `42501`, `…tool_permissions` → `42501`, the AgentsPanel embed → `200` (resolves, no grant error), safe-cols roster → `200` with the 3 seeded agents. Grant state confirmed: `authenticated` holds SELECT on exactly the 13 safe columns; `anon` holds **no** SELECT grant. Static confirmation: **no browser component selects the revoked columns** (only server routes write them; all client embeds use safe cols). The footgun the note raised (PostgREST embed resolution + table-vs-column grant) is **closed by the live HTTP test**. The original deferral text is retained below for history.
 - **[Phase 11 — Med, security follow-up: `agents.system_prompt` is readable by any authenticated user]** The pre-existing `agents_select` RLS policy is `FOR SELECT USING (auth.uid() IS NOT NULL)` — all columns of all agent rows, including `system_prompt`, are readable by any logged-in account via the browser client. Phase 11 now lets users author `system_prompt`, so this is worsened. Mitigated immediately with a UI caption ("Visible to room members — don't put secrets in the system prompt") and the server routes already return a safe column subset. **Proper fix (deferred — needs live-DB verification):** restrict the policy to non-sensitive columns via a view, or `REVOKE SELECT (system_prompt, tool_permissions) … FROM authenticated, anon; GRANT SELECT (safe cols) …`, with a pgTAP test. NOT done unattended because PostgREST `select=*` interacts with column grants and a wrong grant could break legitimate client reads (AgentsPanel/ComposeBox select specific columns today, but this can't be confirmed against a live DB headless). security-auditor rated it **Medium** (system_prompt is persona text, not a credential), and both critics returned **VERDICT: PASS, 0 Critical/High** — so it does not block Phase 11.
   - **2026-05-31 (re-invocation — static de-risking + ready-to-run recipe; NOT applied unattended).** I exhaustively traced every read of `public.agents`: the **only** browser (`authenticated`) read is `AgentsPanel.tsx:61` — `agents!inner(id, name, slug, capabilities, is_active, created_by_user_id)` (explicit columns, no `*`, no sensitive cols). All server reads (`api/agents/route.ts`, `[agentId]/route.ts`, `members/route.ts` embed, `health.ts`) select explicit non-sensitive columns and the members embed uses the **service_role** client (unaffected by `authenticated` grants). **`agents` is NOT in the realtime publication** (only messages/agent_runs/tool_calls/files/pinned_items/agent_memory). ⇒ No current code path reads `system_prompt`/`tool_permissions` from the browser, so a column-grant restriction is **safe against today's code**. **Exact recipe (additive migration + pgTAP):**
     ```sql
@@ -305,8 +353,10 @@ the owner and were NOT taken unattended:
    screenshots / keyboard walkthrough) — need a seeded running app.
 6. **DX clean-env proof** (Phase 5: "<15 min clean clone → running app" + devcontainer)
    — needs a clean machine run.
-7. **Deferred security follow-up** — `agents.system_prompt` RLS column visibility (see
-   "## For morning review"); needs live-DB verification.
+7. **Deferred security follow-up (R1)** — ~~`agents.system_prompt` RLS column
+   visibility; needs live-DB verification.~~ **RESOLVED ✅ 2026-05-31** — applied
+   (migration `20260531000004`) + **verified PASS against a live DB** (pgTAP + role-SQL
+   + real PostgREST HTTP). See the RESOLVED bullet under "## For morning review".
 8. **README badges (Phase 8 DoD)** — CI + MIT-license badges, then a release badge once
    v1.0.0 is tagged. **Blocked until the stack merges:** `origin/main` has no `.github`/CI
    (PR #4) and no `LICENSE` (PR #11), so a badge PR off `main` has no CI to go green and the
