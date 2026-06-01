@@ -11,6 +11,7 @@ import { selectTargetAgents } from '@/lib/agent-targeting'
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { assertSameOrigin, enforceRateLimit, internalError } from '@/lib/api-security'
 import { sendMessageSchema } from '@/lib/api-validation'
+import { stripServerOwnedMetadata } from '@/lib/message-metadata'
 import { parseMentions } from '@/lib/mention-parser'
 import { requireRoomMember, requireRoomOwner } from '@/lib/permissions'
 import { clearRoomChat } from '@/lib/room-chat-management'
@@ -100,9 +101,10 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   if (!room) return apiError('NOT_FOUND', 'Room not found', 404)
 
-  // 5. Insert message
+  // 5. Insert message. SECURITY: the server is the SOLE author of `metadata.discussion` — strip
+  // any client-supplied block before re-adding a trusted one (see stripServerOwnedMetadata).
   const initialMetadata = {
-    ...(data.metadata ?? {}),
+    ...stripServerOwnedMetadata(data.metadata),
     ...(discussionRequest
       ? {
           discussion: {

@@ -89,10 +89,15 @@ export async function buildContextPacket({
   // timestamp ceiling, and filter out the acting agent's OWN reply from the CURRENT phase
   // (self-echo) so it doesn't re-read its own draft as if it were a peer's.
   const discussion = readDiscussionMetadata(triggerMsg.metadata)
+  // Defense-in-depth: original_message_id must be a server-generated UUID. The web route already
+  // strips client-supplied discussion metadata, but if a non-UUID ever reached here it would be
+  // interpolated into the PostgREST .or() filter below — so hard-validate before trusting it.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  const useDiscussionScope = Boolean(discussion && UUID_RE.test(discussion.original_message_id))
   let recentMessages: RecentMsg[]
 
-  if (discussion) {
-    const discId = discussion.original_message_id // a UUID we wrote — safe in a PostgREST filter
+  if (discussion && useDiscussionScope) {
+    const discId = discussion.original_message_id // validated UUID — safe in a PostgREST filter
     let threadQuery = supabase
       .from('messages')
       .select('id, content, sender_type, sender_agent_id, created_at, metadata')

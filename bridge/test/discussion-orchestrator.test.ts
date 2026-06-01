@@ -234,6 +234,44 @@ test('debate: assign→argue fans to all with distinct positions; rebut→adjudi
   assert.deepEqual([...new Set(positions)].sort(), ['against', 'alternative', 'for'])
 })
 
+test('caps fan-out to COLLAB_MAX_AGENTS in a large room (keeps coordinator)', async () => {
+  const big = ['a', 'b', 'c', 'd', 'e'].map((s) => member(s, s))
+  const sb = makeSupabase({
+    runs: [{ status: 'completed' }],
+    memberRows: big,
+    planReply: { content: 'no parse', sender_agent_id: 'a' },
+  })
+  await maybeScheduleDiscussionContinuation({
+    supabase: sb,
+    roomId: 'room',
+    currentRoundIndex: 0,
+    triggerMessage: { id: 'plan', content: '', metadata: discMeta('plan') },
+  })
+  // 5 active agents, but execute fans to at most COLLAB_MAX_AGENTS (3)
+  assert.equal(sb._inserted.agent_runs.length, 3)
+  // the coordinator (a) is retained
+  assert.ok(sb._inserted.agent_runs.some((r) => r.agent_id === 'a'))
+})
+
+test('stamps anti_sycophancy when converging from dissent with no challenge', async () => {
+  const sb = makeSupabase({
+    runs: [{ status: 'completed' }, { status: 'completed' }, { status: 'completed' }],
+    memberRows: MEMBERS,
+    challengePresent: false,
+  })
+  await maybeScheduleDiscussionContinuation({
+    supabase: sb,
+    roomId: 'room',
+    currentRoundIndex: 3,
+    triggerMessage: { id: 'dissent-msg', content: '', metadata: discMeta('dissent') },
+  })
+  assert.equal(sb._inserted.messages[0].metadata.discussion.phase, 'converge')
+  assert.equal(
+    sb._inserted.messages[0].metadata.discussion.anti_sycophancy,
+    'no_challenge_after_dissent',
+  )
+})
+
 test('not a discussion → no-op', async () => {
   const sb = makeSupabase({ runs: [{ status: 'completed' }] })
   await maybeScheduleDiscussionContinuation({

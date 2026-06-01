@@ -2,6 +2,7 @@ import {
   ABS_MAX_DISCUSSION_ROUNDS,
   type Assignment,
   buildCrossReviewPairs,
+  COLLAB_MAX_AGENTS,
   buildDiscussionStagePrompt,
   type CrossReviewPair,
   type DiscussCommand,
@@ -171,9 +172,17 @@ export async function maybeScheduleDiscussionContinuation({
     .limit(1)
   if ((existing ?? []).length > 0) return
 
-  // 6. Who runs the next phase?
-  const activeMembers = await loadActiveMembers(supabase, roomId)
-  if (activeMembers.length === 0) return
+  // 6. Who runs the next phase? Bound the tight loop to COLLAB_MAX_AGENTS (ADR-0011) so fan-out
+  // stays small even in a large room — keep the discussion's coordinator, then fill by membership.
+  const allActiveMembers = await loadActiveMembers(supabase, roomId)
+  if (allActiveMembers.length === 0) return
+  let activeMembers = allActiveMembers
+  if (allActiveMembers.length > COLLAB_MAX_AGENTS) {
+    const coordId = discussion.coordinator_agent_id
+    const coord = allActiveMembers.find((m) => m.agent_id === coordId)
+    const rest = allActiveMembers.filter((m) => m.agent_id !== coordId)
+    activeMembers = (coord ? [coord, ...rest] : allActiveMembers).slice(0, COLLAB_MAX_AGENTS)
+  }
 
   let coordinator: ActiveMember | undefined
   if (discussion.coordinator_agent_id) {
@@ -239,6 +248,14 @@ export async function maybeScheduleDiscussionContinuation({
   })
 
   // 9. Insert the next-phase system message (carrying the blackboard forward).
+  // Anti-sycophancy audit: if we are converging straight out of the dissent stage and the team
+  // STILL produced no substantive challenge, the answer converges but is flagged — never a silent
+  // rubber-stamp (ADR-0011). debate self-satisfies the gate, so this only applies to discuss.
+  const antiSycophancy =
+    isConverge && discussion.phase === 'dissent' && !threadHasChallenge
+      ? { anti_sycophancy: 'no_challenge_after_dissent' }
+      : {}
+
   const nextMetadata = {
     discussion: {
       enabled: true,
@@ -249,6 +266,7 @@ export async function maybeScheduleDiscussionContinuation({
       ...(coordinator ? { coordinator_agent_id: coordinator.agent_id } : {}),
       assignments,
       cross_review_pairs: crossReviewPairs,
+      ...antiSycophancy,
     },
   }
 
