@@ -172,34 +172,50 @@ export function parseTaskList(
     })
   }
 
-  // 1) fenced JSON array of {agent_slug|slug, task, position?}
-  const fence = content.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/i)
-  if (fence?.[1]) {
-    try {
-      const arr = JSON.parse(fence[1]) as Array<Record<string, unknown>>
-      if (Array.isArray(arr)) {
-        for (const it of arr) {
-          const slug = String(it.agent_slug ?? it.slug ?? it.agent ?? '')
-          const task = String(it.task ?? it.subtask ?? it.description ?? '')
-          const pos = it.position
-          push(
-            slug,
-            task,
-            pos === 'for' || pos === 'against' || pos === 'alternative' ? pos : undefined,
-          )
+  // 1) fenced ```json [ ... ] ``` array. Extracted with indexOf/slice (NOT a regex) so there is
+  // no catastrophic-backtracking surface on adversarial agent output (CodeQL js/polynomial-redos).
+  const fenceOpen = content.indexOf('```')
+  if (fenceOpen !== -1) {
+    const fenceClose = content.indexOf('```', fenceOpen + 3)
+    if (fenceClose > fenceOpen) {
+      const block = content.slice(fenceOpen + 3, fenceClose)
+      const lb = block.indexOf('[')
+      const rb = block.lastIndexOf(']')
+      if (lb !== -1 && rb > lb) {
+        try {
+          const arr = JSON.parse(block.slice(lb, rb + 1)) as Array<Record<string, unknown>>
+          if (Array.isArray(arr)) {
+            for (const it of arr) {
+              const slug = String(it.agent_slug ?? it.slug ?? it.agent ?? '')
+              const task = String(it.task ?? it.subtask ?? it.description ?? '')
+              const pos = it.position
+              push(
+                slug,
+                task,
+                pos === 'for' || pos === 'against' || pos === 'alternative' ? pos : undefined,
+              )
+            }
+          }
+        } catch {
+          // fall through to line parsing
         }
       }
-    } catch {
-      // fall through to line parsing
     }
   }
 
-  // 2) freeform lines "@slug: task" / "@slug - task"
+  // 2) freeform lines "@slug: task" / "@slug - task". Parsed in two ReDoS-safe steps: an anchored
+  // single-quantifier slug match (no trailing overlapping quantifier), then a code-level strip of
+  // the leading separator/whitespace (anchored, non-overlapping classes) — no polynomial backtrack.
   if (out.length === 0) {
-    const lineRe = /@([a-z0-9_-]+)\s*[:\-–]\s*(.+)$/i
+    const SLUG_RE = /^@([a-z0-9_-]+)/i
+    const SEP_RE = /^[ \t]*[:–-]?[ \t]*/
     for (const line of content.split(/\r?\n/)) {
-      const m = line.match(lineRe)
-      if (m?.[1] && m[2]) push(m[1], m[2])
+      const at = line.indexOf('@')
+      if (at === -1) continue
+      const m = SLUG_RE.exec(line.slice(at))
+      if (!m?.[1]) continue
+      const task = line.slice(at + 1 + m[1].length).replace(SEP_RE, '')
+      if (task.trim()) push(m[1], task)
     }
   }
 
