@@ -114,6 +114,11 @@ export abstract class SubprocessAdapter implements AgentAdapter {
       shell: false, // never spawn through a shell — no command-injection surface
       env: buildChildEnv(), // allowlisted env — secrets are never forwarded
       windowsHide: true,
+      // On POSIX, make the child its own process-group leader so a force-kill can
+      // signal the WHOLE group (`process.kill(-pid)`) and reap grandchildren — a bare
+      // `process.kill(pid)` would orphan them. Windows uses `taskkill /T` instead, and
+      // `detached` there would spawn a stray console window, so keep it POSIX-only.
+      detached: process.platform !== 'win32',
     })
 
     // SIGTERM → 2s grace → force-kill. Some CLIs ignore termination, so
@@ -300,13 +305,21 @@ export abstract class SubprocessAdapter implements AgentAdapter {
       return
     }
 
+    // POSIX: the child was spawned `detached`, so it leads its own process group
+    // whose id == pid. Signal the NEGATIVE pid to SIGKILL the entire group —
+    // children and grandchildren — not just the direct child (which would orphan
+    // the subtree). Fall back to the direct pid if the group kill fails.
     try {
-      process.kill(pid, 'SIGKILL')
+      process.kill(-pid, 'SIGKILL')
     } catch {
       try {
-        process.kill(pid, 'SIGTERM')
+        process.kill(pid, 'SIGKILL')
       } catch {
-        /* best effort */
+        try {
+          process.kill(pid, 'SIGTERM')
+        } catch {
+          /* best effort */
+        }
       }
     }
   }
