@@ -95,7 +95,14 @@ queried, so the injected throw never fired — it passed even with the fix rever
 by driving the run as `tag_turns` so the mention-followup path issues a post-completion
 query; **revert-proven** (the test now FAILS with the fix disabled, PASSES with it).
 
-**PR:** _pending `/ship` — see below._ · **CI:** _pending._
+**PR:** [#40](https://github.com/neric-joel/Whatsapp-Agents/pull/40) → `main`.
+**CI: GREEN** — `verify` / `secret-scan` / `codeql` / `CodeQL` / `Playwright` /
+`build-images` / `rls` all PASS; only `audit` red (allowed per D3). Two CI self-heals
+during ship: (1) `knip` flagged the new `scripts/chaos/*.ts` as unused → broadened the
+knip entry glob to `scripts/**/*.ts` (`4e1095c`); (2) the POSIX kill-tree test spawned
+its grandchild `detached`, escaping the parent group, so it failed on CI/Linux → made the
+grandchild non-detached (inherits the group) + polled waitDead (`85ad279`); verified on
+real Linux (`node:22 --init`) that `kill(-pgid)` reaps both.
 
 ## 6. Deferred (Medium/Low — tracked, not blocking)
 
