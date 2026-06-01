@@ -119,7 +119,9 @@ function makeHarness(opts: { status: () => string; messageInsertError?: boolean 
         }
         // terminal transitions (completed/failed/cancelled) are awaited directly.
         runUpdates.push(v)
-        return { data: null, error: null }
+        // The completed write is status-guarded with `.select('id')`; return a row
+        // so the worker treats it as a real (non-no-op) terminal write.
+        return { data: [{ id: 'run-1' }], error: null }
       }
       // selects: the watcher polls only `status`; the worker's initial fetch
       // pulls the full row.
@@ -259,7 +261,9 @@ test('handoff_requested event creates a targeted peer run and the source run com
         if (v.status === 'claimed' || v.status === 'running')
           return { data: { id: 'run-1' }, error: null }
         runUpdates.push(v)
-        return { data: null, error: null }
+        // The completed write is status-guarded with `.select('id')`; return a row
+        // so the worker treats it as a real (non-no-op) terminal write.
+        return { data: [{ id: 'run-1' }], error: null }
       }
       if (ctx.fields === 'status') return { data: { status: 'running' }, error: null }
       // collectChainAgents: root run (single) → source agent; descendants → []
@@ -355,6 +359,73 @@ test('a hand-off that resolves to an unknown peer does not break the run', async
 
   assert.equal(runUpdates.length, 1)
   assert.equal(runUpdates[0]?.status, 'completed', 'a blocked hand-off never fails the run')
+})
+
+test('R3: a post-completion follow-up failure never clobbers a completed run to failed', async () => {
+  // The run completes (message inserted, status→completed), then a follow-up
+  // (mention scheduling — which has NO internal try/catch) throws. The worker must
+  // swallow that best-effort failure and leave the run 'completed', NOT flip it to
+  // 'failed'. Without the fix, the throw reaches the outer catch and clobbers it.
+  __resetMetrics()
+  let completedSeen = false
+  const runUpdates: Array<Record<string, unknown>> = []
+  const resolve: Resolver = (ctx) => {
+    if (ctx.table === 'agent_runs') {
+      if (ctx.op === 'update') {
+        const v = ctx.values ?? {}
+        if (v.status === 'claimed' || v.status === 'running')
+          return { data: { id: 'run-1' }, error: null }
+        runUpdates.push(v)
+        if (v.status === 'completed') completedSeen = true
+        return { data: [{ id: 'run-1' }], error: null }
+      }
+      // Any agent_runs read AFTER the completed write belongs to a follow-up — explode.
+      if (completedSeen) throw new Error('follow-up scheduling boom')
+      if (ctx.fields === 'status') return { data: { status: 'running' }, error: null }
+      return { data: RUN_ROW, error: null }
+    }
+    if (ctx.table === 'rooms') {
+      if (completedSeen) throw new Error('follow-up scheduling boom')
+      return { data: ROOM, error: null }
+    }
+    if (ctx.table === 'room_members') {
+      if (completedSeen) throw new Error('follow-up scheduling boom')
+      return { data: [], error: null }
+    }
+    if (ctx.table === 'messages') {
+      if (ctx.op === 'insert') return { data: { id: 'msg-1' }, error: null }
+      if (completedSeen) throw new Error('follow-up scheduling boom')
+      return { data: [], error: null }
+    }
+    if (ctx.table === 'pinned_items') return { data: [], error: null }
+    if (ctx.table === 'files') return { data: [], error: null }
+    return { data: null, error: null }
+  }
+  const supabase = makeFakeSupabase(resolve) as never
+  // Reply mentions a peer so the (uncaught) mention-followup path runs a query.
+  const adapter = fakeAdapter(async function* (packet) {
+    yield {
+      type: 'final_response',
+      run_id: packet.run_id,
+      response: {
+        schema_version: 1,
+        run_id: packet.run_id,
+        content: '@reviewer please take a look',
+        content_type: 'text',
+      },
+    }
+  })
+
+  // Must NOT reject: the run completed; the follow-up failure is best-effort.
+  await processRun('run-1', { supabase, getAdapter: () => adapter })
+
+  assert.deepEqual(
+    runUpdates.map((u) => u.status),
+    ['completed'],
+    'exactly one terminal write = completed; no failed clobber',
+  )
+  assert.equal(snapshotCounters().runs_completed, 1)
+  assert.equal(snapshotCounters().runs_failed, 0)
 })
 
 test('cancellation mid-run → run marked cancelled, child aborted, not re-thrown', async () => {

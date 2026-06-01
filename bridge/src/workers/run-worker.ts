@@ -326,58 +326,80 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
       throw new Error(insertMessageError?.message ?? 'Failed to insert agent reply')
     }
 
-    // i. Mark run completed
-    await supabase
+    // i. Mark run completed — STATUS-GUARDED so a concurrent cancellation (the user
+    // cancels while the adapter is finishing) is never clobbered completed→... If the
+    // run is no longer claimed/running it was finalized elsewhere (e.g. cancelled),
+    // so skip the success follow-ups and leave the terminal state intact (R3/F6).
+    const { data: completedRows } = await supabase
       .from('agent_runs')
       .update({ status: 'completed', completed_at: new Date().toISOString() })
       .eq('id', runId)
-    // Agent-to-agent hand-offs (Phase 10) — create targeted peer runs under the
-    // loop guards + cycle detection. Processed BEFORE mention follow-ups so the
-    // follow-up dedup sees any hand-off runs already created at the next round.
-    // Cap the count per run to bound fan-out amplification (each is still
-    // round/hop/cycle-guarded); drop + log the excess.
-    if (handoffEvents.length > MAX_HANDOFFS_PER_RUN) {
-      log('warn', 'handoff.capped', {
-        run_id: runId,
-        requested: handoffEvents.length,
-        cap: MAX_HANDOFFS_PER_RUN,
-      })
+      .in('status', ['claimed', 'running'])
+      .select('id')
+    if (!completedRows || completedRows.length === 0) {
+      log('warn', 'run.complete_skipped_terminal', { run_id: runId })
+      return
     }
-    for (const handoff of handoffEvents.slice(0, MAX_HANDOFFS_PER_RUN)) {
-      await handleHandoffRequest(handoff, {
+    // Post-completion orchestration (hand-offs/mentions/discussion) is BEST-EFFORT:
+    // an error here must NEVER flip this already-completed run to 'failed' (R3). It is
+    // wrapped in its own log-and-continue try/catch, like memory_op, so follow-up
+    // failures cannot reach the outer catch.
+    try {
+      // Agent-to-agent hand-offs (Phase 10) — create targeted peer runs under the
+      // loop guards + cycle detection. Processed BEFORE mention follow-ups so the
+      // follow-up dedup sees any hand-off runs already created at the next round.
+      // Cap the count per run to bound fan-out amplification (each is still
+      // round/hop/cycle-guarded); drop + log the excess.
+      if (handoffEvents.length > MAX_HANDOFFS_PER_RUN) {
+        log('warn', 'handoff.capped', {
+          run_id: runId,
+          requested: handoffEvents.length,
+          cap: MAX_HANDOFFS_PER_RUN,
+        })
+      }
+      for (const handoff of handoffEvents.slice(0, MAX_HANDOFFS_PER_RUN)) {
+        await handleHandoffRequest(handoff, {
+          supabase,
+          roomId: runRow.room_id,
+          sourceAgentId: runRow.agent_id,
+          sourceMessageId: insertedMessage.id,
+          currentRun: {
+            id: runRow.id,
+            round_index: runRow.round_index,
+            deliberation_depth: runRow.deliberation_depth,
+            deliberation_root_id: runRow.deliberation_root_id,
+            discussion_mode: runRow.discussion_mode,
+          },
+        })
+      }
+      await maybeScheduleAgentMentionFollowUps({
         supabase,
+        currentRun: {
+          id: runRow.id,
+          discussion_mode: runRow.discussion_mode,
+          deliberation_depth: runRow.deliberation_depth,
+          deliberation_root_id: runRow.deliberation_root_id,
+        },
         roomId: runRow.room_id,
         sourceAgentId: runRow.agent_id,
         sourceMessageId: insertedMessage.id,
-        currentRun: {
-          id: runRow.id,
-          round_index: runRow.round_index,
-          deliberation_depth: runRow.deliberation_depth,
-          deliberation_root_id: runRow.deliberation_root_id,
-          discussion_mode: runRow.discussion_mode,
-        },
+        replyContent,
+        roundIndex: runRow.round_index,
+      })
+      await maybeScheduleDiscussionContinuation({
+        supabase,
+        roomId: runRow.room_id,
+        currentRoundIndex: runRow.round_index,
+        triggerMessage: triggerMsg,
+      })
+    } catch (followupErr) {
+      // The run is genuinely completed; a scheduling failure is logged, not fatal.
+      captureError(followupErr, { run_id: runId, where: 'processRun.followups' })
+      log('error', 'run.followup_failed', {
+        run_id: runId,
+        error: redact(followupErr instanceof Error ? followupErr.message : String(followupErr)),
       })
     }
-    await maybeScheduleAgentMentionFollowUps({
-      supabase,
-      currentRun: {
-        id: runRow.id,
-        discussion_mode: runRow.discussion_mode,
-        deliberation_depth: runRow.deliberation_depth,
-        deliberation_root_id: runRow.deliberation_root_id,
-      },
-      roomId: runRow.room_id,
-      sourceAgentId: runRow.agent_id,
-      sourceMessageId: insertedMessage.id,
-      replyContent,
-      roundIndex: runRow.round_index,
-    })
-    await maybeScheduleDiscussionContinuation({
-      supabase,
-      roomId: runRow.room_id,
-      currentRoundIndex: runRow.round_index,
-      triggerMessage: triggerMsg,
-    })
     recordRunCompleted(Date.now() - startedAt)
     log('info', 'run.complete', { run_id: runId, duration_ms: Date.now() - startedAt })
   } catch (err) {
@@ -391,14 +413,19 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
           completed_at: new Date().toISOString(),
         })
         .eq('id', runId)
+        .in('status', ['claimed', 'running'])
       if (started) recordRunCancelled()
       log('warn', 'run.cancelled', { run_id: runId })
       return
     }
+    // STATUS-GUARDED: only a still-in-flight run becomes 'failed'. Never clobber a
+    // run that already reached a terminal state (completed/cancelled) — this is the
+    // core R3 protection against an error after the completed write.
     await supabase
       .from('agent_runs')
       .update({ status: 'failed', error_message: message })
       .eq('id', runId)
+      .in('status', ['claimed', 'running'])
     if (started) recordRunFailed()
     captureError(err, { run_id: runId, where: 'processRun' })
     log('error', 'run.failed', { run_id: runId, error: message })
