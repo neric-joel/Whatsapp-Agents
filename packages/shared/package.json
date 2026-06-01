@@ -19,9 +19,11 @@
   },
   "scripts": {
     "build": "tsc --noEmit",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/**/*.test.ts"
   },
   "devDependencies": {
+    "tsx": "^4.7.0",
     "typescript": "^5.4.0"
   }
 }

@@ -1,7 +1,8 @@
 import {
-  buildDiscussionPhasePrompt,
+  buildDiscussionStagePrompt,
   type DiscussionMode,
   parseDiscussionRequest,
+  selectCoordinatorIndex,
 } from '@agentroom/shared'
 import { NextRequest } from 'next/server'
 
@@ -10,6 +11,7 @@ import { selectTargetAgents } from '@/lib/agent-targeting'
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { assertSameOrigin, enforceRateLimit, internalError } from '@/lib/api-security'
 import { sendMessageSchema } from '@/lib/api-validation'
+import { stripServerOwnedMetadata } from '@/lib/message-metadata'
 import { parseMentions } from '@/lib/mention-parser'
 import { requireRoomMember, requireRoomOwner } from '@/lib/permissions'
 import { clearRoomChat } from '@/lib/room-chat-management'
@@ -21,7 +23,14 @@ interface RouteParams {
 
 type AgentMemberRow = {
   agent_id: string
-  agents: { id: string; slug: string; name: string; is_active: boolean }
+  agents: {
+    id: string
+    slug: string
+    name: string
+    provider: string
+    capabilities: string | null
+    is_active: boolean
+  }
 }
 
 export async function POST(req: NextRequest, { params }: RouteParams) {
@@ -59,8 +68,11 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   const data = parseResult.data
   const rawContent = data.content.trim()
   const discussionRequest = parseDiscussionRequest(rawContent)
+  // ADR-0011: a discussion kicks off at the 'plan' phase on a single coordinator agent (not a
+  // blind parallel fan-out). The coordinator decomposes the problem; the bridge orchestrator
+  // then drives execute → integrate → [dissent] → converge.
   const content = discussionRequest
-    ? buildDiscussionPhasePrompt('individual', discussionRequest.prompt)
+    ? buildDiscussionStagePrompt(discussionRequest.command, 'plan', discussionRequest.prompt)
     : rawContent
   if (!content) {
     return apiError('VALIDATION_ERROR', 'Invalid request body', 400, {
@@ -89,15 +101,16 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   if (!room) return apiError('NOT_FOUND', 'Room not found', 404)
 
-  // 5. Insert message
+  // 5. Insert message. SECURITY: the server is the SOLE author of `metadata.discussion` — strip
+  // any client-supplied block before re-adding a trusted one (see stripServerOwnedMetadata).
   const initialMetadata = {
-    ...(data.metadata ?? {}),
+    ...stripServerOwnedMetadata(data.metadata),
     ...(discussionRequest
       ? {
           discussion: {
             enabled: true,
             command: discussionRequest.command,
-            phase: 'individual',
+            phase: 'plan',
             original_prompt: discussionRequest.prompt,
           },
         }
@@ -135,17 +148,8 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       .eq('room_id', roomId)
   }
 
-  if (discussionRequest) {
-    const nextMetadata = {
-      ...initialMetadata,
-      discussion: {
-        ...(initialMetadata.discussion as Record<string, unknown>),
-        original_message_id: message.id,
-      },
-    }
-    await supabase.from('messages').update({ metadata: nextMetadata }).eq('id', message.id)
-    message.metadata = nextMetadata
-  }
+  // NOTE: the discussion metadata is finalized below (after the coordinator is picked) so
+  // original_message_id + coordinator_agent_id are written in a single patch.
 
   // 6. Update room.last_message_at
   await supabase.from('rooms').update({ last_message_at: message.created_at }).eq('id', roomId)
@@ -180,7 +184,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   // 8. Find active, unmuted agents with reply_enabled=true
   const { data: rawMembers } = await supabase
     .from('room_members')
-    .select('agent_id, agents!inner(id, slug, name, is_active)')
+    .select('agent_id, agents!inner(id, slug, name, provider, capabilities, is_active)')
     .eq('room_id', roomId)
     .eq('member_type', 'agent')
     .eq('reply_enabled', true)
@@ -197,18 +201,53 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   )
   const replyMode = (room as { reply_mode: string }).reply_mode
 
-  const { targetAgents, systemMessage } = selectTargetAgents({
-    allActive,
-    mentions,
-    replyMode,
-    isDiscussionRequest: Boolean(discussionRequest),
-  })
+  let targetAgents: Array<{ agent_id: string }>
+  let systemMessage: string | undefined
+
+  if (discussionRequest) {
+    // ADR-0011: the 'plan' phase runs on ONE deterministically-chosen coordinator (no blind
+    // parallel fan-out). The coordinator decomposes + assigns; the bridge orchestrator drives
+    // the rest. Finalize the discussion metadata now that the coordinator is known.
+    const coordIdx = selectCoordinatorIndex(
+      allActive.map((m) => ({
+        slug: m.agents.slug,
+        provider: m.agents.provider,
+        capabilities: m.agents.capabilities,
+      })),
+    )
+    const coordinator = coordIdx >= 0 ? allActive[coordIdx] : undefined
+    if (!coordinator) {
+      await insertSystemMessage('No active agents are available to start a discussion.')
+      return apiSuccess({ message, agent_runs: [] }, 201)
+    }
+    targetAgents = [{ agent_id: coordinator.agent_id }]
+    const nextMetadata = {
+      ...initialMetadata,
+      discussion: {
+        ...(initialMetadata.discussion as Record<string, unknown>),
+        original_message_id: message.id,
+        coordinator_agent_id: coordinator.agent_id,
+      },
+    }
+    await supabase.from('messages').update({ metadata: nextMetadata }).eq('id', message.id)
+    message.metadata = nextMetadata
+  } else {
+    const selected = selectTargetAgents({
+      allActive,
+      mentions,
+      replyMode,
+      isDiscussionRequest: false,
+    })
+    targetAgents = selected.targetAgents
+    systemMessage = selected.systemMessage
+  }
+
   if (systemMessage) {
     await insertSystemMessage(systemMessage)
     return apiSuccess({ message, agent_runs: [] }, 201)
   }
 
-  // 10. Create one agent_run per qualifying agent
+  // 10. Create one agent_run per qualifying agent (discussion: a single coordinator run)
   const agentRuns: unknown[] = []
   if (targetAgents.length > 0) {
     const runDiscussionMode: DiscussionMode = discussionRequest ? 'tag_turns' : discussionMode

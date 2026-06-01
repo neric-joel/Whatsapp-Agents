@@ -69,7 +69,7 @@ const PROVIDER_ENV_PATTERN =
  * stripped unconditionally; self-hosters can forward extra vars via
  * `BRIDGE_CHILD_ENV_ALLOW` (comma-separated names).
  */
-export interface ChildEnvOptions {
+interface ChildEnvOptions {
   /**
    * BYO-credential injection (ADR-0010 / WS2). Exactly one resolved credential var
    * is set into THIS child's env — applied AFTER the strip/allowlist, so a secret

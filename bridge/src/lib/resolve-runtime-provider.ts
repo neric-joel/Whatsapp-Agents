@@ -23,7 +23,7 @@ const ADAPTER_CREDENTIAL_ENV: Record<string, { envVar: string; baseUrlEnv?: stri
   'codex-cli': { envVar: 'OPENAI_API_KEY', baseUrlEnv: 'OPENAI_BASE_URL' },
 }
 
-export interface ResolveRuntimeProviderArgs {
+interface ResolveRuntimeProviderArgs {
   supabase: SupabaseClient
   adapterType: string | null | undefined
   credentialId: string | null | undefined

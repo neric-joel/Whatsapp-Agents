@@ -6,12 +6,14 @@ import type {
   ReplyMode,
   SenderType,
 } from '@agentroom/shared'
+import { readDiscussionMetadata } from '@agentroom/shared'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 import { recallMemory } from '../memory/recall.js'
 import {
   readContextMessageLimit,
   readContextMessageMaxChars,
+  readDiscussionContextLimit,
   trimContextMessages,
 } from './context-window.js'
 import {
@@ -43,6 +45,7 @@ interface BuildContextArgs {
     sender_type: string
     sender_user_id?: string | null
     created_at: string
+    metadata?: Record<string, unknown>
   }
 }
 
@@ -79,23 +82,60 @@ export async function buildContextPacket({
     context_reset_at: string | null
   }
 
-  // `/reset` (admin+) stamps a watermark: agents only see messages at/after it,
-  // so their rolling context starts fresh while the transcript stays intact.
-  let recentQuery = supabase
-    .from('messages')
-    .select('id, content, sender_type, sender_agent_id, created_at, metadata')
-    .eq('room_id', run.room_id)
-    .lte('created_at', triggerMsg.created_at)
-  if (room.context_reset_at) {
-    recentQuery = recentQuery.gte('created_at', room.context_reset_at)
+  // ADR-0011: in a discussion, an agent MUST see its teammates' contributions in this same
+  // thread — including peer replies written AFTER this run's trigger timestamp. The normal
+  // `created_at <= trigger` window (below) made phase-N agents blind to each other. So for a
+  // discussion run we instead load the WHOLE thread by original_message_id, ignoring the
+  // timestamp ceiling, and filter out the acting agent's OWN reply from the CURRENT phase
+  // (self-echo) so it doesn't re-read its own draft as if it were a peer's.
+  const discussion = readDiscussionMetadata(triggerMsg.metadata)
+  // Defense-in-depth: original_message_id must be a server-generated UUID. The web route already
+  // strips client-supplied discussion metadata, but if a non-UUID ever reached here it would be
+  // interpolated into the PostgREST .or() filter below — so hard-validate before trusting it.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  const useDiscussionScope = Boolean(discussion && UUID_RE.test(discussion.original_message_id))
+  let recentMessages: RecentMsg[]
+
+  if (discussion && useDiscussionScope) {
+    const discId = discussion.original_message_id // validated UUID — safe in a PostgREST filter
+    let threadQuery = supabase
+      .from('messages')
+      .select('id, content, sender_type, sender_agent_id, created_at, metadata')
+      .eq('room_id', run.room_id)
+      .or(`metadata->discussion->>original_message_id.eq.${discId},id.eq.${discId}`)
+    if (room.context_reset_at) {
+      threadQuery = threadQuery.gte('created_at', room.context_reset_at)
+    }
+    const { data: threadRaw } = await threadQuery
+      .order('created_at', { ascending: true })
+      .limit(readDiscussionContextLimit())
+    const filtered = ((threadRaw ?? []) as RecentMsg[]).filter(
+      (m) =>
+        !(
+          m.sender_agent_id === agentInfo.id &&
+          readDiscussionMetadata(m.metadata)?.phase === discussion.phase
+        ),
+    )
+    recentMessages = trimContextMessages(filtered, contextMessageMaxChars)
+  } else {
+    // `/reset` (admin+) stamps a watermark: agents only see messages at/after it,
+    // so their rolling context starts fresh while the transcript stays intact.
+    let recentQuery = supabase
+      .from('messages')
+      .select('id, content, sender_type, sender_agent_id, created_at, metadata')
+      .eq('room_id', run.room_id)
+      .lte('created_at', triggerMsg.created_at)
+    if (room.context_reset_at) {
+      recentQuery = recentQuery.gte('created_at', room.context_reset_at)
+    }
+    const { data: recentRaw } = await recentQuery
+      .order('created_at', { ascending: false })
+      .limit(contextMessageLimit)
+    recentMessages = trimContextMessages(
+      ((recentRaw ?? []) as RecentMsg[]).reverse(),
+      contextMessageMaxChars,
+    )
   }
-  const { data: recentRaw } = await recentQuery
-    .order('created_at', { ascending: false })
-    .limit(contextMessageLimit)
-  const recentMessages = trimContextMessages(
-    ((recentRaw ?? []) as RecentMsg[]).reverse(),
-    contextMessageMaxChars,
-  )
 
   const { data: pinnedItems } = await supabase
     .from('pinned_items')
