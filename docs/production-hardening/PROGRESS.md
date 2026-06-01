@@ -7,6 +7,40 @@ Dates are absolute. **Base of record: `origin/main` (`f780235`).**
 
 ---
 
+## 🚢 v1.0.0 SHIPPED — 2026-05-31 (autonomous release session)
+
+**`v1.0.0` is tagged and released** on merged `main` (`c0cc441`):
+<https://github.com/neric-joel/Whatsapp-Agents/releases/tag/v1.0.0> (not draft/prerelease,
+0 binary assets → nothing secret published). Release notes = CHANGELOG `[1.0.0]`.
+
+Pipeline executed (all via `gh`/git, explicit owner authorization to merge/tag):
+1. **Stack merged.** Opened PR #18; retargeted PR #17 → `main` and merged it (GitHub
+   auto-marked the linear ancestors **#9–#16 as Merged**); merged **#18**; **closed
+   #4–#8 as superseded** (re-stacked content already in the tip; only delta was an
+   obsolete `apps/web/.eslintrc.json`). `main`: `f780235 → bc0f0be (#17) → c0cc441 (#18)`.
+   Dependabot then opened #19–#23 (routine GH-Actions bumps — v1.0.1 housekeeping).
+2. **Merged-main green.** Local: typecheck · lint · format · **289 tests** · web build ·
+   pgTAP **24** · **e2e 12/12** (live mock journey + authed axe). GitHub CI on `main`:
+   `verify`/`secret-scan`/`codeql`/`build-images`/`rls` PASS; only `audit` red (D3).
+3. **Re-sweep on merged `main` = GO** (workflow `wf_30a45488-480`, 10 adversarial
+   dimensions + delta critic, refute-by-default): **0 Critical, 0 High**, 1 Medium + 2
+   Low — and all 3 are **pre-existing, already in the original sweep** (R3 run-worker
+   `completed`-vs-cancel; stale-run CAS Low; POSIX kill-tree Low). The merge + a11y delta
+   introduced **nothing new**.
+4. **Tag + release.** `release.yml` ran **green** on the tag (verify + both images build +
+   GitHub Release). LICENSE = MIT (ADR-0008, confirmed). No committed secrets.
+5. **DoD:** Release boxes ✅; also checked the now-evidenced Security (gitleaks,
+   tool-approval-sound) + all Phase 5 (clean-clone <15 min, Dockerfiles, env-validation,
+   SELF_HOSTING, local-Supabase) + Phase 4 (states, a11y) boxes.
+
+**Remaining (v1.0.1, documented — ADR-0009):** authed-page Lighthouse number (covered by
+axe today), full responsive viewport verification + before/after screenshots, `next@15`
+(D3), per-theme authed axe, the 3 known Medium/Low fast-follows (R3 etc.), and triaging the
+Dependabot PRs #19–#23. None blocks v1.0.0. This finalization is itself a post-tag docs PR
+(`docs/v1.0.0-finalize`).
+
+---
+
 ## Operating policy (standing)
 
 - **Autonomy / continuous run.** Run `/goal` → `/loop` across phases without waiting.
