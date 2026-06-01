@@ -385,42 +385,49 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
       // follow-up dedup sees any hand-off runs already created at the next round.
       // Cap the count per run to bound fan-out amplification (each is still
       // round/hop/cycle-guarded); drop + log the excess.
-      if (handoffEvents.length > MAX_HANDOFFS_PER_RUN) {
-        log('warn', 'handoff.capped', {
-          run_id: runId,
-          requested: handoffEvents.length,
-          cap: MAX_HANDOFFS_PER_RUN,
-        })
-      }
-      for (const handoff of handoffEvents.slice(0, MAX_HANDOFFS_PER_RUN)) {
-        await handleHandoffRequest(handoff, {
+      // ADR-0011: in a discussion the PHASE MACHINE is the sole turn driver. Discussion phase
+      // prompts deliberately ask agents to reference peers by @slug, so the generic
+      // mention-follow-up / hand-off paths would otherwise spawn uncontrolled extra runs off
+      // those @mentions (observed live as stray phase-mislabeled turns). Suppress both for
+      // discussion runs; only the orchestrator advances the discussion.
+      if (!disc) {
+        if (handoffEvents.length > MAX_HANDOFFS_PER_RUN) {
+          log('warn', 'handoff.capped', {
+            run_id: runId,
+            requested: handoffEvents.length,
+            cap: MAX_HANDOFFS_PER_RUN,
+          })
+        }
+        for (const handoff of handoffEvents.slice(0, MAX_HANDOFFS_PER_RUN)) {
+          await handleHandoffRequest(handoff, {
+            supabase,
+            roomId: runRow.room_id,
+            sourceAgentId: runRow.agent_id,
+            sourceMessageId: insertedMessage.id,
+            currentRun: {
+              id: runRow.id,
+              round_index: runRow.round_index,
+              deliberation_depth: runRow.deliberation_depth,
+              deliberation_root_id: runRow.deliberation_root_id,
+              discussion_mode: runRow.discussion_mode,
+            },
+          })
+        }
+        await maybeScheduleAgentMentionFollowUps({
           supabase,
+          currentRun: {
+            id: runRow.id,
+            discussion_mode: runRow.discussion_mode,
+            deliberation_depth: runRow.deliberation_depth,
+            deliberation_root_id: runRow.deliberation_root_id,
+          },
           roomId: runRow.room_id,
           sourceAgentId: runRow.agent_id,
           sourceMessageId: insertedMessage.id,
-          currentRun: {
-            id: runRow.id,
-            round_index: runRow.round_index,
-            deliberation_depth: runRow.deliberation_depth,
-            deliberation_root_id: runRow.deliberation_root_id,
-            discussion_mode: runRow.discussion_mode,
-          },
+          replyContent,
+          roundIndex: runRow.round_index,
         })
       }
-      await maybeScheduleAgentMentionFollowUps({
-        supabase,
-        currentRun: {
-          id: runRow.id,
-          discussion_mode: runRow.discussion_mode,
-          deliberation_depth: runRow.deliberation_depth,
-          deliberation_root_id: runRow.deliberation_root_id,
-        },
-        roomId: runRow.room_id,
-        sourceAgentId: runRow.agent_id,
-        sourceMessageId: insertedMessage.id,
-        replyContent,
-        roundIndex: runRow.round_index,
-      })
       await maybeScheduleDiscussionContinuation({
         supabase,
         roomId: runRow.room_id,
