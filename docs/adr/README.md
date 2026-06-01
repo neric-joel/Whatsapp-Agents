@@ -15,3 +15,4 @@ are marked, not deleted. Format is [MADR](https://adr.github.io/madr/)-lite — 
 | [0006](0006-opt-in-third-party-egress.md) | Third-party image egress is opt-in, off by default | Accepted |
 | [0007](0007-observability-surfaces.md) | Observability: structured logs, health/metrics endpoints, opt-in error tracking | Accepted |
 | [0008](0008-mit-license.md) | MIT license | Accepted (owner may revisit before v1.0) |
+| [0009](0009-v1.0.1-deferred-gates.md) | v1.0.1 deferred gates (tag-now-with-gaps vs wait) | Proposed |
