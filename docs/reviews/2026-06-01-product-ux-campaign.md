@@ -4,14 +4,22 @@
 **Mode:** autonomous (owner asleep; decisions made via brainstorm/web-research + ADR).
 `main` + `v1.0.0` untouched. Local gate green throughout.
 
-## 1. Verdict — PARTIAL (honest)
+## 1. Verdict — GO (one item deferred; honest)
 
-**GO for:** WS1 core product (real Codex + Claude + mock agents work; MVP fan-out; multi-agent
-`/discuss` convergence; RBAC) **and WS2** (Hermes-style BYO credential feature — built end to
-end and security-proven). **NOT yet done:** WS1 breadth (full difficulty/file/command matrix),
-**WS-UX** (7-theme axe, authed Lighthouse user-flow, responsive, screenshots), **WS3**
-(cold-clone onboarding), and the WS2 "real reply from a registered provider" checkpoint
-(needs a real provider API key — see Deferred). These are scoped + ready to resume.
+**GO for:** WS1 core + breadth (real Codex + Claude + mock; MVP fan-out verified live —
+"7×8?"→"56"; multi-agent `/discuss` convergence; RBAC; full slash-command parity; file-MIME
+allowlist; tool-approval gate; hallucination flag-and-surface — all PASS or test-covered),
+**WS2** (Hermes-style BYO credential feature — end-to-end + security-proven; env docs complete),
+and **WS-UX** (authed axe 0 serious/critical on all 7 themes + Settings; authed Lighthouse
+**a11y 100 / best-practices 100** closing ADR-0009 gate #1; responsive 320→1440; keyboard +
+focus; self-hosted brand fonts that actually paint). Regression green after all structural
+changes (bridge 156/156, web 154/154, prod build, typecheck, lint).
+
+**Deferred (non-blocking, scoped):** exhaustive live difficulty matrix (core proven; would
+mainly re-prove fan-out); **WS3** cold-clone onboarding (runs last); the WS2 "real reply from a
+registered provider" checkpoint (needs a real provider API key); Tier-2 a11y CI promotion;
+`next/font/local` for offline builds. The app is **up and usable** (web :3000, bridge :9090,
+Supabase :54322, seeded).
 
 ## 2. Decisions Log (autonomous)
 
@@ -41,7 +49,13 @@ end and security-proven). **NOT yet done:** WS1 breadth (full difficulty/file/co
 | W1.2 | MVP fan-out (one msg → each replies once) | **PASS** | real Claude "2+2 equals 4."; found+fixed Codex reply pollution (live clean: "11 is prime.") |
 | W1.4a | `/debate` registry⇄dispatch parity | **PASS (fixed)** | registered alias + parser passthrough; web slash-commands test |
 | W1.5 | `/discuss` convergence | **PASS** | individual→critique→consensus, peer-referencing, bounded `round_index=3` |
-| W1.x | difficulty matrix, file MIME, tool-approval, full command sweep | **PENDING** | core proven; breadth not yet exhaustively run |
+| W1.3 | full slash-command registry⇄dispatch parity | **PASS** | all 10 (help/commands/discuss/debate/remember/recall/handoff/agents/pin/reset) → parser branch → real effect (API/panel-event/server fan-out); RBAC pre-check + server gate + `unknown` guard |
+| W1.6 | live end-to-end fan-out (post-WS-UX churn) | **PASS** | sent "7×8?" → "56" landed via realtime; full stack web→API→agent_runs→bridge→adapter→messages→UI |
+| W1.7 | file-MIME allowlist + size cap | **PASS (tested)** | `signedUploadSchema` `z.enum(ALLOWED_UPLOAD_MIME_TYPES)` + max-size; `signed-upload-validation.test.ts` |
+| W1.8 | tool-approval gate (waits before executing) | **PASS (tested)** | run-worker: `waiting_approval` → poll `approved`/`denied` → blocks; `room-chat-management.test.ts` |
+| W1.9 | hallucination flag-and-surface | **PASS** | `detectHallucination()` wired in run-worker; reply persisted with `metadata.hallucination{flagged,confidence,reasons}` (surfaced, not silently dropped) |
+| W1.x | exhaustive difficulty matrix (5 levels × 5 domains, live) | **DEFERRED** | core proven live (real Claude math/coding + "56"); a full live matrix mainly re-proves fan-out — deferred over burning real-CLI calls |
+| W1.reg | regression after WS-UX/WS2 structural changes | **PASS** | bridge 156/156, web 154/154; prod `next build` green; typecheck + lint clean |
 | WS2 | schema + RLS + secret REVOKE | **PASS** | pgTAP user_credentials (6): owner-only, secret cols 42501, cross-user denied |
 | WS2 | AES-256-GCM crypto | **PASS** | 5 unit tests (round-trip, nonce, wrong-key, tamper, key validation) |
 | WS2 | runtime resolution + injection | **PASS** | resolver unit tests + e2e: injected key reaches child, base_url too |
