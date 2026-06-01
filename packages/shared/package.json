@@ -10,6 +10,11 @@
       "import": "./src/index.ts",
       "require": "./src/index.ts",
       "types": "./src/index.ts"
+    },
+    "./credential-crypto": {
+      "import": "./src/credential-crypto.ts",
+      "require": "./src/credential-crypto.ts",
+      "types": "./src/credential-crypto.ts"
     }
   },
   "scripts": {

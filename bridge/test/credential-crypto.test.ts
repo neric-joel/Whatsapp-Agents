@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { decryptSecret, encryptSecret, getCredentialKey, hasCredentialKey } from '@agentroom/shared'
+import {
+  decryptSecret,
+  encryptSecret,
+  getCredentialKey,
+  hasCredentialKey,
+} from '@agentroom/shared/credential-crypto'
 
 // A deterministic 32-byte test key (hex). Real keys come from CREDENTIAL_ENCRYPTION_KEY.
 const KEY_HEX = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff'

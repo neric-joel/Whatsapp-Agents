@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { encryptSecret, getCredentialKey } from '@agentroom/shared'
+import { encryptSecret, getCredentialKey } from '@agentroom/shared/credential-crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 import { resolveRuntimeProvider } from '../src/lib/resolve-runtime-provider.js'

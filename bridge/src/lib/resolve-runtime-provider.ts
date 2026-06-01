@@ -1,9 +1,9 @@
+import type { RuntimeCredential } from '@agentroom/shared'
 import {
   decryptSecret,
   getCredentialKey,
   hasCredentialKey,
-  type RuntimeCredential,
-} from '@agentroom/shared'
+} from '@agentroom/shared/credential-crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 /**

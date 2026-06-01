@@ -1,4 +1,8 @@
-import { encryptSecret, getCredentialKey, hasCredentialKey } from '@agentroom/shared'
+import {
+  encryptSecret,
+  getCredentialKey,
+  hasCredentialKey,
+} from '@agentroom/shared/credential-crypto'
 import { NextRequest } from 'next/server'
 
 import { apiError, apiSuccess } from '@/lib/api-error'

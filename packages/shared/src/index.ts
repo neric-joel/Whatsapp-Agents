@@ -1,7 +1,10 @@
 export const AGENTROOM_VERSION = '0.1.0'
 
 export * from './commands.js'
-export * from './credential-crypto.js'
+// NOTE: credential-crypto is intentionally NOT re-exported here — it imports
+// `node:crypto`, which would poison the browser bundle (the barrel is imported by
+// client code via slash-commands). Server code imports it from the subpath
+// '@agentroom/shared/credential-crypto'. The RuntimeCredential *type* lives below.
 export * from './error-tracking.js'
 export * from './logger.js'
 export * from './memory-scan.js'
