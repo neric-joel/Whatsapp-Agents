@@ -134,13 +134,23 @@ gate inserts plan→execute→integrate→**dissent**→converge.)
 
 **Shipped** (`feat/collab-and-output-hardening`): c9f0131 (hallucination dedupe + test),
 98553c3 (phase machine + plan kickoff + 10 unit tests), cb4c404 (orchestrator + scoped peer query
-+ run-worker stamp + migration + 9 orchestrator tests), 5566c68 (suppress follow-ups in discussion).
++ run-worker stamp + migration + 9 orchestrator tests), 5566c68 (suppress follow-ups in discussion),
+**7ef7e9e** (post-critique: HIGH security fix + COLLAB_MAX_AGENTS cap + anti_sycophancy audit flag).
 
-**Deferred (tracked):** agent-CLI preamble noise (host-CLI behavior, Low); CI Tier-2 to run the
-authed/live discussion integration test (needs Supabase-in-CI, stubbed in `e2e.yml`); a real
-`/debate` smoke transcript (machine verified live structurally; real adjudication transcript not
-captured this run to conserve the real-call budget — ~14/25 used); `@everyone X?` auto-escalation
-could become an explicit opt-in (D6, intentional today).
+**`/critique qa` + `security`** (reports: [collab-security](2026-06-01-collab-security.md),
+[collab-qa](2026-06-01-collab-qa.md)) — the panel found **1 HIGH** (a client could self-stamp
+`metadata.discussion` on a normal message → the scoped query leaks another in-room discussion's
+transcript) + 2 Med guardrail gaps (COLLAB_MAX_AGENTS unenforced; anti_sycophancy flag never
+written). **All fixed before ship** (7ef7e9e), each with a regression test. Room isolation,
+challenge-spoofing, the migration re-scope, and all untouched invariants **SURVIVED**.
+
+**Deferred (tracked):** 1-agent-room `/discuss` coherence + a partial-phase-failure intent test +
+coordinator-leaves-mid-discussion test (QA Med/Low — out of the ≤3-agent tight-loop scope);
+non-atomic orphaned-phase-message recovery (Low); `fakeCite` whitespace-URL false-positive
+(pre-existing, Low); agent-CLI preamble noise (host-CLI behavior, Low); CI Tier-2 to gate the
+live discussion integration test (needs Supabase-in-CI, stubbed in `e2e.yml`); a real `/debate`
+adjudication transcript (machine verified structurally; not captured to conserve the ~14/25
+real-call budget); `@everyone X?` auto-escalation could become explicit opt-in (D6).
 
 ## 7. Next `/goal`
 
