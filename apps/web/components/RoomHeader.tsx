@@ -214,7 +214,7 @@ export default function RoomHeader({ roomId }: Props) {
           <span className="h-5 w-px bg-[var(--border)]" aria-hidden="true" />
           <span className="text-sm text-[var(--muted)]">{agentCount} agents</span>
         </div>
-        <div className="flex min-h-4 items-center gap-1.5" aria-label="Active agents">
+        <div className="flex min-h-4 items-center gap-1.5" role="group" aria-label="Active agents">
           {activeAgentMembers.slice(0, 10).map((member) => {
             const providerStyle = getProviderStyle(member.agent.provider)
             return (
