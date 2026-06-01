@@ -19,6 +19,7 @@ import {
   recordRunStarted,
 } from '../lib/metrics.js'
 import { redact } from '../lib/redact.js'
+import { resolveRuntimeProvider } from '../lib/resolve-runtime-provider.js'
 import { createServiceClient } from '../lib/supabase.js'
 import { persistMemoryOp } from '../memory/persist-memory-op.js'
 
@@ -51,6 +52,10 @@ interface AgentInfo {
   provider: string
   adapter_type: string
   tool_permissions: Record<string, unknown>
+  // BYO credential (ADR-0010): the bound credential + the agent's creator (whose
+  // credential fuels it). Never carries the secret — only the id + owner.
+  credential_id: string | null
+  created_by_user_id: string | null
 }
 
 interface AgentRunRow {
@@ -79,7 +84,7 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
   const { data: runRaw } = await supabase
     .from('agent_runs')
     .select(
-      'id, room_id, agent_id, trigger_msg_id, status, round_index, discussion_mode, deliberation_depth, deliberation_root_id, agents!agent_id(id, name, slug, system_prompt, provider, adapter_type, tool_permissions)',
+      'id, room_id, agent_id, trigger_msg_id, status, round_index, discussion_mode, deliberation_depth, deliberation_root_id, agents!agent_id(id, name, slug, system_prompt, provider, adapter_type, tool_permissions, credential_id, created_by_user_id)',
     )
     .eq('id', runId)
     .single()
@@ -156,15 +161,27 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
       triggerMsg,
     })
 
-    // g. Run adapter, collect final response
+    // g. Run adapter, collect final response. Resolve a BYO credential (ADR-0010) for
+    // this agent — decrypted out-of-band and injected into the child env only (never
+    // the packet/stdin/argv/logs). null = unchanged host-login behavior.
     const adapter = getAdapter(agentInfo.adapter_type ?? 'mock')
+    const runtimeCredential = await resolveRuntimeProvider({
+      supabase,
+      adapterType: agentInfo.adapter_type,
+      credentialId: agentInfo.credential_id,
+      ownerUserId: agentInfo.created_by_user_id,
+    })
     const controller = new AbortController()
     const stopCancellationWatcher = watchRunCancellation(supabase, runId, controller)
     let finalContent = ''
     const handoffEvents: HandoffRequestedEvent[] = []
 
     try {
-      for await (const event of adapter.run(packet, controller.signal)) {
+      for await (const event of adapter.run(
+        packet,
+        controller.signal,
+        runtimeCredential ?? undefined,
+      )) {
         if (event.type === 'final_response') {
           finalContent = event.response.content
         } else if (event.type === 'error') {

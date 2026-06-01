@@ -394,8 +394,26 @@ export type AgentEvent =
 
 // ─── AGENT ADAPTER INTERFACE ───
 
+/**
+ * A resolved BYO provider credential (ADR-0010 / WS2), passed to an adapter
+ * OUT-OF-BAND at run time. The decrypted `secret` is runtime-only: it is never part
+ * of the ContextPacketV1 (which is serialized to the CLI's stdin), never persisted,
+ * and never logged. The adapter injects exactly `{ [envVarName]: secret }` (and
+ * optionally `{ [baseUrlEnvName]: baseUrl }`) into its own child env.
+ */
+export interface RuntimeCredential {
+  envVarName: string
+  secret: string
+  baseUrl?: string
+  baseUrlEnvName?: string
+}
+
 export interface AgentAdapter {
-  run(_packet: ContextPacketV1, _signal: AbortSignal): AsyncIterable<AgentEvent>
+  run(
+    _packet: ContextPacketV1,
+    _signal: AbortSignal,
+    _runtime?: RuntimeCredential,
+  ): AsyncIterable<AgentEvent>
 }
 
 // ─── API ENVELOPE TYPES ───
