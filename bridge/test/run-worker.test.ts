@@ -382,7 +382,9 @@ test('R3: a post-completion follow-up failure never clobbers a completed run to 
       // Any agent_runs read AFTER the completed write belongs to a follow-up — explode.
       if (completedSeen) throw new Error('follow-up scheduling boom')
       if (ctx.fields === 'status') return { data: { status: 'running' }, error: null }
-      return { data: RUN_ROW, error: null }
+      // tag_turns so maybeScheduleAgentMentionFollowUps proceeds PAST its early-return
+      // (agent-follow-up.ts:49) into the post-completion rooms read, which throws below.
+      return { data: { ...RUN_ROW, discussion_mode: 'tag_turns' }, error: null }
     }
     if (ctx.table === 'rooms') {
       if (completedSeen) throw new Error('follow-up scheduling boom')
@@ -402,7 +404,8 @@ test('R3: a post-completion follow-up failure never clobbers a completed run to 
     return { data: null, error: null }
   }
   const supabase = makeFakeSupabase(resolve) as never
-  // Reply mentions a peer so the (uncaught) mention-followup path runs a query.
+  // tag_turns mode makes the mention-followup path (no internal try/catch) issue a
+  // post-completion rooms read, which the resolver throws on — exercising the fix.
   const adapter = fakeAdapter(async function* (packet) {
     yield {
       type: 'final_response',
