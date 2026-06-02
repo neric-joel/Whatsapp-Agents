@@ -27,3 +27,8 @@ coverage/
 # Playwright e2e artifacts
 playwright-report/
 test-results/
+
+# Lighthouse / authed user-flow + UX-audit scratch (local dev only)
+.lh-profile/
+lh-*.json
+._*.mjs

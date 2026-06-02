@@ -7,6 +7,27 @@ Dates are absolute. **Base of record: `origin/main` (`f780235`).**
 
 ---
 
+## 2026-06-01 — Product / UX / Hermes-credential campaign (autonomous, `feat/product-validation-v1`)
+
+Branch stacked on PR #40 tip. Report: `docs/reviews/2026-06-01-product-ux-campaign.md`.
+**WS1 core + WS2 (BYO credentials) done + secure; WS1-breadth, WS-UX, WS3 = pending.**
+- **WS1:** validated MVP fan-out (real Claude + Codex), RBAC, `/discuss` convergence
+  (individual→critique→consensus, bounded). Fixed: Codex reply pollution (`7a16fd1`),
+  `/debate` registry parity (`0d6e6a1`).
+- **WS2 (ADR-0010) — shipped end to end:** `user_credentials` (owner-RLS + secret-column
+  REVOKE) + `agents.credential_id`; AES-256-GCM crypto; `buildChildEnv` inject seam;
+  `resolveRuntimeProvider` (per-adapter env map, owner-scoped, fail-closed) + out-of-band
+  adapter injection; credentials API (write-only secret) + agent binding; **Settings →
+  Providers UI**. Security proven: e2e key-leak red-team + RLS pgTAP (30 total) + live
+  encrypt-at-rest / no-secret-in-response / 0 log hits. Commits `3086473`→`73ebb99`.
+- **Live-verified ready-to-use:** web :3000 + bridge :9090 + Supabase up; seeded room +
+  3 agents; `CREDENTIAL_ENCRYPTION_KEY` set so BYO is live. Gate: typecheck/lint/format ✓,
+  **test 311**, pgTAP 30. Real calls ~7/25.
+- **Deferred:** WS2 real-provider-reply (needs a real API key; host codex uses ChatGPT-login),
+  WS-UX (7-theme axe / authed Lighthouse / responsive / screenshots), WS1 breadth, WS3.
+
+---
+
 ## 2026-05-31 — Post-v1.0 stress + chaos hardening campaign (PR #40)
 
 Reliability campaign on the warm local stack (`harden/stress-chaos-v1` → PR **#40 → main**;
@@ -553,3 +574,12 @@ Judge rule: DONE only when every box is checked with linked evidence and no Crit
   - [x] Critique gate (Security Auditor + Code Reviewer) **PASS**, saved to `docs/reviews/2026-05-30-phase1-security.md`; no open Critical/High; `typecheck`/`lint`/`test` (135)/`build` green. Mediums M-1/CR-1/CR-3 fixed; L-1 deferred to Phase 2.
 
 Judge rule: DONE only when every box is checked with linked evidence and no Critical/High is open. **Met.**
+
+## Output-Stress + Architecture-Reconciliation + Team-Collaboration campaign (2026-06-01)
+Branch `feat/collab-and-output-hardening` (off `feat/product-validation-v1`). `main`+`v1.0.0` untouched; not pushed.
+  - [x] PART A — as-built `/discuss` map by observation (8-agent parallel read + live driving); 12 intended-vs-observed divergences logged with output+rows+logs. → `docs/reviews/2026-06-01-output-collab-campaign.md`.
+  - [x] PART B — output stress: hallucination confidence-inflation + React dup-key **fixed** with regression (`c9f0131`); command parity / mentions / integrity re-verified.
+  - [x] PART C — `/discuss` redesigned into a real team (ADR-0011): plan→execute→integrate→[dissent]→converge; `/debate` adversarial (assign→argue→rebut→adjudicate). Parallel-blindness fixed (discussion-scoped query); decompose+assign by capability; cross-review; anti-sycophancy dissent gate; attributed converge. **Proven live with real agents** (codex+claude): build-on + "Contributions:" attribution + challenge. `98553c3`,`cb4c404`,`5566c68`.
+  - [x] `/critique qa`+`security` — 1 HIGH (client-forgeable `metadata.discussion`) + 2 Med guardrails, **all fixed** with regression tests (`7ef7e9e`); reports in `docs/reviews/2026-06-01-collab-{security,qa}.md`. No open Critical/High.
+  - [x] Gate: typecheck 0 · shared 10/10 · bridge 163/163 · web 157/157 · `next build` ✓ · index-only migration applied.
+  - [x] **PR #41 OPEN + CI GREEN** (base `feat/product-validation-v1`): all required checks pass (verify · rls · build-images · Playwright e2e · CodeQL); `audit` allowed-red per D3. Self-healed 3 CI-only issues (prettier format, knip unused-exports, 2 CodeQL ReDoS HIGHs in parseTaskList). Critique Critical/High-free. https://github.com/neric-joel/Whatsapp-Agents/pull/41

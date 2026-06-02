@@ -69,7 +69,24 @@ const PROVIDER_ENV_PATTERN =
  * stripped unconditionally; self-hosters can forward extra vars via
  * `BRIDGE_CHILD_ENV_ALLOW` (comma-separated names).
  */
-export function buildChildEnv(source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+interface ChildEnvOptions {
+  /**
+   * BYO-credential injection (ADR-0010 / WS2). Exactly one resolved credential var
+   * is set into THIS child's env — applied AFTER the strip/allowlist, so a secret
+   * resolved per-run reaches only the chosen child's chosen variable while
+   * `process.env` secrets stay stripped. The decrypted value is never logged and is
+   * computed out-of-band (never via the stdin packet). The name must be a valid env
+   * identifier; an invalid name is ignored (fail-closed, no injection).
+   */
+  inject?: { name: string; value: string }
+}
+
+const ENV_NAME_RE = /^[A-Z][A-Z0-9_]*$/
+
+export function buildChildEnv(
+  source: NodeJS.ProcessEnv = process.env,
+  options: ChildEnvOptions = {},
+): NodeJS.ProcessEnv {
   const extra = (source['BRIDGE_CHILD_ENV_ALLOW'] ?? '')
     .split(',')
     .map((s) => s.trim())
@@ -81,6 +98,14 @@ export function buildChildEnv(source: NodeJS.ProcessEnv = process.env): NodeJS.P
     if (value === undefined) continue
     if (SECRET_ENV_PATTERN.test(key)) continue // never forward secrets
     if (allow.has(key) || PROVIDER_ENV_PATTERN.test(key)) out[key] = value
+  }
+
+  // Deliberate single-var injection of a resolved BYO credential — the ONLY way a
+  // user secret enters a child env. Overrides the strip for exactly this one var,
+  // in this one child, for this one run.
+  const inj = options.inject
+  if (inj && ENV_NAME_RE.test(inj.name)) {
+    out[inj.name] = inj.value
   }
   return out
 }

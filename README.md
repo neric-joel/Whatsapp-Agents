@@ -19,6 +19,7 @@ The project is built as a pnpm monorepo with a Next.js web app, a Supabase-backe
 - Queue-based agent execution through the `agent_runs` table
 - Bridge daemon for subprocess-based agent adapters
 - Claude Code, Codex CLI, Ruflo, custom Claude, and mock adapter support
+- Bring-your-own provider credentials — per-user API keys, encrypted at rest, bound to agents (Settings → Providers)
 - Mentions with `@agent_slug` and `@everyone`
 - `/discuss` mode for multi-agent deliberation before a final answer
 - Agent-to-agent tag turns with loop guards
@@ -98,6 +99,10 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+# Enables the BYO provider-credentials feature (Settings -> Providers). 32-byte key
+# (64-hex or base64), e.g. `openssl rand -hex 32`. Leave blank to disable the feature.
+# MUST be identical to the bridge's CREDENTIAL_ENCRYPTION_KEY.
+CREDENTIAL_ENCRYPTION_KEY=
 ```
 
 Bridge env:
@@ -114,6 +119,9 @@ CLAUDE_BIN=claude
 CODEX_BIN=codex
 MYCLAUDE_BIN=myclaude
 RUFLO_BIN=ruflo
+# BYO provider credentials (ADR-0010): decrypts user-stored API keys at spawn.
+# MUST match the web app's CREDENTIAL_ENCRYPTION_KEY. Blank = feature disabled.
+CREDENTIAL_ENCRYPTION_KEY=
 # Optional image text/OCR extraction sends image bytes to OpenAI — OFF by default.
 # It activates only when the flag is true AND a key is set. See docs/SELF_HOSTING.md.
 ENABLE_IMAGE_TEXT_EXTRACTION=false
@@ -213,6 +221,18 @@ Start a structured team discussion:
 ```
 
 In discussion mode, agents first contribute independently, then critique and synthesize, then produce a final consensus answer. Agent replies only create follow-up runs when tag-turn mode allows it and the reply explicitly mentions another eligible agent.
+
+Other commands include `/debate`, `/remember`, `/recall`, `/handoff @agent`, `/agents`, `/pin`, and `/reset` (admin). Type `/help` in any room to see the full, role-aware list.
+
+## Providers & API Keys (bring your own)
+
+Agents run on the credentials of the user who creates them — "the owner brings the fuel". To use your own provider key instead of the host login:
+
+1. Set `CREDENTIAL_ENCRYPTION_KEY` (the same value) in both `apps/web/.env.local` and `bridge/.env` — generate one with `openssl rand -hex 32`. Without it the feature is disabled and the API returns `503`.
+2. Open **Settings → Providers**, add a credential (provider, label, secret, optional base URL). The secret is encrypted at rest (AES-256-GCM) and is never returned to the browser or written to logs.
+3. Bind the credential to an agent when creating it. At spawn, the bridge decrypts the key and injects it into that adapter's child process only (e.g. `ANTHROPIC_API_KEY` for Claude Code, `OPENAI_API_KEY` + `OPENAI_BASE_URL` for Codex CLI).
+
+See [`docs/adr/0010-byo-credentials.md`](docs/adr/0010-byo-credentials.md) for the design and security model.
 
 ## Testing Agent Behavior
 

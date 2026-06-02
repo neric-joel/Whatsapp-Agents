@@ -363,8 +363,16 @@ export default function LeftSidebar() {
       className="w-[260px] flex-shrink-0 h-full bg-[var(--sidebar)] flex flex-col border-r border-[var(--border)]"
       aria-label="Rooms"
     >
-      <div className="p-4 pb-2">
+      <div className="flex items-center justify-between p-4 pb-2">
         <span className="text-base font-bold text-[var(--text)]">AgentRoom</span>
+        <Link
+          href="/settings"
+          aria-label="Settings — providers and API keys"
+          title="Settings"
+          className="rounded-md px-2 py-1 text-xs text-[var(--muted)] transition-colors hover:text-[var(--text)]"
+        >
+          ⚙ Settings
+        </Link>
       </div>
       <div className="px-4 py-2 text-[11px] font-medium uppercase tracking-widest text-[var(--muted)]">
         ROOMS

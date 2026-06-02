@@ -1,12 +1,17 @@
 export const AGENTROOM_VERSION = '0.1.0'
 
 export * from './commands.js'
+// NOTE: credential-crypto is intentionally NOT re-exported here — it imports
+// `node:crypto`, which would poison the browser bundle (the barrel is imported by
+// client code via slash-commands). Server code imports it from the subpath
+// '@agentroom/shared/credential-crypto'. The RuntimeCredential *type* lives below.
 export * from './error-tracking.js'
 export * from './logger.js'
 export * from './memory-scan.js'
 export * from './redact.js'
+// ADR-0011 team-collaboration /discuss + adversarial /debate phase machine. Owns DiscussionPhase.
+export * from './discussion.js'
 
-export type DiscussionPhase = 'individual' | 'critique' | 'consensus'
 export type DiscussionMode = 'independent' | 'tag_turns'
 
 export interface DiscussionCommand {
@@ -45,44 +50,8 @@ export function parseDiscussionRequest(content: string): DiscussionCommand | nul
   }
 }
 
-export function nextDiscussionPhase(phase: DiscussionPhase): DiscussionPhase | null {
-  if (phase === 'individual') return 'critique'
-  if (phase === 'critique') return 'consensus'
-  return null
-}
-
-export function buildDiscussionPhasePrompt(phase: DiscussionPhase, originalPrompt: string): string {
-  if (phase === 'critique') {
-    return [
-      'Discussion phase 2: critique and synthesis.',
-      '',
-      'Original problem:',
-      originalPrompt,
-      '',
-      'Read the independent agent contributions above. Identify mistakes, missing edge cases, and over/under-abstraction. Respond to specific agents by name, compare approaches, and add the missing step needed for the team answer. Do not restart as a solo solution.',
-    ].join('\n')
-  }
-
-  if (phase === 'consensus') {
-    return [
-      'Discussion phase 3: consensus and conclusion.',
-      '',
-      'Original problem:',
-      originalPrompt,
-      '',
-      'Use the prior independent answers and critique round to produce one clear final consensus response for the room. State the final answer, explain the reasoning compactly, and mention any caveats the team agreed matter. Do not @mention another agent in this final consensus.',
-    ].join('\n')
-  }
-
-  return [
-    'Discussion phase 1: independent assessment.',
-    '',
-    'Original problem:',
-    originalPrompt,
-    '',
-    'Contribute one focused piece of the solution as a teammate, not a full final answer. State your approach, key reasoning, and what you want another agent to challenge or extend. End by explicitly @mentioning one other agent when you need their next move.',
-  ].join('\n')
-}
+// Superseded by ADR-0011's nextDiscussionStage / buildDiscussionStagePrompt (./discussion.ts).
+// The legacy individual→critique→consensus prompt builders were removed here.
 
 export function conclusionDetected(content: string): boolean {
   const patterns = [
@@ -393,8 +362,26 @@ export type AgentEvent =
 
 // ─── AGENT ADAPTER INTERFACE ───
 
+/**
+ * A resolved BYO provider credential (ADR-0010 / WS2), passed to an adapter
+ * OUT-OF-BAND at run time. The decrypted `secret` is runtime-only: it is never part
+ * of the ContextPacketV1 (which is serialized to the CLI's stdin), never persisted,
+ * and never logged. The adapter injects exactly `{ [envVarName]: secret }` (and
+ * optionally `{ [baseUrlEnvName]: baseUrl }`) into its own child env.
+ */
+export interface RuntimeCredential {
+  envVarName: string
+  secret: string
+  baseUrl?: string
+  baseUrlEnvName?: string
+}
+
 export interface AgentAdapter {
-  run(_packet: ContextPacketV1, _signal: AbortSignal): AsyncIterable<AgentEvent>
+  run(
+    _packet: ContextPacketV1,
+    _signal: AbortSignal,
+    _runtime?: RuntimeCredential,
+  ): AsyncIterable<AgentEvent>
 }
 
 // ─── API ENVELOPE TYPES ───

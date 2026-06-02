@@ -1,6 +1,6 @@
 import {
-  buildDiscussionPhasePrompt,
-  nextDiscussionPhase,
+  buildDiscussionStagePrompt,
+  nextDiscussionStage,
   parseDiscussionCommand,
   parseDiscussionRequest,
 } from '@agentroom/shared'
@@ -23,12 +23,25 @@ describe('discussion slash command', () => {
     expect(parseDiscussionRequest('@everyone hi guys')).toBeNull()
   })
 
-  it('builds critique and consensus prompts', () => {
-    expect(nextDiscussionPhase('individual')).toBe('critique')
-    expect(buildDiscussionPhasePrompt('individual', 'math')).toContain('not a full final answer')
-    expect(buildDiscussionPhasePrompt('critique', 'math')).toContain(
-      'Do not restart as a solo solution',
+  it('drives the team-collaboration phase machine (ADR-0011)', () => {
+    // discuss: plan -> execute -> integrate -> converge (challenge present skips dissent)
+    expect(nextDiscussionStage('discuss', 'plan', false)).toEqual({
+      phase: 'execute',
+      target: 'all',
+    })
+    expect(nextDiscussionStage('discuss', 'integrate', true)).toEqual({
+      phase: 'converge',
+      target: 'coordinator',
+    })
+    expect(buildDiscussionStagePrompt('discuss', 'plan', 'math')).toContain(
+      'COMPLEMENTARY sub-tasks',
     )
-    expect(buildDiscussionPhasePrompt('consensus', 'math')).toContain('one clear final consensus')
+    expect(buildDiscussionStagePrompt('discuss', 'converge', 'math')).toContain('Contributions:')
+    // debate is a genuinely different (adversarial) machine
+    expect(nextDiscussionStage('debate', 'assign', false)).toEqual({
+      phase: 'argue',
+      target: 'all',
+    })
+    expect(buildDiscussionStagePrompt('debate', 'adjudicate', 'math')).toContain('Do NOT merge')
   })
 })
