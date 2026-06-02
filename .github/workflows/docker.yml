@@ -25,7 +25,7 @@ jobs:
       - uses: docker/setup-buildx-action@v4
 
       - name: Build web image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: apps/web/Dockerfile
@@ -57,7 +57,7 @@ jobs:
           echo "web image boots and serves /api/health"
 
       - name: Build bridge image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: bridge/Dockerfile
