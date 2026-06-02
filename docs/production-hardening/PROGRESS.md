@@ -7,6 +7,32 @@ Dates are absolute. **Base of record: `origin/main` (`f780235`).**
 
 ---
 
+## 2026-05-31 — Post-v1.0 stress + chaos hardening campaign (PR #40)
+
+Reliability campaign on the warm local stack (`harden/stress-chaos-v1` → PR **#40 → main**;
+never touched main directly). **Verdict: GO** — concurrency (C1–C4) + fault-injection
+(F1–F6) invariants hold after fixing **3 real defects**, each with a regression test; no
+security control weakened. Full report: `docs/reviews/2026-05-31-stress-chaos-campaign.md`.
+
+- **Found + fixed (live):** **R3/F6** completed↔cancel / completed→failed clobber — the
+  terminal writes are now status-guarded + post-completion follow-ups isolated (`2cf3209`);
+  **F4** stale-run false-positive — a healthy run was being failed by the periodic sweep
+  under C1 load; NULL heartbeat is now age-guarded + the recovery write status-guarded
+  (`2664734`); **F3** POSIX kill-tree — spawn `detached` + group-kill so cancel/timeout
+  reaps grandchildren (`95fe02e`).
+- **Live evidence:** C1 (cap=3 holds, 72/72, global 1:1, 0 stale-FP after fix), C3 (2
+  workers, no double-claim), C4 (1 real `claude-code` run), F1 (orphan reclaim on restart,
+  no dup), F4 (deterministic stale semantics), F5 (DB-outage survival + resume), F6 (cancel
+  integrity). Tooling: `scripts/chaos/{concurrency,stale-live}.ts`.
+- **Gate:** typecheck/lint/format ✓ · **test 292** (web 149 + bridge 143; +3 regression
+  tests). **Critique (security + qa, adversarial): PASS, 0 Critical/High**; the one Medium
+  (a false-guard R3 test) was fixed + revert-proven before shipping.
+- **Deferred (Med/Low → tracked in the report):** R7 A2A fan-out hardening (mention-path
+  cycle/round cap + `agent_runs` unique index); bridge poll-error logging during a DB
+  outage; R3 cancelled-metric skip; detached-child orphan on graceful shutdown.
+
+---
+
 ## 🚢 v1.0.0 SHIPPED — 2026-05-31 (autonomous release session)
 
 **`v1.0.0` is tagged and released** on merged `main` (`c0cc441`):
