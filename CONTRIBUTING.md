@@ -12,8 +12,8 @@ change. By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 - Optional: the agent CLIs you want to exercise (`claude`, `codex`, …). Without them,
   the **mock adapter** works end-to-end.
 
-See [`QUICKSTART.md`](QUICKSTART.md) for the fast path and
-[`docs/SELF_HOSTING.md`](docs/SELF_HOSTING.md) for the full setup, including the
+See the [Quickstart in the README](README.md#quickstart-local-510-min-to-a-working-app) for the
+fast path and [`docs/SELF_HOSTING.md`](docs/SELF_HOSTING.md) for the full setup, including the
 Docker/devcontainer paths.
 
 ## Local setup

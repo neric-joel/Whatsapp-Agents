@@ -55,7 +55,7 @@ env values you have already set, and only fills blank/placeholder keys from
 `supabase status`.
 
 **Windows:** use `start-agentroom.bat` (or the desktop shortcut created by
-`create-desktop-shortcut.ps1`). See `QUICKSTART.md`.
+`create-desktop-shortcut.ps1`). See the [README Quickstart](../README.md#quickstart-local-510-min-to-a-working-app).
 
 Manual equivalent:
 

@@ -129,5 +129,6 @@ returned **GO** (0 Critical, 0 confirmed High). Highlights by phase:
   server/service-role path is unaffected. Verified against a live DB (pgTAP +
   role-level SQL + real PostgREST HTTP); migration `20260531000004_agents_column_privs.sql`.
 
-[Unreleased]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/neric-joel/Whatsapp-Agents/releases/tag/v1.0.0

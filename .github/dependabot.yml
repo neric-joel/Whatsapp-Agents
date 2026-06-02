@@ -1,11 +1,11 @@
 version: 2
 updates:
+  # Single root entry only: this is a pnpm workspace with ONE root lockfile, so
+  # scanning '/' updates dependencies across every package (apps/web, bridge,
+  # packages/shared). Listing the sub-directories too made Dependabot open a
+  # duplicate per-directory PR for every root PR (see closed #32–#38).
   - package-ecosystem: npm
-    directories:
-      - '/'
-      - '/apps/web'
-      - '/bridge'
-      - '/packages/shared'
+    directory: '/'
     schedule:
       interval: weekly
     open-pull-requests-limit: 10

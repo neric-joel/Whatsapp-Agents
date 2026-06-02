@@ -1,6 +1,6 @@
 # AgentRoom — cross-platform developer tasks (POSIX / macOS / Linux / WSL).
 # Thin wrappers over pnpm + the Supabase CLI. Windows users have the same flows via
-# start-agentroom.bat / the desktop shortcut; see QUICKSTART.md and docs/SELF_HOSTING.md.
+# start-agentroom.bat / the desktop shortcut; see the README Quickstart and docs/SELF_HOSTING.md.
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help

@@ -32,35 +32,49 @@ Realtime, Storage), and a separate TypeScript **bridge daemon** that runs the ag
 **No API keys are needed for this Quickstart** — you'll use the built-in **mock** agent. (The
 `claude` / `codex` CLIs are optional and only needed to run _real_ agents.)
 
-> **Windows shortcut:** `start-agentroom.bat` does all of the below automatically (starts
-> Supabase, fills the env files from `supabase status`, launches both processes, opens the
-> browser). On macOS/Linux/WSL, `make bootstrap` runs steps 1–3 (it copies the env templates but
-> you still paste the keys in step 3, then run step 4).
+> **One-command setup (recommended).** First clone the repo and `cd` into it (see step 0 below).
+> Then, on **Windows**, double-click **`start-agentroom.bat`** in the repo root — it starts
+> Supabase, **auto-fills both env files** from `supabase status`, launches the web app + bridge,
+> and opens the browser. On **macOS/Linux/WSL**, run **`make bootstrap`** (requires `make`) — it
+> installs deps, starts Supabase, runs the DB reset, and copies the env templates **and auto-fills
+> the keys** — then just run step 4 (`pnpm dev:web` + `pnpm dev:bridge`). **If you used a script,
+> you're done — skip the manual steps and jump to [Use it](#use-it--reproduce-the-demo).** The
+> manual steps below are for doing it by hand or if a script can't run.
 
 ```bash
-# 1. Install dependencies
+# 0. Clone the repo and enter it (every command below runs from the repo root)
+git clone https://github.com/neric-joel/Whatsapp-Agents.git
+cd Whatsapp-Agents
+
+# 1. Install dependencies  (no pnpm? run `corepack enable` first to get it)
 pnpm install
 
-# 2. Start local Supabase (Docker) in its own terminal, then apply migrations + seed data
-pnpm dev:supabase          # leave running; first run pulls Docker images (a few minutes)
-pnpm db:reset              # applies migrations + seeds 3 demo agents (safe to re-run)
+# 2. Start the local Supabase stack (Docker), then apply migrations + seed
+pnpm dev:supabase          # brings up Supabase in Docker and returns; first run pulls images (a few min)
+pnpm db:reset              # applies migrations + seed (safe to re-run); you'll create your own agent in the UI
 
-# 3. Create the two env files, then paste the keys that `supabase status` printed
-cp apps/web/.env.example apps/web/.env.local   # Windows (no WSL/Git Bash): use `copy`
-cp bridge/.env.example bridge/.env
-supabase status            # prints API URL + the keys to copy
+# 3. Print the keys, create the two env files, then paste the keys into them
+supabase status                                # prints the API URL + keys (keep this output visible)
+cp apps/web/.env.example apps/web/.env.local   # Windows PowerShell: Copy-Item apps\web\.env.example apps\web\.env.local
+cp bridge/.env.example bridge/.env             # Windows PowerShell: Copy-Item bridge\.env.example bridge\.env
 ```
 
-From `supabase status`, fill the env files (the other variables already have sane defaults):
+Open `apps/web/.env.local` and `bridge/.env` in an editor and paste the values from `supabase
+status` per the table below — you only need to set these; every other variable in the example
+files already has a sane default, so leave them as-is.
 
 | `supabase status` line | Goes into |
 |---|---|
 | `API URL` → `http://127.0.0.1:54321` | `NEXT_PUBLIC_SUPABASE_URL` (web) **and** `SUPABASE_URL` (bridge) |
-| `publishable key` (`sb_publishable_…`) | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (web) |
-| `secret key` / `service_role key` (`sb_secret_…`) | `SUPABASE_SERVICE_ROLE_KEY` (web **and** bridge) |
+| **anon / publishable key** (`sb_publishable_…` or a long JWT) | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (web) |
+| **service_role / secret key** (`sb_secret_…` or a long JWT) | `SUPABASE_SERVICE_ROLE_KEY` (web **and** bridge) |
 
-> Leave `CREDENTIAL_ENCRYPTION_KEY` **blank** — it's only for the bring-your-own-key feature, not
-> the mock Quickstart. (Use `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, not the old "anon key" name.)
+> Depending on your Supabase CLI version, the first key is labelled `anon key` **or**
+> `publishable key` (and may be a `sb_publishable_…` string or a long JWT) — either way it goes
+> into `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Likewise `service_role key` / `secret key` →
+> `SUPABASE_SERVICE_ROLE_KEY`. Tip: `supabase status -o env` prints them as `ANON_KEY=…` /
+> `SERVICE_ROLE_KEY=…`. Leave `CREDENTIAL_ENCRYPTION_KEY` **blank** — it's only for the
+> bring-your-own-key feature ([below](#bring-your-own-provider-key)), not the mock Quickstart.
 
 ```bash
 # 4. Run the web app and the bridge daemon — each in its OWN terminal (both must stay running)
@@ -68,23 +82,44 @@ pnpm dev:web               # terminal A → http://localhost:3000
 pnpm dev:bridge            # terminal B → claims agent_runs and produces replies
 ```
 
-Then, in the browser:
+### Use it — reproduce the demo
 
-1. Open **http://localhost:3000** and **sign up** (any email + password — local auth, no email
-   confirmation).
-2. Click **New Room**, create one, then open the room's **agents panel** (right side / room
-   header) and **add an agent**. The seed ships three you can add — **Reviewer** (a **mock** that
-   needs no API key — use this), plus **Claude Thinker** and **Codex Builder** (need the `claude`
-   / `codex` CLIs installed and logged in) — or **＋ Create agent** to make your own.
-3. **Send a message** — the agent replies as a participant. Add 2–3 agents and try
-   **`/discuss <a problem>`** to see the team collaboration.
+With the web app and bridge running, do exactly what the GIF above shows. **No API keys needed —
+you'll use the built-in `mock` adapter** (it returns canned text so you can see the flow end-to-end
+offline).
+
+1. **Sign up.** Open **http://localhost:3000** and create an account — any email + password
+   (local auth, no email confirmation, no demo login). You're now the owner of anything you create.
+2. **Create a room.** Click **New Room**, give it a name. (The room you make is yours; the seeded
+   demo room isn't shared with new accounts, which is why you create your own.)
+3. **Add agents — create them, don't look for existing ones.** Open the room's **agents panel**
+   and click **`+ Create agent`**. Give it a name and a slug (e.g. `helper`), leave **Provider =
+   `mock`** (the default — zero keys), and save; it joins the room immediately. **Create a
+   _second_ mock agent** the same way — you need **at least two** for `/discuss` to have a team.
+4. **Send a message.** Type anything and send — each agent replies as its own participant within a
+   few seconds.
+5. **Run the team.** Type **`/discuss <a problem>`** (e.g. `/discuss how should we cache the feed?`).
+   A coordinator decomposes the problem, assigns sub-tasks, the agents build on a shared
+   blackboard, cross-review, and converge on one **attributed** answer. Try **`/debate <question>`**
+   for the adversarial variant.
+6. **Switch themes** (like the demo) from the theme picker in the **room header** — 7 light/dark
+   themes. `/help` lists every command available to you.
+
+> **Mock vs. real reasoning.** The `mock` adapter is a **canned stub** — on `/discuss` you'll see
+> the real _structure_ (plan → execute → cross-review → converge) but the content is placeholder
+> text, not genuine reasoning. To get real answers, **create an agent with Provider =
+> `claude_code` or `codex_cli`**: install and log in that CLI on the host the bridge runs on
+> ([Claude Code](https://docs.claude.com/en/docs/claude-code) → run `claude`;
+> [Codex CLI](https://github.com/openai/codex) → run `codex`), then **restart `pnpm dev:bridge`**
+> so it picks up the login — or skip the host login entirely and
+> [bring your own key](#bring-your-own-provider-key) (Settings → Providers).
 
 **Verify it's working:** `curl http://localhost:3000/api/health` returns `{"ok":true,…,"db":"up"}`,
-and a message in a room containing the mock **Reviewer** gets a reply within a few seconds.
+and a message in a room with at least one (unmuted) agent gets a reply within a few seconds.
 
 **Not getting a reply?** Check that (a) `pnpm dev:bridge` is running in its own terminal,
-(b) both `.env` files have the keys from `supabase status`, (c) the agent is added to the room and
-not muted. If a run is stuck, restart the bridge (stale runs auto-recover).
+(b) both `.env` files have the keys from `supabase status`, (c) the room has at least one agent and
+it isn't muted. If a run looks stuck, restart the bridge (stale runs auto-recover).
 
 > Supabase Studio (browse the local DB) is at http://127.0.0.1:54323. Full env-var reference:
 > [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#environment-variables).
@@ -171,7 +206,6 @@ docs/            ARCHITECTURE · SELF_HOSTING · OBSERVABILITY · adr/ (decision
 
 ## Documentation
 
-- [`QUICKSTART.md`](QUICKSTART.md) — the short startup checklist.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — components, data-flow, the `agent_runs` queue
   contract, the adapter/subprocess model, trust boundaries, and the full env-var reference.
 - [`docs/SELF_HOSTING.md`](docs/SELF_HOSTING.md) — Docker, self-hosted Supabase, bridge trust model.
