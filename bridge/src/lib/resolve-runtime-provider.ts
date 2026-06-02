@@ -40,7 +40,7 @@ export async function resolveRuntimeProvider({
   env = process.env,
 }: ResolveRuntimeProviderArgs): Promise<RuntimeCredential | null> {
   const map = adapterType ? ADAPTER_CREDENTIAL_ENV[adapterType] : undefined
-  if (!map) return null // adapter takes no injected key (mock, ruflo, myclaude, …)
+  if (!map) return null // adapter takes no injected key (e.g. mock)
   if (!credentialId || !ownerUserId) return null // no bound credential → host login
   if (!hasCredentialKey(env)) return null // feature disabled (no decryption key)
 

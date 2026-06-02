@@ -33,15 +33,6 @@ export const PROVIDER_STYLES: Record<AgentProvider, ProviderStyle> = {
     dot: 'bg-[#0891b2]',
     glow: 'shadow-[0_0_14px_rgba(8,145,178,0.16)]',
   },
-  ruflo: {
-    bubble: 'bg-[#f5f3ff]',
-    border: 'border-[#c4b5fd]/70',
-    text: 'text-[#2e1065]',
-    avatar: 'bg-[#7c3aed]',
-    nameColor: 'text-[#7c3aed]',
-    dot: 'bg-[#7c3aed]',
-    glow: 'shadow-[0_0_14px_rgba(124,58,237,0.16)]',
-  },
   mock: {
     bubble: 'bg-[#f1f5f9]',
     border: 'border-[#cbd5e1]/80',

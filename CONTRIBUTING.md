@@ -57,6 +57,9 @@ job is informational (a known transitive advisory tracked for the next@15 upgrad
 
 ## Branching, commits, and PRs
 
+- **Trunk-based.** `main` is the single source of truth (always releasable). Cut a
+  **short-lived** feature branch off `main`, open a PR, merge it back, then **delete the
+  branch**. Don't let long-running or stacked branches accumulate.
 - **Never push to `main`.** It is protected. Work on a branch and open a PR.
 - Branch naming: `feat/…`, `fix/…`, `chore/…`, or `docs/…`.
 - **[Conventional Commits](https://www.conventionalcommits.org/):** `feat(p6): …`,
