@@ -32,27 +32,36 @@ Realtime, Storage), and a separate TypeScript **bridge daemon** that runs the ag
 **No API keys are needed for this Quickstart** — you'll use the built-in **mock** agent. (The
 `claude` / `codex` CLIs are optional and only needed to run _real_ agents.)
 
-> **One-command setup.** On **Windows**, double-click `start-agentroom.bat` — it starts Supabase,
-> **auto-fills both env files** from `supabase status`, launches the web app + bridge, and opens
-> the browser. On **macOS/Linux/WSL**, `make bootstrap` does steps 1–3 — installs deps, starts
-> Supabase, runs the DB reset, copies the env templates **and auto-fills the keys** — then you just
-> run step 4. The manual steps below are for doing it by hand or if a script can't run.
+> **One-command setup (recommended).** First clone the repo and `cd` into it (see step 0 below).
+> Then, on **Windows**, double-click **`start-agentroom.bat`** in the repo root — it starts
+> Supabase, **auto-fills both env files** from `supabase status`, launches the web app + bridge,
+> and opens the browser. On **macOS/Linux/WSL**, run **`make bootstrap`** (requires `make`) — it
+> installs deps, starts Supabase, runs the DB reset, and copies the env templates **and auto-fills
+> the keys** — then just run step 4 (`pnpm dev:web` + `pnpm dev:bridge`). **If you used a script,
+> you're done — skip the manual steps and jump to [Use it](#use-it--reproduce-the-demo).** The
+> manual steps below are for doing it by hand or if a script can't run.
 
 ```bash
-# 1. Install dependencies
+# 0. Clone the repo and enter it (every command below runs from the repo root)
+git clone https://github.com/neric-joel/Whatsapp-Agents.git
+cd Whatsapp-Agents
+
+# 1. Install dependencies  (no pnpm? run `corepack enable` first to get it)
 pnpm install
 
-# 2. Start local Supabase (Docker) in its own terminal, then apply migrations + seed data
-pnpm dev:supabase          # leave running; first run pulls Docker images (a few minutes)
+# 2. Start the local Supabase stack (Docker), then apply migrations + seed
+pnpm dev:supabase          # brings up Supabase in Docker and returns; first run pulls images (a few min)
 pnpm db:reset              # applies migrations + seed (safe to re-run); you'll create your own agent in the UI
 
-# 3. Create the two env files, then paste the keys that `supabase status` printed
-cp apps/web/.env.example apps/web/.env.local   # Windows (no WSL/Git Bash): use `copy`
-cp bridge/.env.example bridge/.env
-supabase status            # prints API URL + the keys to copy
+# 3. Print the keys, create the two env files, then paste the keys into them
+supabase status                                # prints the API URL + keys (keep this output visible)
+cp apps/web/.env.example apps/web/.env.local   # Windows PowerShell: Copy-Item apps\web\.env.example apps\web\.env.local
+cp bridge/.env.example bridge/.env             # Windows PowerShell: Copy-Item bridge\.env.example bridge\.env
 ```
 
-From `supabase status`, fill the env files (the other variables already have sane defaults):
+Open `apps/web/.env.local` and `bridge/.env` in an editor and paste the values from `supabase
+status` per the table below — you only need to set these; every other variable in the example
+files already has a sane default, so leave them as-is.
 
 | `supabase status` line | Goes into |
 |---|---|
@@ -93,12 +102,16 @@ offline).
    A coordinator decomposes the problem, assigns sub-tasks, the agents build on a shared
    blackboard, cross-review, and converge on one **attributed** answer. Try **`/debate <question>`**
    for the adversarial variant.
+6. **Switch themes** (like the demo) from the theme picker in the **room header** — 7 light/dark
+   themes. `/help` lists every command available to you.
 
 > **Mock vs. real reasoning.** The `mock` adapter is a **canned stub** — on `/discuss` you'll see
 > the real _structure_ (plan → execute → cross-review → converge) but the content is placeholder
 > text, not genuine reasoning. To get real answers, **create an agent with Provider =
-> `claude_code` or `codex_cli`**: install that CLI and log it in on the host (`claude` / `codex`),
-> then **restart `pnpm dev:bridge`** so it picks up the login — or skip the host login entirely and
+> `claude_code` or `codex_cli`**: install and log in that CLI on the host the bridge runs on
+> ([Claude Code](https://docs.claude.com/en/docs/claude-code) → run `claude`;
+> [Codex CLI](https://github.com/openai/codex) → run `codex`), then **restart `pnpm dev:bridge`**
+> so it picks up the login — or skip the host login entirely and
 > [bring your own key](#bring-your-own-provider-key) (Settings → Providers).
 
 **Verify it's working:** `curl http://localhost:3000/api/health` returns `{"ok":true,…,"db":"up"}`,
