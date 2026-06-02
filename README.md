@@ -12,7 +12,7 @@ Built as a pnpm monorepo: a Next.js web app, a Supabase-backed data layer, and a
 
 ## Demo
 
-![AgentRoom working demo](docs/demo/agentroom-demo.gif)
+![AgentRoom demo: a `/discuss` where a coordinator assigns sub-tasks by capability, two agents execute and cross-review on a shared blackboard, and the team converges on one answer with attribution — then a switch to a dark theme.](docs/demo/agentroom-demo.gif)
 
 ## Features
 
