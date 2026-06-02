@@ -8,6 +8,47 @@ All notable changes to this project are documented here. The format is based on
 
 _Nothing yet._
 
+## [1.1.0] - 2026-06-01
+
+Four post-1.0 campaigns, each landed via a CI-green PR and an adversarial review, integrated onto
+`main` through a single release branch.
+
+### Added
+
+- **Real team collaboration via `/discuss`** (ADR-0011). Replaces the old
+  individual→critique→consensus flow with a genuine team: a coordinator **decomposes** the
+  problem and **assigns sub-tasks by capability** onto a shared blackboard; agents **execute their
+  part while seeing and building on their teammates' work**, then **cross-review**; a coordinator
+  **converges on one answer with attribution**. An anti-sycophancy **dissent** stage runs when no
+  one has substantively challenged, so the team never rubber-stamps. The parallel-blindness bug
+  (phase-N agents couldn't see peers) is fixed by a discussion-scoped context query.
+- **Adversarial `/debate`** — agents argue distinct assigned positions (argue → rebut), then a
+  coordinator **adjudicates a winner** (not a merge).
+- **Bring-your-own CLI / API-key Providers** (ADR-0010). A per-user, RLS-isolated keychain
+  (`user_credentials`), secrets **AES-256-GCM encrypted at rest** and never returned to the
+  browser; bind a credential to an agent and the bridge injects exactly that key into the
+  adapter's child env at spawn. Managed in **Settings → Providers**.
+- Fresh, current **demo GIF** (team `/discuss` + dark theme) and a polished, public-facing README.
+
+### Changed / Hardened
+
+- **Stress/chaos + race-condition hardening** — fixed a terminal-write clobber where a
+  post-completion follow-up could flip a completed run to failed (R3) and related concurrency/F6
+  issues; hardened stale-run recovery and added POSIX detached **kill-tree** on cancel/timeout.
+- **Output hardening** — deduped hallucination reasons (killed a false "high"-confidence inflation
+  + a React duplicate-key render fault); fixed two `js/polynomial-redos` findings; the codex
+  adapter no longer leaks non-JSON process noise into replies.
+- **De-cluttered the public repo** — untracked internal AI/build-process tooling (kept on disk +
+  in history): `CLAUDE.md`, `docs/production-hardening/`, `docs/reviews/`, `.claude/`, and the
+  internal runner scripts.
+
+### Security
+
+- **`/discuss` room-isolation guard** — the server is the sole author of `metadata.discussion`;
+  a client can no longer forge it to pull another in-room discussion's transcript into an agent's
+  context (the collaboration HIGH, fixed before merge). All subprocess/RLS/credential invariants
+  preserved.
+
 ## [1.0.0] - 2026-05-31
 
 First production-ready release. A pre-1.0 hardening effort turned the MVP into a
