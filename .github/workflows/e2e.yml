@@ -41,7 +41,7 @@ jobs:
     env:
       # â”€â”€ Next.js build-time env (dummy values â€” app boots but Supabase calls fail) â”€â”€
       NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
-      # CRITICAL: use PUBLISHABLE_KEY not ANON_KEY â€” see CLAUDE.md Â§7
+      # CRITICAL: use PUBLISHABLE_KEY, never the deprecated ANON_KEY (rejected by apps/web/lib/env.ts)
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-dummy-publishable-key
       SUPABASE_SERVICE_ROLE_KEY: ci-dummy-service-role-key
       NEXT_PUBLIC_APP_URL: http://localhost:3000

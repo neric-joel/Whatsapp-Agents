@@ -226,4 +226,3 @@ authoritative. **Never commit real secrets.**
 - [OBSERVABILITY.md](OBSERVABILITY.md) — logging, health, metrics, reliability.
 - [SELF_HOSTING.md](SELF_HOSTING.md) — local Docker default + self-hosted Supabase.
 - [adr/](adr/) — architecture decision records.
-- `docs/production-hardening/` — the hardening plan, subagents, and Definition of Done.

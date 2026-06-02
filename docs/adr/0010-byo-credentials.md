@@ -1,7 +1,7 @@
 # 0010 — Bring-your-own CLI / API-key credentials (per-user keychain)
 
 - **Status:** Accepted (autonomous decision — owner pre-approved the design in the WS2
-  campaign brief; see `docs/production-hardening/specs/2026-06-01-ws2-byo-cli-credentials.md`)
+  campaign brief)
 - **Date:** 2026-06-01
 
 ## Context
