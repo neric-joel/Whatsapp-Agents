@@ -1,6 +1,6 @@
 # 0008 — MIT license
 
-- **Status:** Accepted (owner may revisit before v1.0)
+- **Status:** Accepted
 - **Date:** 2026-05-31
 
 ## Context

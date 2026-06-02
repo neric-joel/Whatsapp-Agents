@@ -22,8 +22,8 @@ prefer to remain anonymous.
 
 ## Supported versions
 
-This is pre-1.0 software. Security fixes target the `main` branch (and the latest
-tagged release once `v1.0.0` ships). Older commits are not maintained.
+Security fixes target the `main` branch and the latest tagged release (currently the
+`v1.x` line). Older tags are not maintained — upgrade to the latest release.
 
 ## Trust model (read this before you deploy)
 
