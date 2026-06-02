@@ -62,7 +62,7 @@ const BASE_ENV_KEYS = [
 
 /** Provider auth the agent CLIs legitimately read from the environment. */
 const PROVIDER_ENV_PATTERN =
-  /^(ANTHROPIC_|CLAUDE_CODE_|OPENAI_|CODEX_|RUFLO_|AWS_|AZURE_|GOOGLE_|GEMINI_|VERTEX_)/i
+  /^(ANTHROPIC_|CLAUDE_CODE_|OPENAI_|CODEX_|AWS_|AZURE_|GOOGLE_|GEMINI_|VERTEX_)/i
 
 /**
  * Build a minimal, allowlisted environment for a child agent CLI. Secrets are

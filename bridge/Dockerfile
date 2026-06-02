@@ -7,7 +7,7 @@
 #   docker build -f bridge/Dockerfile -t agentroom-bridge .
 #
 # TRUST MODEL (see docs/SELF_HOSTING.md): by default this image can only run the
-# MOCK adapter. The real adapters (claude / codex / ruflo / myclaude) shell out to
+# MOCK adapter. The real adapters (claude / codex) shell out to
 # host-installed CLIs that are NOT present in this image — running them requires a
 # derived image that bakes in those CLIs + their provider auth, or running the
 # bridge on the host. The bridge holds the Supabase SERVICE_ROLE key: inject it at

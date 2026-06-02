@@ -28,7 +28,7 @@ tagged release once `v1.0.0` ships). Older commits are not maintained.
 ## Trust model (read this before you deploy)
 
 - **The bridge executes CLIs on its host.** Real agent adapters (`claude-code`,
-  `codex-cli`, `ruflo`, `myclaude`) spawn host-installed binaries as child processes.
+  `codex-cli`) spawn host-installed binaries as child processes.
   Anyone who can create an agent + send a message in a room the bridge serves can
   cause those CLIs to run. **Run the bridge only where you trust the room
   participants and the installed CLIs.** The default Docker bridge image ships the

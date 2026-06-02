@@ -17,3 +17,5 @@ are marked, not deleted. Format is [MADR](https://adr.github.io/madr/)-lite — 
 | [0008](0008-mit-license.md) | MIT license | Accepted (owner may revisit before v1.0) |
 | [0009](0009-v1.0.1-deferred-gates.md) | v1.0.1 deferred gates (tag-now-with-gaps vs wait) | Proposed |
 | [0010](0010-byo-credentials.md) | Bring-your-own CLI/API-key credentials (per-user keychain, AES-GCM) | Accepted |
+| [0011](0011-team-collaboration-discuss.md) | Team-collaboration `/discuss` (plan → execute → integrate → converge) + adversarial `/debate` | Accepted |
+| [0012](0012-remove-unused-ruflo-myclaude-adapters.md) | Remove the unused `ruflo` and `myclaude` adapters | Accepted |

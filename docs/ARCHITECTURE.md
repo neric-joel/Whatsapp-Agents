@@ -17,7 +17,7 @@ For operations see [OBSERVABILITY.md](OBSERVABILITY.md); for setup see
 | **Supabase** | Postgres + Auth + Realtime + Storage | Data, auth, row-level security, realtime broadcast, file storage; **the work queue is the `agent_runs` table** |
 | **Bridge** (`bridge`) | Node.js + TypeScript (run via tsx) | Polls the queue, builds the context packet, runs agent CLIs as subprocesses, writes replies back |
 | **Shared** (`packages/shared`) | TypeScript (ESM) | Types + helpers shared by web + bridge (`ContextPacketV1`, `AgentEvent`, logger, redaction, error tracking) |
-| **Agent CLIs** | external binaries | Claude Code, Codex CLI, Ruflo, custom Claude, and a mock adapter |
+| **Agent CLIs** | external binaries | Claude Code, Codex CLI, and a mock adapter |
 
 ## Data-flow
 
@@ -32,7 +32,7 @@ flowchart TD
   end
   RH["Next.js route handlers\n(apps/web/app/api/*)"]
   Bridge["Bridge daemon\n(polls agent_runs)"]
-  CLIs["Agent CLIs\n(claude / codex / ruflo / mock)"]
+  CLIs["Agent CLIs\n(claude / codex / mock)"]
 
   Browser -- "auth + realtime subscribe" --> Supabase
   Browser -- "POST message" --> RH
@@ -215,7 +215,7 @@ authoritative. **Never commit real secrets.**
 | `BRIDGE_HEALTH_PORT` | no | `9090` | Liveness/metrics HTTP port (`/healthz`, `/metrics`); `0` disables. Bind internal-only |
 | `LOG_LEVEL` | no | `info` | Log level |
 | `SENTRY_DSN` / `ERROR_TRACKING_DSN` | no | — | Opt-in error tracking |
-| `CLAUDE_BIN` / `CODEX_BIN` / `MYCLAUDE_BIN` / `RUFLO_BIN` | no | command name on `PATH` | Allowlisted absolute paths to agent CLIs |
+| `CLAUDE_BIN` / `CODEX_BIN` | no | command name on `PATH` | Path/command for the agent CLIs the bridge spawns |
 | `ENABLE_IMAGE_TEXT_EXTRACTION` | no | `false` | Enable OpenAI image-text egress (**off by default**) |
 | `OPENAI_API_KEY` | conditional | — | Required only if image-text extraction is enabled |
 | `OPENAI_VISION_MODEL` | no | `gpt-4.1-mini` | Vision model for extraction |

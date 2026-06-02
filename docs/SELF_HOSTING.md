@@ -36,8 +36,8 @@ for the write-path API. `web` and `bridge` both talk to Supabase server-side usi
 - **pnpm ≥ 11** — `npm install -g pnpm@11.0.8` (or `corepack enable`).
 - **Docker** (Desktop or Engine) — for the local Supabase stack and the container images.
 - **Supabase CLI** — https://supabase.com/docs/guides/cli (`brew install supabase/tap/supabase`, `scoop install supabase`).
-- **(Optional) Agent CLIs** on the host that runs the bridge: `claude`, `codex`, `ruflo`,
-  `myclaude` — only needed to run those real agents (see the trust model below).
+- **(Optional) Agent CLIs** on the host that runs the bridge: `claude`, `codex` — only
+  needed to run those real agents (see the trust model below).
 
 ---
 
@@ -173,8 +173,8 @@ rather than failing mysteriously later.
 
 This is the most important security decision when self-hosting.
 
-The bridge executes **real local CLI programs** (`claude`, `codex`, `ruflo`,
-`myclaude`) as child processes to produce agent replies. It does so safely
+The bridge executes **real local CLI programs** (`claude`, `codex`) as child
+processes to produce agent replies. It does so safely
 (`shell: false`, an allow-listed child environment with secrets stripped, a binary-path
 allowlist, an output cap, and process-tree kill on timeout/abort) — but the model has
 direct consequences:
@@ -189,7 +189,7 @@ direct consequences:
    - **Run the bridge on a host** that already has the CLIs installed and authenticated
      (the simplest production model), **or**
    - **Build a derived image** that installs those CLIs and supplies their provider auth
-     (e.g. `ANTHROPIC_*`, `OPENAI_*`, `CODEX_*`, `RUFLO_*` and the CLIs' own config/auth
+     (e.g. `ANTHROPIC_*`, `OPENAI_*`, `CODEX_*` and the CLIs' own config/auth
      dirs). Treat that image as highly privileged.
 
 3. **Provider auth is forwarded, not stored by AgentRoom.** The bridge passes through an

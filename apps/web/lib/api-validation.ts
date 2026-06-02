@@ -101,24 +101,9 @@ export const updateMemorySchema = z
 // user-set `system_prompt` is attacker-influenced: the bridge delivers it to the
 // CLI via stdin only, never argv (see bridge/src/lib/subprocess-security.ts and
 // the subprocess-security tests) — this schema does not relax that invariant.
-export const AGENT_ADAPTER_TYPES = [
-  'mock',
-  'claude-code',
-  'subprocess',
-  'codex-cli',
-  'myclaude',
-  'ruflo',
-] as const
+export const AGENT_ADAPTER_TYPES = ['mock', 'claude-code', 'subprocess', 'codex-cli'] as const
 
-export const AGENT_PROVIDERS = [
-  'claude_code',
-  'codex',
-  'mock',
-  'ruflo',
-  'myclaude',
-  'openai',
-  'custom',
-] as const
+export const AGENT_PROVIDERS = ['claude_code', 'codex', 'mock', 'openai', 'custom'] as const
 
 const agentSlug = z
   .string()
