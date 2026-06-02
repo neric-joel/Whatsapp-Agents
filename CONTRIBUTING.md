@@ -58,7 +58,7 @@ job is informational (a known transitive advisory tracked for the next@15 upgrad
 ## Branching, commits, and PRs
 
 - **Never push to `main`.** It is protected. Work on a branch and open a PR.
-- Branch naming: `feat/…`, `fix/…`, or `harden/…` for hardening-effort work.
+- Branch naming: `feat/…`, `fix/…`, `chore/…`, or `docs/…`.
 - **[Conventional Commits](https://www.conventionalcommits.org/):** `feat(p6): …`,
   `fix(security): …`, `docs: …`, `test: …`, `chore: …`.
 - Keep a PR to **one concern**. Fill in the PR template (what/why, changes, risk &

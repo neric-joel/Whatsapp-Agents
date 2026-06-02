@@ -10,12 +10,10 @@ _Nothing yet._
 
 ## [1.0.0] - 2026-05-31
 
-First production-ready release. The pre-1.0 production-hardening effort
-(`docs/production-hardening/`) turned the MVP into a self-hostable, OSS-ready
-project across eleven phases, each landed via a CI-green PR and a saved
-adversarial review (`docs/reviews/`). A final 10-dimension pre-v1.0 security +
-correctness sweep returned **GO** (0 Critical, 0 confirmed High;
-`docs/reviews/2026-05-31-pre-v1.0-adversarial-sweep.md`). Highlights by phase:
+First production-ready release. A pre-1.0 hardening effort turned the MVP into a
+self-hostable, OSS-ready project across eleven phases, each landed via a CI-green PR and
+an adversarial review. A final 10-dimension pre-v1.0 security + correctness sweep
+returned **GO** (0 Critical, 0 confirmed High). Highlights by phase:
 
 ### Added
 

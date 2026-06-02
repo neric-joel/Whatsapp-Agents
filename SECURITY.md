@@ -58,6 +58,5 @@ tagged release once `v1.0.0` ships). Older commits are not maintained.
 
 ## Hardening status
 
-The repository tracks a multi-phase production-hardening effort
-(`docs/production-hardening/`). Phase 1 (security) findings and fixes are documented
-in `docs/reviews/`. `pnpm audit`, `gitleaks` (secret scan), and CodeQL run in CI.
+AgentRoom went through a multi-phase, security-focused pre-1.0 hardening effort with
+adversarial review. `pnpm audit`, `gitleaks` (secret scan), and CodeQL run in CI on every PR.

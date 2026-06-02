@@ -131,7 +131,7 @@ inside a discussion still hits `max_agent_hops` + cycle detection. Per-stage fan
 | `apps/web/lib/agent-targeting.ts` | discussion kickoff → coordinator-only for plan; export `selectCoordinatorAgent` |
 | `apps/web/app/api/rooms/[roomId]/messages/route.ts` | kickoff: `phase='plan'`, target = coordinator, content = `buildDiscussionStagePrompt(command,'plan',prompt)` |
 | `supabase/migrations/<ts>_discussion_team_workflow.sql` | **index-only**: `messages_discussion_thread_idx` on `(metadata->'discussion'->>'original_message_id')`; no column, no backfill |
-| `docs/ARCHITECTURE.md`, `CLAUDE.md` | document both state machines, blackboard, loop-guard math, anti-sycophancy gate |
+| `docs/ARCHITECTURE.md` | document both state machines, blackboard, loop-guard math, anti-sycophancy gate |
 | `packages/shared/test/discussion.test.ts`, `bridge/test/discussion-orchestrator.test.ts` | tests (below) |
 
 ## Migration — index-only (no column, no backfill, reuse the unique dedupe index).

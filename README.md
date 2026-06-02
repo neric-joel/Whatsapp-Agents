@@ -4,31 +4,30 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/neric-joel/Whatsapp-Agents?sort=semver)](https://github.com/neric-joel/Whatsapp-Agents/releases/latest)
 
-AgentRoom is a WhatsApp/Slack-style group chat for local LLM agents. A human can create a room, add named agents, send a message, and watch each active agent respond as a visible participant in the same conversation.
+**A WhatsApp/Slack-style group chat where local LLM agents are named, visible participants.**
 
-The project is built as a pnpm monorepo with a Next.js web app, a Supabase-backed data layer, and a separate TypeScript bridge daemon that executes local agent CLIs such as Claude Code and Codex CLI.
+Create a room, add agents, send a message, and watch each active agent reply in the same conversation — or run **`/discuss`** to make them work as a *team*: a coordinator decomposes the problem, divides it by capability, the agents build on each other's work on a shared blackboard, and they converge on one answer **with attribution**.
+
+Built as a pnpm monorepo: a Next.js web app, a Supabase-backed data layer, and a separate TypeScript bridge daemon that executes local agent CLIs such as Claude Code and Codex CLI.
 
 ## Demo
 
-![AgentRoom working demo](docs/demo/agentroom-demo.gif)
+![AgentRoom demo: a `/discuss` where a coordinator assigns sub-tasks by capability, two agents execute and cross-review on a shared blackboard, and the team converges on one answer with attribution — then a switch to a dark theme.](docs/demo/agentroom-demo.gif)
 
 ## Features
 
-- Group chat UI with named AI participants
-- Supabase Auth, Postgres, Storage, and Realtime
-- Queue-based agent execution through the `agent_runs` table
-- Bridge daemon for subprocess-based agent adapters
-- Claude Code, Codex CLI, Ruflo, custom Claude, and mock adapter support
-- Bring-your-own provider credentials — per-user API keys, encrypted at rest, bound to agents (Settings → Providers)
-- Mentions with `@agent_slug` and `@everyone`
-- `/discuss` mode for multi-agent deliberation before a final answer
-- Agent-to-agent tag turns with loop guards
-- File attachments, pasted screenshots, signed download links, and image text extraction support
-- Message pinning and unpinning
-- Tool approval flow for protected actions
-- Run cancellation for stuck or unwanted agent responses
-- Markdown and math rendering for agent replies
-- Hallucination flagging and rejection workflow
+- Group chat UI with named AI participants; one human message fans out to every active agent
+- **Real team collaboration via `/discuss`** — a coordinator decomposes the problem and assigns sub-tasks by capability; agents execute on a shared blackboard *seeing each other's work*, cross-review, and converge on one answer **with attribution** — plus an anti-sycophancy *dissent* gate so the team never rubber-stamps
+- **Adversarial `/debate`** — agents argue distinct assigned positions, then a coordinator adjudicates a winner (not a merge)
+- **Bring-your-own CLI / API key** — per-user provider credentials, AES-256-GCM encrypted at rest, bound to agents (Settings → Providers)
+- Claude Code, Codex CLI, Ruflo, custom-Claude, and mock adapters
+- Mentions with `@agent_slug` / `@everyone`; agent-to-agent tag turns with loop guards
+- Per-room memory: `/remember` and `/recall`
+- File attachments, pasted screenshots, signed download links, optional image text extraction
+- Message pinning; tool-approval for protected actions; run cancellation
+- Markdown + math (KaTeX) rendering; hallucination flagging on agent replies
+- **7 accessible themes** (light & dark families), WCAG 2.1 AA verified
+- Supabase Auth/Postgres/Storage/Realtime; queue-based execution via the `agent_runs` table + a subprocess bridge daemon
 
 ## Repository Layout
 
@@ -214,15 +213,15 @@ Mention all eligible agents:
 @everyone compare these approaches
 ```
 
-Start a structured team discussion:
+Run a problem as a team:
 
 ```text
-/discuss Solve this integral: integral from 0 to pi/2 of dx / (1 + tan x)^2
+/discuss Design a rate limiter for our API: algorithm, storage, and how to handle bursts
 ```
 
-In discussion mode, agents first contribute independently, then critique and synthesize, then produce a final consensus answer. Agent replies only create follow-up runs when tag-turn mode allows it and the reply explicitly mentions another eligible agent.
+`/discuss` runs a real collaboration: a **coordinator** breaks the problem into complementary sub-tasks and assigns one to each agent by capability (the shared *blackboard*); each agent **executes its part while seeing its teammates' work** and builds on it; they **cross-review** each other; then the coordinator **converges on one answer that attributes who did what**. If no one has substantively challenged the emerging answer, an extra *dissent* round runs first — so the team never rubber-stamps. Use **`/debate`** instead to have agents argue distinct assigned positions and let the coordinator adjudicate a winner.
 
-Other commands include `/debate`, `/remember`, `/recall`, `/handoff @agent`, `/agents`, `/pin`, and `/reset` (admin). Type `/help` in any room to see the full, role-aware list.
+Other commands: `/remember`, `/recall`, `/handoff @agent`, `/agents`, `/pin`, `/reset` (admin). Type `/help` in any room for the full, role-aware list.
 
 ## Providers & API Keys (bring your own)
 
@@ -285,7 +284,7 @@ If a tagged agent does not respond, check that the agent is:
 
 ## Project Status
 
-The MVP is complete. Current work focuses on hardening the local developer experience, improving multi-agent deliberation quality, and making output rendering stable for real math and code-heavy answers.
+Production-ready (v1.0). The MVP, the multi-phase security/quality hardening, the team-collaboration `/discuss` redesign, and the bring-your-own-credentials feature have all landed. Ongoing work focuses on broader provider support and polishing multi-agent output quality.
 
 ## Documentation
 
