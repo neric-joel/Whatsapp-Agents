@@ -11,7 +11,7 @@
 - [ ] typecheck / lint / test / build green (CI link: __)
 - [ ] phase-specific checks (e2e / a11y / gitleaks / audit): __
 - [ ] screenshots for UI changes: __
-- [ ] critic + specialist review attached (docs/reviews/__)
+- [ ] code review requested / attached
 
 ## Notes
-<web sources cited; local .claude assets used; follow-ups filed as issues>
+<rationale; any follow-ups filed as issues>

@@ -8,6 +8,7 @@ type ApiErrorCode =
   | 'CONFLICT'
   | 'RATE_LIMITED'
   | 'INTERNAL_ERROR'
+  | 'SERVICE_UNAVAILABLE'
 
 export function apiError(
   code: ApiErrorCode,

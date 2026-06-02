@@ -37,7 +37,14 @@ export function detectHallucination(content: string): HallucinationResult {
     }
   }
 
-  const flagged = reasons.length > 0
-  const confidence = reasons.length >= 3 ? 'high' : reasons.length === 2 ? 'medium' : 'low'
-  return { flagged, confidence, reasons }
+  // Dedupe reasons: the self-contradiction scan above can push the same reason once
+  // per outer-loop line, and confidence is derived from reason COUNT — so duplicates
+  // would (a) falsely inflate confidence toward 'high' from a single category and
+  // (b) collide as non-unique React keys in HallucinationBanner. Confidence must
+  // reflect distinct signal categories, not repeat hits of one.
+  const uniqueReasons = [...new Set(reasons)]
+  const flagged = uniqueReasons.length > 0
+  const confidence =
+    uniqueReasons.length >= 3 ? 'high' : uniqueReasons.length === 2 ? 'medium' : 'low'
+  return { flagged, confidence, reasons: uniqueReasons }
 }

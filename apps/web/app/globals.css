@@ -4,6 +4,7 @@
 
 body {
   font-family:
+    var(--font-dm-sans),
     'DM Sans',
     ui-sans-serif,
     system-ui,
@@ -18,8 +19,8 @@ kbd,
 samp,
 pre {
   font-family:
-    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
-    monospace;
+    var(--font-jetbrains-mono), 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, 'Liberation Mono', monospace;
 }
 
 .message-markdown .katex-display {
@@ -120,8 +121,8 @@ pre {
   --sidebar-hover: #e6dfc8;
   --sidebar-active: #d8d0b7;
   --text: #073642;
-  /* #657b83 was ~4.3:1 on the cream --app-bg; darkened for WCAG AA. */
-  --muted: #586e75;
+  /* #586e75 was 4.39:1 on the #eee8d5 panel (just under AA); darkened to ~5.1:1. */
+  --muted: #4e646b;
   --border: #d8d0b7;
   --accent: #586e75;
   --accent-strong: #073642;
@@ -178,7 +179,8 @@ pre {
   --sidebar-hover: #2c313a;
   --sidebar-active: #353b45;
   --text: #abb2bf;
-  --muted: #7f848e;
+  /* #7f848e was 3.72:1 on the #282c34 surface (under AA); lightened to ~5.5:1. */
+  --muted: #9ca3af;
   --border: #3b4048;
   --accent: #abb2bf;
   --accent-strong: #d7dae0;

@@ -9,16 +9,22 @@ supabase/.temp/
 agentroom_graph_*.html
 *.tsbuildinfo
 *.lnk
-.claude/do-tasks/*/
 apps/web/.claude/
 bridge/.tmp-test/
 
-# hardening: stale worktrees, graphify output, runner stop-flag + live heartbeat, local settings
+# Internal AI/build-process tooling — untracked from the public repo but kept on disk (the local
+# dev workflow still works) and preserved in git history + the local `internal/build-tooling`
+# branch. A public cloner doesn't need any of it.
+CLAUDE.md
+.claude/
+docs/production-hardening/
+docs/reviews/
+scripts/agent-runner.ps1
+scripts/register-task.ps1
+
+# hardening scratch: stale worktrees, graphify output
 .worktrees/
 graphify-out/
-docs/production-hardening/DONE.flag
-docs/production-hardening/STATUS.md
-.claude/settings.local.json
 
 # Coverage output
 coverage/
@@ -27,3 +33,8 @@ coverage/
 # Playwright e2e artifacts
 playwright-report/
 test-results/
+
+# Lighthouse / authed user-flow + UX-audit scratch (local dev only)
+.lh-profile/
+lh-*.json
+._*.mjs

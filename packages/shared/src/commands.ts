@@ -42,6 +42,16 @@ export const COMMAND_REGISTRY: Record<string, CommandSpec> = {
     argsSpec: '<problem>',
     surface: 'chat',
   },
+  debate: {
+    // Server-side synonym of /discuss (parseDiscussionCommand accepts both). Listed
+    // here so it is discoverable in /help, role-gated, and recognized by the parser
+    // — closing the registry⇄dispatch divergence flagged in the pre-v1.0 sweep.
+    name: 'debate',
+    description: 'Alias of /discuss — start a multi-agent discussion',
+    minRole: 'member',
+    argsSpec: '<problem>',
+    surface: 'chat',
+  },
   remember: {
     name: 'remember',
     description: 'Save a memory note for this room (or --global)',

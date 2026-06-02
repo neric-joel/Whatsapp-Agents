@@ -1,7 +1,13 @@
 import { spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
 
-import type { AgentAdapter, AgentEvent, AgentResponseV1, ContextPacketV1 } from '@agentroom/shared'
+import type {
+  AgentAdapter,
+  AgentEvent,
+  AgentResponseV1,
+  ContextPacketV1,
+  RuntimeCredential,
+} from '@agentroom/shared'
 
 import {
   BinaryNotFoundError,
@@ -73,7 +79,11 @@ export abstract class SubprocessAdapter implements AgentAdapter {
     return null
   }
 
-  async *run(packet: ContextPacketV1, signal: AbortSignal): AsyncGenerator<AgentEvent> {
+  async *run(
+    packet: ContextPacketV1,
+    signal: AbortSignal,
+    runtime?: RuntimeCredential,
+  ): AsyncGenerator<AgentEvent> {
     const args = this.buildArgs(packet)
 
     // Resolve the binary to an absolute path from a trusted source (the *_BIN
@@ -109,11 +119,26 @@ export abstract class SubprocessAdapter implements AgentAdapter {
       forceExitResolve = r
     })
 
+    // BYO credential (ADR-0010): inject the resolved key into THIS child's one env var
+    // (after the strip/allowlist). The decrypted secret arrives out-of-band via `runtime`
+    // — never in the packet/stdin, argv, or logs. base_url (non-secret) is set alongside.
+    const childEnv = runtime
+      ? buildChildEnv(process.env, { inject: { name: runtime.envVarName, value: runtime.secret } })
+      : buildChildEnv()
+    if (runtime?.baseUrl && runtime.baseUrlEnvName) {
+      childEnv[runtime.baseUrlEnvName] = runtime.baseUrl
+    }
+
     const child = spawn(target.command, target.args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: false, // never spawn through a shell — no command-injection surface
-      env: buildChildEnv(), // allowlisted env — secrets are never forwarded
+      env: childEnv, // allowlisted env — process.env secrets stripped; only the resolved BYO var injected
       windowsHide: true,
+      // On POSIX, make the child its own process-group leader so a force-kill can
+      // signal the WHOLE group (`process.kill(-pid)`) and reap grandchildren — a bare
+      // `process.kill(pid)` would orphan them. Windows uses `taskkill /T` instead, and
+      // `detached` there would spawn a stray console window, so keep it POSIX-only.
+      detached: process.platform !== 'win32',
     })
 
     // SIGTERM → 2s grace → force-kill. Some CLIs ignore termination, so
@@ -300,13 +325,21 @@ export abstract class SubprocessAdapter implements AgentAdapter {
       return
     }
 
+    // POSIX: the child was spawned `detached`, so it leads its own process group
+    // whose id == pid. Signal the NEGATIVE pid to SIGKILL the entire group —
+    // children and grandchildren — not just the direct child (which would orphan
+    // the subtree). Fall back to the direct pid if the group kill fails.
     try {
-      process.kill(pid, 'SIGKILL')
+      process.kill(-pid, 'SIGKILL')
     } catch {
       try {
-        process.kill(pid, 'SIGTERM')
+        process.kill(pid, 'SIGKILL')
       } catch {
-        /* best effort */
+        try {
+          process.kill(pid, 'SIGTERM')
+        } catch {
+          /* best effort */
+        }
       }
     }
   }

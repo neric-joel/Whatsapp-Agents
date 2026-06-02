@@ -94,6 +94,9 @@ describe('parseSlashCommand', () => {
     expect(parseSlashCommand('@claude_thinker hello')).toBeNull()
     expect(parseSlashCommand('just a normal message')).toBeNull()
     expect(parseSlashCommand('/discuss should we ship?')).toBeNull()
+    // /debate is a registered /discuss synonym — it must pass through (not "unknown"),
+    // matching the server dispatch (registry⇄parser⇄dispatch parity).
+    expect(parseSlashCommand('/debate should we ship?')).toBeNull()
     // a stray leading slash that is not command-like flows through as a message
     expect(parseSlashCommand('/123 not a command')).toBeNull()
   })

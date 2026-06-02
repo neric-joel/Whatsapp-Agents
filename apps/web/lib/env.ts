@@ -7,9 +7,9 @@ import { z } from 'zod'
  * misconfiguration fails fast with a message that NAMES the bad var, instead of
  * surfacing as a cryptic Supabase "Invalid URL" at request time.
  *
- * CRITICAL (see CLAUDE.md §7): the publishable key var is
- * `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` — never `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
- * We explicitly reject the deprecated name to catch copy-paste mistakes early.
+ * CRITICAL: the publishable key var is `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` — never the
+ * deprecated `NEXT_PUBLIC_SUPABASE_ANON_KEY`. We explicitly reject the deprecated name to catch
+ * copy-paste mistakes early.
  */
 
 const serverEnvSchema = z
@@ -29,7 +29,7 @@ const serverEnvSchema = z
         code: z.ZodIssueCode.custom,
         path: ['NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'],
         message:
-          'is required — you set the deprecated NEXT_PUBLIC_SUPABASE_ANON_KEY; rename it to NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (CLAUDE.md §7)',
+          'is required — you set the deprecated NEXT_PUBLIC_SUPABASE_ANON_KEY; rename it to NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
       })
     }
   })
