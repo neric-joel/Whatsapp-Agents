@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@agentroom/shared": "workspace:*",
-    "@supabase/supabase-js": "^2.106.2",
+    "@supabase/supabase-js": "^2.108.1",
     "dotenv": "^17.4.2",
     "zod": "4.4.3"
   },
