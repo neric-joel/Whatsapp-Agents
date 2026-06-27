@@ -1,8 +1,7 @@
-import type { AgentEvent, ContextPacketV1, SenderType } from '@agentroom/shared'
+import type { AgentEvent, ContextPacketV1 } from '@agentroom/shared'
 
-import { formatRosterForPrompt } from '../agents/format-roster.js'
-import { formatFilesForPrompt } from '../context/file-context.js'
-import { formatMemoryForPrompt } from '../memory/format-memory.js'
+import { parseCodexJsonLine } from './output-parsers.js'
+import { buildAgentPrompt } from './prompt.js'
 import { SubprocessAdapter } from './subprocess-adapter.js'
 
 export class CodexCliAdapter extends SubprocessAdapter {
@@ -21,93 +20,13 @@ export class CodexCliAdapter extends SubprocessAdapter {
   }
 
   protected buildStdin(packet: ContextPacketV1): string {
-    const triggerMessage = packet.trigger_message
-    const history = packet.recent_messages
-      .filter((m) => m.id !== triggerMessage.id)
-      .map((message) => `${this.senderLabel(message.sender_type)}: ${message.content}`)
-      .join('\n')
-
-    const sections = [
-      `You are ${packet.agent.name}, a coding assistant in the room "${packet.room.name}".`,
-    ]
-
-    if (history) {
-      sections.push(
-        `Relevant recent context only. Use it as background, but prioritize the current message if there is any conflict:\n${history}`,
-      )
-    }
-
-    const rosterContext = formatRosterForPrompt(packet.roster)
-    if (rosterContext) sections.push(rosterContext)
-
-    const memoryContext = formatMemoryForPrompt(packet.memory)
-    if (memoryContext) sections.push(memoryContext)
-
-    const fileContext = formatFilesForPrompt(packet.files)
-    if (fileContext) sections.push(fileContext)
-
-    sections.push(`-----
-CURRENT MESSAGE YOU MUST RESPOND TO:
-${triggerMessage.content}
------
-
-Respond directly and specifically to the CURRENT MESSAGE above as ${packet.agent.name}.`)
-
-    return sections.join('\n\n')
+    return buildAgentPrompt(packet, {
+      intro: `You are ${packet.agent.name}, a coding assistant in the room "${packet.room.name}".`,
+      includeSystemPrompt: false,
+    })
   }
 
   protected parseStdoutLine(line: string): AgentEvent | null {
-    let obj: Record<string, unknown>
-
-    try {
-      obj = JSON.parse(line) as Record<string, unknown>
-    } catch {
-      // `codex exec --json` emits structured JSON events for all real content, so a
-      // non-JSON line is process noise — e.g. a Windows "SUCCESS: The process with
-      // PID … has been terminated." notice from a killed codex helper — and must NOT
-      // be surfaced as agent reply content (it would pollute the answer). Drop it.
-      return null
-    }
-
-    const content = this.extractMessageContent(obj)
-    if (content) {
-      return { type: 'visible_message', run_id: '', content }
-    }
-
-    // Defer to the base parser for control envelopes (memory_op / handoff_requested).
-    return super.parseStdoutLine(line)
-  }
-
-  private senderLabel(senderType: SenderType): string {
-    if (senderType === 'user') return 'User'
-    if (senderType === 'system') return 'System'
-    return 'Agent'
-  }
-
-  private extractMessageContent(event: Record<string, unknown>): string | null {
-    if (this.isMessageEvent(event)) {
-      return this.contentFromRecord(event)
-    }
-
-    const item = event.item
-    if (this.isRecord(item) && this.isMessageEvent(item)) {
-      return this.contentFromRecord(item)
-    }
-
-    return null
-  }
-
-  private isMessageEvent(event: Record<string, unknown>): boolean {
-    return event.type === 'message' || event.type === 'agent_message'
-  }
-
-  private contentFromRecord(record: Record<string, unknown>): string | null {
-    if (typeof record.content === 'string') return record.content
-    if (typeof record.text === 'string') return record.text
-    return null
-  }
-
-  private isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === 'object' && value !== null && !Array.isArray(value)
+    return parseCodexJsonLine(line) ?? super.parseStdoutLine(line)
   }
 }

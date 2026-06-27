@@ -14,7 +14,8 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test test/**/*.test.ts"
+    "test": "tsx --test test/**/*.test.ts",
+    "test:coverage": "tsx --test test/**/*.test.ts"
   },
   "dependencies": {
     "@agentroom/shared": "workspace:*",

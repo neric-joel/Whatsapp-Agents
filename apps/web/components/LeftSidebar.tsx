@@ -365,14 +365,24 @@ export default function LeftSidebar() {
     >
       <div className="flex items-center justify-between p-4 pb-2">
         <span className="text-base font-bold text-[var(--text)]">AgentRoom</span>
-        <Link
-          href="/settings"
-          aria-label="Settings — providers and API keys"
-          title="Settings"
-          className="rounded-md px-2 py-1 text-xs text-[var(--muted)] transition-colors hover:text-[var(--text)]"
-        >
-          ⚙ Settings
-        </Link>
+        <div className="flex items-center gap-1">
+          <Link
+            href="/connections"
+            aria-label="Connections — connect your agent CLIs"
+            title="Connections"
+            className="rounded-md px-2 py-1 text-xs text-[var(--muted)] transition-colors hover:text-[var(--text)]"
+          >
+            🔌 Connect
+          </Link>
+          <Link
+            href="/settings"
+            aria-label="Settings — providers and API keys"
+            title="Settings"
+            className="rounded-md px-2 py-1 text-xs text-[var(--muted)] transition-colors hover:text-[var(--text)]"
+          >
+            ⚙ Settings
+          </Link>
+        </div>
       </div>
       <div className="px-4 py-2 text-[11px] font-medium uppercase tracking-widest text-[var(--muted)]">
         ROOMS

@@ -1,4 +1,4 @@
-import { getDb, intBool, jsonText, newId, rowToAgent } from '@agentroom/db'
+import { getDb, getProfile, intBool, jsonText, newId, rowToAgent } from '@agentroom/db'
 import { NextRequest } from 'next/server'
 
 import { apiError, apiSuccess } from '@/lib/api-error'
@@ -54,6 +54,19 @@ export async function POST(req: NextRequest) {
     return apiError('VALIDATION_ERROR', 'Invalid request body', 400, parsed.error.flatten())
   }
   const input = parsed.data
+
+  // adapter_type 'cli' (a connected CLI): the profile id is stored in `provider` so
+  // the bridge's CliProfileAdapter can resolve it. Validate the profile exists.
+  let providerToStore: string = input.provider
+  if (input.adapter_type === 'cli') {
+    if (!input.cli_profile_id) {
+      return apiError('VALIDATION_ERROR', 'cli_profile_id is required for a CLI agent', 400)
+    }
+    if (!getProfile(input.cli_profile_id)) {
+      return apiError('VALIDATION_ERROR', 'cli_profile_id does not match a connected CLI', 400)
+    }
+    providerToStore = input.cli_profile_id
+  }
 
   const db = getDb()
   try {
@@ -113,7 +126,7 @@ export async function POST(req: NextRequest) {
         input.name,
         input.slug,
         input.avatar_url ?? null,
-        input.provider,
+        providerToStore,
         input.adapter_type ?? 'subprocess',
         input.model ?? null,
         input.system_prompt ?? null,

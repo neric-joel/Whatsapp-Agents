@@ -34,6 +34,16 @@ export abstract class SubprocessAdapter implements AgentAdapter {
     return JSON.stringify(packet)
   }
 
+  /**
+   * Extra environment variables to set on the child, merged AFTER the secret-strip
+   * allowlist. Default none. A profile-driven adapter overrides this to apply the
+   * optional per-profile `env` a user explicitly opted into (their own machine,
+   * their own config) — process.env secrets are still never forwarded.
+   */
+  protected extraChildEnv(): Record<string, string> {
+    return {}
+  }
+
   protected parseStdoutLine(line: string): AgentEvent | null {
     try {
       const obj = JSON.parse(line) as Record<string, unknown>
@@ -128,6 +138,9 @@ export abstract class SubprocessAdapter implements AgentAdapter {
     if (runtime?.baseUrl && runtime.baseUrlEnvName) {
       childEnv[runtime.baseUrlEnvName] = runtime.baseUrl
     }
+    // Per-profile env the user explicitly configured (BYO CLI). Applied last so it
+    // wins over the base allowlist for exactly the vars the user opted into.
+    for (const [k, v] of Object.entries(this.extraChildEnv())) childEnv[k] = v
 
     const child = spawn(target.command, target.args, {
       stdio: ['pipe', 'pipe', 'pipe'],
