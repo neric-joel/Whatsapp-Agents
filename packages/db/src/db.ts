@@ -39,10 +39,32 @@ export function getDb(): Database.Database {
   db.pragma('foreign_keys = ON')
   db.pragma('busy_timeout = 5000')
   db.exec(SCHEMA_SQL)
+  applyMigrations(db)
   seedIfEmpty(db)
 
   _db = db
   return db
+}
+
+/**
+ * Additive column migrations for DBs created before a column existed. SCHEMA_SQL uses
+ * CREATE TABLE IF NOT EXISTS, which does NOT add new columns to an existing table — so
+ * pre-existing local DBs need an explicit ADD COLUMN. Each is guarded: a duplicate-column
+ * error means it's already applied (idempotent, safe on every boot).
+ */
+function applyMigrations(db: Database.Database): void {
+  const addColumn = (sql: string) => {
+    try {
+      db.exec(sql)
+    } catch (e) {
+      if (!/duplicate column name/i.test(e instanceof Error ? e.message : String(e))) throw e
+    }
+  }
+  addColumn('ALTER TABLE rooms ADD COLUMN session_id TEXT')
+  // Safe now that session_id exists (fresh DBs: the CREATE TABLE already has it).
+  db.exec(
+    'CREATE INDEX IF NOT EXISTS rooms_session_idx ON rooms (session_id) WHERE session_id IS NOT NULL',
+  )
 }
 
 /** Close the singleton (tests). */

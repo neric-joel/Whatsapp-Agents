@@ -56,11 +56,12 @@ export async function POST(req: NextRequest) {
   const db = getDb()
 
   try {
-    // 3. Insert room
+    // 3. Insert room (attached to the active session if one was provided)
+    const sessionId = data.session_id ?? null
     const room = db
       .prepare(
-        `INSERT INTO rooms (id, name, room_type, reply_mode, discussion_mode, visibility, created_by_user_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO rooms (id, name, room_type, reply_mode, discussion_mode, visibility, session_id, created_by_user_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          RETURNING *`,
       )
       .get(
@@ -70,10 +71,23 @@ export async function POST(req: NextRequest) {
         data.reply_mode === 'all' ? 'everyone' : (data.reply_mode ?? 'everyone'),
         data.discussion_mode ?? 'independent',
         data.visibility ?? 'private',
+        sessionId,
         user.id,
       ) as Record<string, unknown> | undefined
 
     if (!room) return internalError('rooms create room', new Error('insert returned no row'))
+
+    // Touch the session so it sorts as the active one.
+    if (sessionId) {
+      try {
+        db.prepare('UPDATE sessions SET last_active_at = ? WHERE id = ?').run(
+          new Date().toISOString(),
+          sessionId,
+        )
+      } catch {
+        /* non-fatal */
+      }
+    }
 
     // 4. Insert creator as owner member
     db.prepare(

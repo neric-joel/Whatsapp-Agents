@@ -82,7 +82,21 @@ export interface Room {
   visibility: string
   is_archived: boolean
   last_message_at: string | null
+  /** The Cowork-style session (working context) this room belongs to, if any. */
+  session_id: string | null
   created_by_user_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** A Cowork-style working context: a named session bound to a folder on disk. */
+export interface Session {
+  id: string
+  name: string
+  /** Absolute path to the working folder this session is scoped to. */
+  working_dir: string
+  created_by_user_id: string | null
+  last_active_at: string
   created_at: string
   updated_at: string
 }

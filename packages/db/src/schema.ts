@@ -33,11 +33,27 @@ CREATE TABLE IF NOT EXISTS rooms (
   is_archived          INTEGER NOT NULL DEFAULT 0,
   context_reset_at     TEXT,
   last_message_at      TEXT,
+  session_id           TEXT,
   created_by_user_id   TEXT,
   created_at           TEXT NOT NULL DEFAULT ${ISO_NOW},
   updated_at           TEXT NOT NULL DEFAULT ${ISO_NOW}
 );
 CREATE INDEX IF NOT EXISTS rooms_last_message_at_idx ON rooms (last_message_at DESC);
+-- NOTE: the rooms(session_id) index is created in db.ts applyMigrations(), AFTER the
+-- ALTER that adds session_id — an existing DB lacks the column when SCHEMA_SQL runs, so
+-- creating the index here would abort the whole schema exec on upgrade.
+
+-- ----- sessions (Cowork-style working contexts; a session has many rooms) ---------
+CREATE TABLE IF NOT EXISTS sessions (
+  id             TEXT PRIMARY KEY,
+  name           TEXT NOT NULL,
+  working_dir    TEXT NOT NULL,
+  created_by_user_id TEXT,
+  last_active_at TEXT NOT NULL DEFAULT ${ISO_NOW},
+  created_at     TEXT NOT NULL DEFAULT ${ISO_NOW},
+  updated_at     TEXT NOT NULL DEFAULT ${ISO_NOW}
+);
+CREATE INDEX IF NOT EXISTS sessions_last_active_idx ON sessions (last_active_at DESC);
 
 -- ----- agents ----------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS agents (
@@ -241,6 +257,7 @@ CREATE INDEX IF NOT EXISTS user_credentials_user_idx ON user_credentials (user_i
 
 -- ----- updated_at triggers (replace the Postgres set_updated_at() trigger) ----
 CREATE TRIGGER IF NOT EXISTS rooms_set_updated_at        AFTER UPDATE ON rooms        FOR EACH ROW BEGIN UPDATE rooms        SET updated_at = ${ISO_NOW} WHERE id = NEW.id; END;
+CREATE TRIGGER IF NOT EXISTS sessions_set_updated_at     AFTER UPDATE ON sessions     FOR EACH ROW BEGIN UPDATE sessions     SET updated_at = ${ISO_NOW} WHERE id = NEW.id; END;
 CREATE TRIGGER IF NOT EXISTS agents_set_updated_at       AFTER UPDATE ON agents       FOR EACH ROW BEGIN UPDATE agents       SET updated_at = ${ISO_NOW} WHERE id = NEW.id; END;
 CREATE TRIGGER IF NOT EXISTS room_members_set_updated_at AFTER UPDATE ON room_members FOR EACH ROW BEGIN UPDATE room_members SET updated_at = ${ISO_NOW} WHERE id = NEW.id; END;
 CREATE TRIGGER IF NOT EXISTS messages_set_updated_at     AFTER UPDATE ON messages     FOR EACH ROW BEGIN UPDATE messages     SET updated_at = ${ISO_NOW} WHERE id = NEW.id; END;

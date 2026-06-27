@@ -30,6 +30,7 @@ export {
   rowToPinnedItem,
   rowToRoom,
   rowToRoomMember,
+  rowToSession,
   rowToToolCall,
 } from './rows.js'
 export { SCHEMA_SQL } from './schema.js'

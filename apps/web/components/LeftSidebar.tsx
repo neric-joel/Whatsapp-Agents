@@ -6,7 +6,10 @@ import { FormEvent, MouseEvent, useMemo, useRef, useState } from 'react'
 
 import { useAuth } from '@/hooks/useAuth'
 import { useRooms } from '@/hooks/useRooms'
+import { useSessions } from '@/hooks/useSessions'
 import { notifyChatCleared } from '@/lib/chat-events'
+
+import SessionBar from './SessionBar'
 
 type ApiResponse<T> = { ok: true; data: T } | { ok: false; error: { message?: string } | string }
 
@@ -100,6 +103,8 @@ function getApiErrorMessage(response: ApiResponse<unknown>) {
 
 export default function LeftSidebar() {
   const { rooms, refreshRooms } = useRooms()
+  const sessions = useSessions()
+  const { active } = sessions
   const { user, signOut } = useAuth()
   const pathname = usePathname()
   const router = useRouter()
@@ -174,7 +179,8 @@ export default function LeftSidebar() {
       const res = await fetch('/api/rooms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
+        // Attach the new room to the active session (Cowork working context), if any.
+        body: JSON.stringify({ name, ...(active ? { session_id: active.id } : {}) }),
       })
       const payload = (await res.json().catch(() => null)) as ApiResponse<Room> | null
       if (!res.ok || !payload?.ok) {
@@ -384,6 +390,14 @@ export default function LeftSidebar() {
           </Link>
         </div>
       </div>
+      <SessionBar
+        sessions={sessions.sessions}
+        active={active}
+        loading={sessions.loading}
+        onCreate={sessions.createSession}
+        onRename={(id, name) => sessions.updateSession(id, { name })}
+        onSwitch={(id) => sessions.updateSession(id, { touch: true })}
+      />
       <div className="px-4 py-2 text-[11px] font-medium uppercase tracking-widest text-[var(--muted)]">
         ROOMS
       </div>

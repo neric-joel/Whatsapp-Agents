@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { createAgentSchema, updateAgentSchema, upsertCliProfileSchema } from '../api-validation'
+import {
+  createAgentSchema,
+  createSessionSchema,
+  updateAgentSchema,
+  updateSessionSchema,
+  upsertCliProfileSchema,
+} from '../api-validation'
 
 const ROOM = '00000000-0000-4000-8000-000000000001'
 
@@ -90,6 +96,19 @@ describe('upsertCliProfileSchema', () => {
     expect(upsertCliProfileSchema.safeParse({ ...valid, env: { MY_FLAG: 'true' } }).success).toBe(
       true,
     )
+  })
+})
+
+describe('session schemas', () => {
+  it('createSessionSchema requires a working_dir', () => {
+    expect(createSessionSchema.safeParse({ name: 'X' }).success).toBe(false)
+    expect(createSessionSchema.safeParse({ working_dir: 'C:/work' }).success).toBe(true)
+  })
+
+  it('updateSessionSchema accepts rename or touch, rejects empty', () => {
+    expect(updateSessionSchema.safeParse({ name: 'Renamed' }).success).toBe(true)
+    expect(updateSessionSchema.safeParse({ touch: true }).success).toBe(true)
+    expect(updateSessionSchema.safeParse({}).success).toBe(false)
   })
 })
 
