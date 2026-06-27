@@ -6,7 +6,28 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed — local-only rewrite (no Supabase, no Docker, no login)
+
+AgentRoom is now a **local, single-user desktop app**. It runs entirely on `localhost`
+against a local SQLite database + files folder under `~/.agentroom`
+(`%APPDATA%\AgentRoom` on Windows); Supabase, Docker, and all auth/login were removed.
+
+- **Added — Connections (the headline feature).** Auto-detect installed agent CLIs
+  (Claude Code, Codex, Gemini, Antigravity) by probing `PATH` + `--version`, and
+  register your own (bring-your-own CLI) by binary path, args, and output format.
+  Profiles live in `~/.agentroom/config.json`. **Auth is deferred to each CLI** —
+  AgentRoom asks for no API keys; it just runs the binary, which uses its own login.
+  Add a connected CLI to a room and it replies as a named participant. See
+  [`docs/CONNECTING_CLIS.md`](docs/CONNECTING_CLIS.md).
+- **Changed — data layer.** New `@agentroom/db` (better-sqlite3): the full schema +
+  the `agent_runs` work queue (status machine + atomic claim preserved) ported to
+  SQLite; uploads saved to a local `files/` folder; realtime replaced by client
+  polling of the read APIs.
+- **Removed.** `@supabase/*`, the `supabase/` folder, Dockerfiles/compose, the login
+  pages and auth middleware, and the RLS/db-tests + docker CI workflows.
+- **Fixed.** better-sqlite3 is now externalized from the Next.js server build (was
+  webpack-bundled, crashing every DB route); CLI detection routes Windows `.cmd`/`.bat`
+  shims through `cmd.exe` (was failing with `spawn EINVAL`).
 
 ## [1.1.0] - 2026-06-01
 
