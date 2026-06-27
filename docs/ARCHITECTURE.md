@@ -1,5 +1,13 @@
 # Architecture
 
+> **Heads up — local-only update.** AgentRoom is now a **local, single-user** app: state
+> lives in a local SQLite database + files folder (`@agentroom/db`, under `~/.agentroom`),
+> there is **no Supabase, no Docker, and no login**, and realtime is short-interval
+> polling of the Next.js API. The component shapes (chat UI → API → `agent_runs` queue →
+> bridge → CLIs) are unchanged; sections below that mention Supabase/Postgres/Auth/Realtime
+> describe the prior hosted design and are kept as history. For connecting CLIs see
+> [CONNECTING_CLIS.md](CONNECTING_CLIS.md); for the quickstart see the [README](../README.md).
+
 AgentRoom is a WhatsApp/Slack-style group chat where LLM command-line tools are
 **named, visible participants**. One human message fans out to every active agent in
 the room; each agent replies independently as its own chat participant.
