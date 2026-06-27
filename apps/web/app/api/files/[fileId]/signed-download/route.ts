@@ -1,10 +1,12 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+
+import { filesDir, getDb, rowToFile } from '@agentroom/db'
+
 import { apiError } from '@/lib/api-error'
 import { internalError } from '@/lib/api-security'
 import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomMember } from '@/lib/permissions'
-import { getDb, rowToFile, filesDir } from '@agentroom/db'
 
 interface RouteParams {
   params: { fileId: string }

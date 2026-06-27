@@ -19,10 +19,14 @@ const serverEnvSchema = z.object({
 type ServerEnv = z.infer<typeof serverEnvSchema>
 
 /** Validate a raw env record (defaults to `process.env`). Throws on failure. */
-export function validateServerEnv(raw: Record<string, string | undefined> = process.env): ServerEnv {
+export function validateServerEnv(
+  raw: Record<string, string | undefined> = process.env,
+): ServerEnv {
   const result = serverEnvSchema.safeParse(raw)
   if (!result.success) {
-    const lines = result.error.issues.map((i) => `  - ${i.path.join('.') || '(root)'}: ${i.message}`)
+    const lines = result.error.issues.map(
+      (i) => `  - ${i.path.join('.') || '(root)'}: ${i.message}`,
+    )
     throw new Error(`Invalid web environment:\n${lines.join('\n')}`)
   }
   return result.data

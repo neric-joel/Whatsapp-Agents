@@ -48,9 +48,9 @@ export async function maybeScheduleAgentMentionFollowUps({
 
   const db = getDb()
 
-  const room = db
-    .prepare('SELECT max_agent_rounds FROM rooms WHERE id = ?')
-    .get(roomId) as RoomDeliberationSettings | undefined
+  const room = db.prepare('SELECT max_agent_rounds FROM rooms WHERE id = ?').get(roomId) as
+    | RoomDeliberationSettings
+    | undefined
 
   const settings = (room ?? null) as RoomDeliberationSettings | null
   const maxDepth = Math.max((settings?.max_agent_rounds ?? 1) - 1, 0)
@@ -86,19 +86,21 @@ export async function maybeScheduleAgentMentionFollowUps({
     a_is_active: number
   }>
 
-  const members = rawMembers.map(
-    (row): AgentMemberRow => ({
-      agent_id: row.agent_id,
-      muted: row.muted === 1,
-      reply_enabled: row.reply_enabled === 1,
-      agents: {
-        id: row.a_id,
-        name: row.a_name,
-        slug: row.a_slug,
-        is_active: row.a_is_active === 1,
-      },
-    }),
-  ).filter((member) => member.agents?.is_active)
+  const members = rawMembers
+    .map(
+      (row): AgentMemberRow => ({
+        agent_id: row.agent_id,
+        muted: row.muted === 1,
+        reply_enabled: row.reply_enabled === 1,
+        agents: {
+          id: row.a_id,
+          name: row.a_name,
+          slug: row.a_slug,
+          is_active: row.a_is_active === 1,
+        },
+      }),
+    )
+    .filter((member) => member.agents?.is_active)
 
   const mentions = parseMentions(
     replyContent,

@@ -1,9 +1,9 @@
+import { getDb, intBool } from '@agentroom/db'
 import { NextRequest } from 'next/server'
 
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { assertSameOrigin, enforceRateLimit, internalError } from '@/lib/api-security'
 import { getAuthenticatedUser } from '@/lib/auth'
-import { getDb, intBool } from '@agentroom/db'
 
 interface RouteParams {
   params: { id: string }

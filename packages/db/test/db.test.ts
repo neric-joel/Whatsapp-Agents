@@ -25,7 +25,11 @@ test('fresh install seeds one room with three agents as members', () => {
   assert.equal((db.prepare('SELECT count(*) c FROM rooms').get() as { c: number }).c, 1)
   assert.equal((db.prepare('SELECT count(*) c FROM agents').get() as { c: number }).c, 3)
   assert.equal(
-    (db.prepare("SELECT count(*) c FROM room_members WHERE member_type='agent'").get() as { c: number }).c,
+    (
+      db.prepare("SELECT count(*) c FROM room_members WHERE member_type='agent'").get() as {
+        c: number
+      }
+    ).c,
     3,
   )
   const owner = db.prepare('SELECT created_by_user_id o FROM rooms LIMIT 1').get() as { o: string }
@@ -40,7 +44,9 @@ test('messages round-trip with ISO timestamps and defaults', () => {
     `INSERT INTO messages (id, room_id, sender_type, sender_user_id, content, content_type)
      VALUES (?, ?, 'user', ?, 'hello world', 'text')`,
   ).run(id, roomId, LOCAL_USER_ID)
-  const row = db.prepare('SELECT content, mentions, metadata, created_at FROM messages WHERE id = ?').get(id) as {
+  const row = db
+    .prepare('SELECT content, mentions, metadata, created_at FROM messages WHERE id = ?')
+    .get(id) as {
     content: string
     mentions: string
     metadata: string
@@ -57,11 +63,9 @@ test('agent_runs status-guarded claim is atomic (only one claimant wins)', () =>
   const roomId = (db.prepare('SELECT id FROM rooms LIMIT 1').get() as { id: string }).id
   const agentId = (db.prepare('SELECT id FROM agents LIMIT 1').get() as { id: string }).id
   const runId = newId()
-  db.prepare(`INSERT INTO agent_runs (id, room_id, agent_id, status) VALUES (?, ?, ?, 'queued')`).run(
-    runId,
-    roomId,
-    agentId,
-  )
+  db.prepare(
+    `INSERT INTO agent_runs (id, room_id, agent_id, status) VALUES (?, ?, ?, 'queued')`,
+  ).run(runId, roomId, agentId)
 
   const claim = db.prepare(
     `UPDATE agent_runs SET status='claimed', worker_id=?, started_at=(strftime('%Y-%m-%dT%H:%M:%fZ','now'))
@@ -82,13 +86,15 @@ test('agent_runs status-guarded claim is atomic (only one claimant wins)', () =>
 test('updated_at trigger bumps on UPDATE', () => {
   const db = getDb()
   const roomId = (db.prepare('SELECT id FROM rooms LIMIT 1').get() as { id: string }).id
-  const before = (db.prepare('SELECT updated_at u FROM rooms WHERE id=?').get(roomId) as { u: string }).u
+  const before = (
+    db.prepare('SELECT updated_at u FROM rooms WHERE id=?').get(roomId) as { u: string }
+  ).u
   // force a distinct timestamp tick
   db.prepare("UPDATE rooms SET name='Renamed Room' WHERE id=?").run(roomId)
-  const after = (db.prepare('SELECT updated_at u, name n FROM rooms WHERE id=?').get(roomId) as {
+  const after = db.prepare('SELECT updated_at u, name n FROM rooms WHERE id=?').get(roomId) as {
     u: string
     n: string
-  })
+  }
   assert.equal(after.n, 'Renamed Room')
   assert.ok(after.u >= before, 'updated_at is monotonic on update')
 })

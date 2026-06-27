@@ -1,11 +1,10 @@
+import { getDb, intBool, rowToRoomMember } from '@agentroom/db'
 import { NextRequest } from 'next/server'
 
-import { getDb, intBool, rowToRoomMember } from '@agentroom/db'
-
-import { getAuthenticatedUser } from '@/lib/auth'
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { internalError } from '@/lib/api-security'
 import { updateRoomAgentMemberSchema } from '@/lib/api-validation'
+import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomMember } from '@/lib/permissions'
 
 interface RouteParams {
@@ -44,7 +43,7 @@ function loadAgentMember(roomId: string, memberId: string) {
               a.is_active AS agent__is_active
        FROM room_members m
        INNER JOIN agents a ON a.id = m.agent_id
-       WHERE m.id = ? AND m.room_id = ? AND m.member_type = 'agent'`
+       WHERE m.id = ? AND m.room_id = ? AND m.member_type = 'agent'`,
     )
     .get(memberId, roomId) as Record<string, unknown> | undefined
   if (!row) return null
@@ -76,7 +75,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
   const db = getDb()
   try {
     db.prepare(
-      `DELETE FROM room_members WHERE id = ? AND room_id = ? AND member_type = 'agent'`
+      `DELETE FROM room_members WHERE id = ? AND room_id = ? AND member_type = 'agent'`,
     ).run(params.memberId, params.roomId)
   } catch (e) {
     return internalError('room member delete', e)
@@ -110,7 +109,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   const db = getDb()
   try {
     db.prepare(
-      `UPDATE room_members SET ${sets.join(', ')} WHERE id = ? AND room_id = ? AND member_type = 'agent'`
+      `UPDATE room_members SET ${sets.join(', ')} WHERE id = ? AND room_id = ? AND member_type = 'agent'`,
     ).run(...values, params.memberId, params.roomId)
   } catch (e) {
     return internalError('room member update', e)

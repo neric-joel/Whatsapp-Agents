@@ -14,7 +14,6 @@ import { useRooms } from '@/hooks/useRooms'
 import { ALLOWED_UPLOAD_MIME_TYPES, MAX_UPLOAD_BYTES } from '@/lib/api-validation'
 import { getImageFilesFromClipboardItems } from '@/lib/pasted-files'
 import { parseSlashCommand, type SlashCommand } from '@/lib/slash-commands'
-import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 import { AGENTS_EVENT } from './AgentsPanel'
 import { RECALL_EVENT, type RecallEventDetail } from './MemoryPanel'
@@ -69,45 +68,31 @@ export default function ComposeBox({
   const room = rooms.find((r) => r.id === roomId)
 
   useEffect(() => {
-    const supabase = createSupabaseBrowserClient()
-    supabase
-      .from('room_members')
-      .select('agent_id, agents!inner(id, slug, name, is_active)')
-      .eq('room_id', roomId)
-      .eq('member_type', 'agent')
-      .eq('muted', false)
-      .then(({ data }) => {
-        if (!data) return
-        const agents = (data as unknown as Array<{ agents: SlimAgent & { is_active: boolean } }>)
-          .filter((m) => m.agents?.is_active)
-          .map((m) => ({ id: m.agents.id, slug: m.agents.slug, name: m.agents.name }))
+    let cancelled = false
+    fetch(`/api/rooms/${roomId}/members`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (cancelled || !json?.ok) return
+        const members = (json.data ?? []) as Array<{
+          member_type: string
+          muted?: boolean
+          agents?: (SlimAgent & { is_active: boolean }) | null
+        }>
+        const agents = members
+          .filter((m) => m.member_type === 'agent' && !m.muted && m.agents?.is_active)
+          .map((m) => ({ id: m.agents!.id, slug: m.agents!.slug, name: m.agents!.name }))
         setRoomAgents(agents)
       })
-  }, [roomId])
-
-  useEffect(() => {
-    const supabase = createSupabaseBrowserClient()
-    let cancelled = false
-    void (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) return
-      const { data } = await supabase
-        .from('room_members')
-        .select('role')
-        .eq('room_id', roomId)
-        .eq('user_id', user.id)
-        .maybeSingle()
-      const role = (data?.role as MemberRole | undefined) ?? 'member'
-      if (!cancelled) {
-        setUserRole(role)
-        setRoleLoaded(true)
-      }
-    })()
+      .catch(() => {})
     return () => {
       cancelled = true
     }
+  }, [roomId])
+
+  useEffect(() => {
+    // Local single-user app — the user owns every room.
+    setUserRole('owner')
+    setRoleLoaded(true)
   }, [roomId])
 
   useEffect(() => {
@@ -169,32 +154,20 @@ export default function ComposeBox({
     }
     setUploading(true)
     try {
+      // Local upload: POST the file bytes directly; the route writes to ~/.agentroom/files.
+      const form = new FormData()
+      form.append('file', file)
       const res = await fetch(`/api/rooms/${roomId}/files/signed-upload`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filename: file.name,
-          mime_type: file.type || 'application/octet-stream',
-          size_bytes: file.size,
-        }),
+        body: form,
       })
       const json = (await res.json().catch(() => ({}))) as {
         ok?: boolean
-        data?: { signed_url: string; file_id: string }
+        data?: { file_id: string; storage_path: string }
         error?: { message?: string }
       }
       if (!res.ok || !json.ok || !json.data) {
         setFileError(json.error?.message ?? 'Upload failed')
-        return
-      }
-
-      const uploadRes = await fetch(json.data.signed_url, {
-        method: 'PUT',
-        headers: { 'Content-Type': file.type || 'application/octet-stream' },
-        body: file,
-      })
-      if (!uploadRes.ok) {
-        setFileError('Upload failed')
         return
       }
 

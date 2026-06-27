@@ -1,13 +1,13 @@
+import { getDb, jsonText, rowToMessage } from '@agentroom/db'
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 
-import { getAuthenticatedUser } from '@/lib/auth'
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { assertSameOrigin, internalError } from '@/lib/api-security'
+import { getAuthenticatedUser } from '@/lib/auth'
 import { canCurrentUserDeleteMessage, createDeletedMessagePatch } from '@/lib/message-management'
 import { stripServerOwnedMetadata } from '@/lib/message-metadata'
 import { requireRoomMember } from '@/lib/permissions'
-import { getDb, jsonText, rowToMessage } from '@agentroom/db'
 
 interface RouteParams {
   params: { roomId: string; messageId: string }
@@ -78,9 +78,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     }
 
     const updated = db
-      .prepare(
-        `UPDATE messages SET ${sets.join(', ')} WHERE id = ? AND room_id = ? RETURNING *`,
-      )
+      .prepare(`UPDATE messages SET ${sets.join(', ')} WHERE id = ? AND room_id = ? RETURNING *`)
       .get(...vals, messageId, roomId) as Record<string, unknown> | undefined
 
     if (!updated) return internalError('message update', new Error('update returned no row'))

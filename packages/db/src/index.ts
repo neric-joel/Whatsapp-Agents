@@ -1,17 +1,17 @@
-export { getDb, closeDb, LOCAL_USER_ID, LOCAL_USER } from './db.js'
+export { closeDb, getDb, LOCAL_USER, LOCAL_USER_ID } from './db.js'
 export { newId, nowIso } from './ids.js'
-export { appDataDir, dbPath, filesDir, configPath, ensureAppDirs } from './paths.js'
-export { SCHEMA_SQL } from './schema.js'
+export { appDataDir, configPath, dbPath, ensureAppDirs, filesDir } from './paths.js'
 export {
   intBool,
   jsonText,
-  rowToRoom,
   rowToAgent,
-  rowToRoomMember,
-  rowToMessage,
   rowToAgentRun,
-  rowToToolCall,
   rowToFile,
-  rowToPinnedItem,
   rowToMemoryEntry,
+  rowToMessage,
+  rowToPinnedItem,
+  rowToRoom,
+  rowToRoomMember,
+  rowToToolCall,
 } from './rows.js'
+export { SCHEMA_SQL } from './schema.js'

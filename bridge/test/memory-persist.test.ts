@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import { afterEach, beforeEach, test } from 'node:test'
 
 import { persistMemoryOp } from '../src/memory/persist-memory-op.js'
-import { freshTestDb, seedAgent, seedMessage, seedRoom } from './helpers/test-db.js'
 import type { TestDb } from './helpers/test-db.js'
+import { freshTestDb, seedAgent, seedMessage, seedRoom } from './helpers/test-db.js'
 
 let h: TestDb
 
@@ -105,9 +105,10 @@ test('replace: deactivates the target (scoped to the agent) then inserts', async
   assert.equal(target['is_active'], 0, 'target deactivated')
 
   // A brand-new active row was inserted with the updated content.
-  const inserted = h.db
-    .prepare('SELECT * FROM agent_memory WHERE id = ?')
-    .get(res.id) as Record<string, unknown>
+  const inserted = h.db.prepare('SELECT * FROM agent_memory WHERE id = ?').get(res.id) as Record<
+    string,
+    unknown
+  >
   assert.ok(inserted, 'new entry inserted')
   assert.notEqual(res.id, targetId)
   assert.equal(inserted['content'], 'Updated fact.')
@@ -118,7 +119,7 @@ test('replace: deactivates the target (scoped to the agent) then inserts', async
   assert.equal(count.n, 2)
 })
 
-test('replace is scoped to the agent — cannot supersede ANOTHER agent\'s memory', async () => {
+test("replace is scoped to the agent — cannot supersede ANOTHER agent's memory", async () => {
   const targetId = '00000000-0000-4000-8000-000000000002'
   // Seed a second agent and a memory it owns.
   seedAgent(h.db, { id: 'agent-2' })

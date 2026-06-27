@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { getDb, filesDir, jsonText } from '@agentroom/db'
+import { filesDir, getDb, jsonText } from '@agentroom/db'
 
 import { log } from '../lib/logger.js'
 

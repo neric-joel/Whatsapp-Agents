@@ -1,3 +1,4 @@
+import { getDb, intBool, jsonText, newId, rowToAgent } from '@agentroom/db'
 import { NextRequest } from 'next/server'
 
 import { apiError, apiSuccess } from '@/lib/api-error'
@@ -5,7 +6,6 @@ import { assertSameOrigin, enforceRateLimit, internalError } from '@/lib/api-sec
 import { createAgentSchema } from '@/lib/api-validation'
 import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomAdmin } from '@/lib/permissions'
-import { getDb, newId, intBool, jsonText, rowToAgent } from '@agentroom/db'
 
 export async function GET(req: NextRequest) {
   const {
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
         `SELECT a.slug AS slug, a.is_active AS is_active
          FROM room_members m
          INNER JOIN agents a ON a.id = m.agent_id
-         WHERE m.room_id = ? AND m.member_type = 'agent'`
+         WHERE m.room_id = ? AND m.member_type = 'agent'`,
       )
       .all(input.room_id) as Array<{ slug: string; is_active: number }>
     const slugTaken = clash.some((m) => m.is_active === 1 && m.slug === input.slug)
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
            system_prompt, capabilities, reply_policy, tool_permissions,
            credential_id, created_by_user_id, is_active
          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         RETURNING *`
+         RETURNING *`,
       )
       .get(
         newId(),
@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
         jsonText({}),
         input.credential_id ?? null,
         user.id,
-        intBool(true)
+        intBool(true),
       ) as Record<string, unknown> | undefined
     if (!row) return internalError('agent create', new Error('insert returned no row'))
     agent = rowToAgent(row)
@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
     db.prepare(
       `INSERT INTO room_members (
          id, room_id, agent_id, member_type, reply_enabled, muted
-       ) VALUES (?, ?, ?, 'agent', ?, ?)`
+       ) VALUES (?, ?, ?, 'agent', ?, ?)`,
     ).run(newId(), input.room_id, agent.id, intBool(true), intBool(false))
   } catch (e) {
     // A duplicate member (UNIQUE) is harmless. Any other attach failure would leave

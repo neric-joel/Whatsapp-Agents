@@ -1,3 +1,4 @@
+import { getDb, intBool, newId } from '@agentroom/db'
 import {
   encryptSecret,
   getCredentialKey,
@@ -9,7 +10,6 @@ import { apiError, apiSuccess } from '@/lib/api-error'
 import { assertSameOrigin, enforceRateLimit, internalError } from '@/lib/api-security'
 import { createCredentialSchema } from '@/lib/api-validation'
 import { getAuthenticatedUser } from '@/lib/auth'
-import { getDb, newId, intBool } from '@agentroom/db'
 
 /**
  * WS2 (ADR-0010) — per-user BYO provider credentials. The secret is AES-256-GCM

@@ -1,21 +1,21 @@
+import { getDb, jsonText, newId } from '@agentroom/db'
 import {
   ABS_MAX_DISCUSSION_ROUNDS,
   type Assignment,
   buildCrossReviewPairs,
-  COLLAB_MAX_AGENTS,
   buildDiscussionStagePrompt,
+  COLLAB_MAX_AGENTS,
   type CrossReviewPair,
   type DiscussCommand,
+  DISCUSSION_MAX_PHASES,
   type DiscussionPhase,
   discussionStageNumber,
-  DISCUSSION_MAX_PHASES,
   formatBlackboard,
   nextDiscussionStage,
   parseTaskList,
   readDiscussionMetadata,
   selectCoordinatorIndex,
 } from '@agentroom/shared'
-import { getDb, jsonText, newId } from '@agentroom/db'
 
 // ADR-0011 — team-collaboration /discuss + adversarial /debate orchestration. Replaces the old
 // individual→critique→consensus engine. After each agent run completes the worker calls

@@ -1,8 +1,6 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { createSupabaseBrowserClient } from '@/lib/supabase/client'
-
 interface MemoryRow {
   id: string
   room_id: string | null
@@ -68,21 +66,13 @@ export default function MemoryPanel({ roomId }: Props) {
     void load('')
   }, [load])
 
-  // Live updates (mirrors PinnedItemsPanel). Only reflect the unfiltered list.
+  // Live updates via polling (local app). Only reflect the unfiltered list.
   useEffect(() => {
-    const supabase = createSupabaseBrowserClient()
-    const sub = supabase
-      .channel(`memory:${roomId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'agent_memory', filter: `room_id=eq.${roomId}` },
-        () => {
-          if (!queryRef.current) void load('')
-        },
-      )
-      .subscribe()
+    const id = setInterval(() => {
+      if (!queryRef.current) void load('')
+    }, 2000)
     return () => {
-      void sub.unsubscribe()
+      clearInterval(id)
     }
   }, [roomId, load])
 

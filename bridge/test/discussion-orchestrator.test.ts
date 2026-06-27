@@ -245,7 +245,12 @@ test('idempotency: does not schedule a phase that already exists', async () => {
     content: 'already scheduled execute',
     round_index: 1,
     metadata: JSON.stringify({
-      discussion: { enabled: true, command: 'discuss', phase: 'execute', original_message_id: ROOT },
+      discussion: {
+        enabled: true,
+        command: 'discuss',
+        phase: 'execute',
+        original_message_id: ROOT,
+      },
     }),
   })
 

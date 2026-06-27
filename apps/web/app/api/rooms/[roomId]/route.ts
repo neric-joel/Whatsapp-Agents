@@ -1,11 +1,11 @@
+import { getDb, intBool, rowToRoom } from '@agentroom/db'
 import { NextRequest } from 'next/server'
 
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { internalError } from '@/lib/api-security'
 import { updateRoomArchiveSchema } from '@/lib/api-validation'
-import { requireRoomOwner } from '@/lib/permissions'
 import { getAuthenticatedUser } from '@/lib/auth'
-import { getDb, intBool, rowToRoom } from '@agentroom/db'
+import { requireRoomOwner } from '@/lib/permissions'
 
 interface RouteParams {
   params: { roomId: string }

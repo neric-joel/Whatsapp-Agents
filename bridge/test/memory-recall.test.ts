@@ -95,7 +95,9 @@ function seedMemory(o: Record<string, unknown> = {}): string {
   }
   const cols = Object.keys(row)
   h.db
-    .prepare(`INSERT INTO agent_memory (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`)
+    .prepare(
+      `INSERT INTO agent_memory (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`,
+    )
     .run(...cols.map((c) => row[c]))
   return id
 }
@@ -121,10 +123,34 @@ test('recallMemory ranks pinned, then confidence, then created_at (all DESC)', a
   seedAgent(h.db, { id: 'a1' })
   // No query → ranking falls to pinned DESC, confidence DESC, created_at DESC.
   // Seed in a deliberately wrong order so only the sort can produce the result.
-  seedMemory({ id: 'low-conf-old', content: 'c', confidence: 0.1, pinned: 0, created_at: '2026-01-01T00:00:00Z' })
-  seedMemory({ id: 'high-conf', content: 'b', confidence: 0.9, pinned: 0, created_at: '2026-02-01T00:00:00Z' })
-  seedMemory({ id: 'mid-conf-new', content: 'c', confidence: 0.1, pinned: 0, created_at: '2026-03-01T00:00:00Z' })
-  seedMemory({ id: 'pinned', content: 'a', confidence: 0.0, pinned: 1, created_at: '2025-01-01T00:00:00Z' })
+  seedMemory({
+    id: 'low-conf-old',
+    content: 'c',
+    confidence: 0.1,
+    pinned: 0,
+    created_at: '2026-01-01T00:00:00Z',
+  })
+  seedMemory({
+    id: 'high-conf',
+    content: 'b',
+    confidence: 0.9,
+    pinned: 0,
+    created_at: '2026-02-01T00:00:00Z',
+  })
+  seedMemory({
+    id: 'mid-conf-new',
+    content: 'c',
+    confidence: 0.1,
+    pinned: 0,
+    created_at: '2026-03-01T00:00:00Z',
+  })
+  seedMemory({
+    id: 'pinned',
+    content: 'a',
+    confidence: 0.0,
+    pinned: 1,
+    created_at: '2025-01-01T00:00:00Z',
+  })
 
   const memory = await recallMemory({ agentId: 'a1', roomId: 'r1', queryText: '' })
   assert.ok(memory)

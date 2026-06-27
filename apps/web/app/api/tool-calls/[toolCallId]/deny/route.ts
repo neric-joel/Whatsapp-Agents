@@ -1,8 +1,9 @@
+import { getDb, nowIso, rowToToolCall } from '@agentroom/db'
+
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { internalError } from '@/lib/api-security'
 import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomMember } from '@/lib/permissions'
-import { getDb, nowIso, rowToToolCall } from '@agentroom/db'
 
 interface RouteParams {
   params: { toolCallId: string }
@@ -33,8 +34,7 @@ export async function POST(req: Request, { params }: RouteParams) {
         `UPDATE tool_calls SET status = 'denied', approved_by = ?, approved_at = ? WHERE id = ? AND status = 'waiting_approval' RETURNING *`,
       )
       .get(user.id, nowIso(), params.toolCallId) as Record<string, unknown> | undefined
-    if (!updated)
-      return apiError('CONFLICT', 'Tool call is not waiting for approval', 400)
+    if (!updated) return apiError('CONFLICT', 'Tool call is not waiting for approval', 400)
 
     return apiSuccess(rowToToolCall(updated))
   } catch (e) {

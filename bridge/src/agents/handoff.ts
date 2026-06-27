@@ -1,6 +1,5 @@
-import { z } from 'zod'
-
 import { getDb, jsonText, newId } from '@agentroom/db'
+import { z } from 'zod'
 
 import { log } from '../lib/logger.js'
 import { normalizeSlug } from '../lib/mention-parser.js'
@@ -75,7 +74,9 @@ export async function handleHandoffRequest(
 
     // 1. Room guards.
     const roomRaw = db
-      .prepare('SELECT allow_agent_to_agent, max_agent_rounds, max_agent_hops FROM rooms WHERE id = ?')
+      .prepare(
+        'SELECT allow_agent_to_agent, max_agent_rounds, max_agent_hops FROM rooms WHERE id = ?',
+      )
       .get(ctx.roomId) as
       | { allow_agent_to_agent: number; max_agent_rounds: number; max_agent_hops: number }
       | undefined

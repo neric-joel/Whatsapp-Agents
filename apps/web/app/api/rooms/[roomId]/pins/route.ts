@@ -1,11 +1,10 @@
+import { getDb, newId, rowToPinnedItem } from '@agentroom/db'
 import { NextRequest } from 'next/server'
 
-import { getDb, newId, rowToPinnedItem } from '@agentroom/db'
-
-import { getAuthenticatedUser } from '@/lib/auth'
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { internalError } from '@/lib/api-security'
 import { createPinSchema } from '@/lib/api-validation'
+import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomMember } from '@/lib/permissions'
 
 interface RouteParams {

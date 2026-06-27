@@ -2,9 +2,10 @@ name: Release
 
 # Fires ONLY when a human pushes a semver tag (e.g. `v1.0.0`). It never tags or
 # releases on its own — pushing the tag is the explicit, human gate. On a tag it
-# re-runs the full quality gate, proves both container images build, and publishes a
-# GitHub Release with auto-generated notes. No registry push, no external secrets
-# (only the auto-provisioned GITHUB_TOKEN, scoped to this repo's releases).
+# re-runs the full quality gate and publishes a GitHub Release with auto-generated
+# notes. No registry push, no external secrets (only the auto-provisioned
+# GITHUB_TOKEN, scoped to this repo's releases). AgentRoom is a local-only app —
+# there are no container images to build.
 #
 # To cut a release (human, after the v1.0 decision):
 #   git tag v1.0.0 && git push origin v1.0.0
@@ -25,10 +26,6 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     env:
-      # Dummy build-time env so `next build` runs without secrets. NOT real values.
-      NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
-      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-dummy-publishable-key
-      SUPABASE_SERVICE_ROLE_KEY: ci-dummy-service-role-key
       NEXT_PUBLIC_APP_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v7
@@ -45,35 +42,8 @@ jobs:
       - run: pnpm test:coverage
       - run: pnpm --filter web build
 
-  images:
-    needs: verify
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: docker/setup-buildx-action@v4
-      - name: Build web image (proves the tag builds; no push)
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: apps/web/Dockerfile
-          push: false
-          tags: agentroom-web:${{ github.ref_name }}
-          build-args: |
-            NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321
-            NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=ci-dummy-publishable-key
-            NEXT_PUBLIC_APP_URL=http://localhost:3000
-          cache-from: type=gha,scope=web
-      - name: Build bridge image (no push)
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: bridge/Dockerfile
-          push: false
-          tags: agentroom-bridge:${{ github.ref_name }}
-          cache-from: type=gha,scope=bridge
-
   release:
-    needs: [verify, images]
+    needs: [verify]
     runs-on: ubuntu-latest
     permissions:
       contents: write

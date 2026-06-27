@@ -1,11 +1,10 @@
+import { filesDir, getDb, newId } from '@agentroom/db'
 import { NextRequest } from 'next/server'
 
-import { getDb, newId, filesDir } from '@agentroom/db'
-
-import { getAuthenticatedUser } from '@/lib/auth'
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { assertSameOrigin, enforceRateLimit, internalError } from '@/lib/api-security'
 import { ALLOWED_UPLOAD_MIME_TYPES, MAX_UPLOAD_BYTES } from '@/lib/api-validation'
+import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomMember } from '@/lib/permissions'
 
 interface RouteParams {

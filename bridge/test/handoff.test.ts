@@ -61,11 +61,7 @@ function seedWorld(opts: SeedOpts): void {
  * descendant runs (deliberation_root_id = rootId). Used by the cycle / success
  * tests where the source reads the chain to detect repeat participants.
  */
-function seedChain(
-  rootId: string,
-  rootAgentId: string | null,
-  descendants: string[] = [],
-): void {
+function seedChain(rootId: string, rootAgentId: string | null, descendants: string[] = []): void {
   // agent_runs.agent_id has a FK to agents — make sure every chain agent exists
   // (some are already room members; INSERT OR IGNORE keeps this idempotent).
   const ensureAgent = (agentId: string) => {
@@ -94,9 +90,7 @@ function seedChain(
 /** Read the targeted peer agent_runs that the source created (excludes seeded chain rows). */
 function targetedRuns(): Array<Record<string, unknown>> {
   return h.db
-    .prepare(
-      `SELECT * FROM agent_runs WHERE trigger_msg_id = ? ORDER BY created_at`,
-    )
+    .prepare(`SELECT * FROM agent_runs WHERE trigger_msg_id = ? ORDER BY created_at`)
     .all('msg-1') as Array<Record<string, unknown>>
 }
 
@@ -109,9 +103,7 @@ function systemMessages(): string[] {
   ).map((r) => r.content)
 }
 
-const baseCtx = (
-  over: Partial<Parameters<typeof handleHandoffRequest>[1]['currentRun']> = {},
-) => ({
+const baseCtx = (over: Partial<Parameters<typeof handleHandoffRequest>[1]['currentRun']> = {}) => ({
   roomId: 'room-1',
   sourceAgentId: 'agent-A',
   sourceMessageId: 'msg-1',

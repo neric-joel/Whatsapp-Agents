@@ -1,5 +1,5 @@
-import type { ContextPacketV1, MemoryEntry, UserProfileSummary } from '@agentroom/shared'
 import { getDb, rowToMemoryEntry } from '@agentroom/db'
+import type { ContextPacketV1, MemoryEntry, UserProfileSummary } from '@agentroom/shared'
 
 import { log } from '../lib/logger.js'
 

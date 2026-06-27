@@ -5,7 +5,6 @@ import type { AgentAdapter, AgentEvent, ContextPacketV1 } from '@agentroom/share
 
 import { __resetMetrics, snapshotCounters } from '../src/lib/metrics.js'
 import { processRun } from '../src/workers/run-worker.js'
-
 import {
   freshTestDb,
   seedAgent,
@@ -32,11 +31,13 @@ let h: TestDb
 
 /** Seed the standard world: a room, a mock-adapter agent, a trigger message, and a
  *  QUEUED run 'run-1' wired to all three. Overrides let a case tweak the room/run. */
-function seedWorld(opts: {
-  room?: Record<string, unknown>
-  run?: Record<string, unknown>
-  triggerMsg?: Record<string, unknown> | null
-} = {}): void {
+function seedWorld(
+  opts: {
+    room?: Record<string, unknown>
+    run?: Record<string, unknown>
+    triggerMsg?: Record<string, unknown> | null
+  } = {},
+): void {
   seedRoom(h.db, {
     id: 'room-1',
     name: 'Test Room',
@@ -67,9 +68,7 @@ function seedWorld(opts: {
 
   // Trigger message (null = run has no trigger_msg_id; the worker uses its fallback).
   const triggerId =
-    opts.triggerMsg === null
-      ? null
-      : ((opts.triggerMsg?.id as string | undefined) ?? 'trigger-1')
+    opts.triggerMsg === null ? null : ((opts.triggerMsg?.id as string | undefined) ?? 'trigger-1')
   if (opts.triggerMsg !== null) {
     seedMessage(h.db, 'room-1', {
       id: triggerId as string,
@@ -104,7 +103,9 @@ function runRow(id = 'run-1'): {
 }
 
 /** All agent reply messages the worker inserted for the room. */
-function agentReplies(roomId = 'room-1'): Array<{ content: string; round_index: number; metadata: string }> {
+function agentReplies(
+  roomId = 'room-1',
+): Array<{ content: string; round_index: number; metadata: string }> {
   return h.db
     .prepare(
       "SELECT content, round_index, metadata FROM messages WHERE room_id = ? AND sender_type = 'agent' ORDER BY created_at",
@@ -135,10 +136,7 @@ test('induced child crash (adapter error event) → run marked failed, re-thrown
     yield { type: 'error', run_id: packet.run_id, message: 'child crashed' }
   })
 
-  await assert.rejects(
-    processRun('run-1', { getAdapter: () => adapter }),
-    /child crashed/,
-  )
+  await assert.rejects(processRun('run-1', { getAdapter: () => adapter }), /child crashed/)
 
   // The single terminal write moved the run to 'failed' with the error recorded.
   const row = runRow()
@@ -156,10 +154,7 @@ test('bad agent output (no final_response) → run marked failed, no hang', asyn
     yield { type: 'visible_message', run_id: packet.run_id, content: 'thinking...' }
   })
 
-  await assert.rejects(
-    processRun('run-1', { getAdapter: () => adapter }),
-    /no final_response/,
-  )
+  await assert.rejects(processRun('run-1', { getAdapter: () => adapter }), /no final_response/)
 
   const row = runRow()
   assert.equal(row.status, 'failed')
@@ -190,10 +185,7 @@ test('DB error inserting the reply → run marked failed (clean state, no lost r
   }) as typeof h.db.prepare
 
   try {
-    await assert.rejects(
-      processRun('run-1', { getAdapter: () => adapter }),
-      /insert failed/,
-    )
+    await assert.rejects(processRun('run-1', { getAdapter: () => adapter }), /insert failed/)
   } finally {
     ;(h.db as { prepare: typeof h.db.prepare }).prepare = realPrepare
   }
@@ -252,10 +244,7 @@ test('memory_op event is handled and a failing memory write does NOT break the r
   assert.equal(agentReplies().length, 1)
   assert.equal(agentReplies()[0]!.content, 'noted')
   // No memory row was persisted (the write failed, best-effort).
-  assert.equal(
-    (h.db.prepare('SELECT COUNT(*) AS n FROM agent_memory').get() as { n: number }).n,
-    0,
-  )
+  assert.equal((h.db.prepare('SELECT COUNT(*) AS n FROM agent_memory').get() as { n: number }).n, 0)
   assert.equal(snapshotCounters().runs_completed, 1)
   assert.equal(snapshotCounters().runs_failed, 0)
 })
@@ -355,9 +344,9 @@ test('a hand-off that resolves to an unknown peer does not break the run', async
   // No peer run was created for any other agent.
   assert.equal(
     (
-      h.db
-        .prepare("SELECT COUNT(*) AS n FROM agent_runs WHERE id != 'run-1'")
-        .get() as { n: number }
+      h.db.prepare("SELECT COUNT(*) AS n FROM agent_runs WHERE id != 'run-1'").get() as {
+        n: number
+      }
     ).n,
     0,
   )
@@ -406,7 +395,11 @@ test('R3: a post-completion follow-up failure never clobbers a completed run to 
   }
 
   // Exactly one terminal state = completed; no failed clobber.
-  assert.equal(runRow().status, 'completed', 'exactly one terminal write = completed; no failed clobber')
+  assert.equal(
+    runRow().status,
+    'completed',
+    'exactly one terminal write = completed; no failed clobber',
+  )
   assert.equal(agentReplies().length, 1)
   assert.equal(snapshotCounters().runs_completed, 1)
   assert.equal(snapshotCounters().runs_failed, 0)

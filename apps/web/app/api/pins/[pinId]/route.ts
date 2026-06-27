@@ -1,11 +1,10 @@
+import { getDb, intBool, rowToPinnedItem } from '@agentroom/db'
 import { NextRequest } from 'next/server'
 
-import { getDb, intBool, rowToPinnedItem } from '@agentroom/db'
-
-import { getAuthenticatedUser } from '@/lib/auth'
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { internalError } from '@/lib/api-security'
 import { updatePinSchema } from '@/lib/api-validation'
+import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomMember } from '@/lib/permissions'
 
 interface RouteParams {
@@ -21,9 +20,9 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
 
   const db = getDb()
 
-  const pin = db
-    .prepare('SELECT id, room_id FROM pinned_items WHERE id = ?')
-    .get(params.pinId) as { id: string; room_id: string } | undefined
+  const pin = db.prepare('SELECT id, room_id FROM pinned_items WHERE id = ?').get(params.pinId) as
+    | { id: string; room_id: string }
+    | undefined
   if (!pin) return apiError('NOT_FOUND', 'Pin not found', 404)
 
   try {

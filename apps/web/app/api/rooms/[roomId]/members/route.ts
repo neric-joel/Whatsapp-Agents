@@ -1,3 +1,4 @@
+import { getDb, intBool, newId } from '@agentroom/db'
 import { NextRequest } from 'next/server'
 
 import { apiError, apiSuccess } from '@/lib/api-error'
@@ -5,7 +6,6 @@ import { internalError } from '@/lib/api-security'
 import { addRoomAgentSchema } from '@/lib/api-validation'
 import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomMember } from '@/lib/permissions'
-import { getDb, newId, intBool } from '@agentroom/db'
 
 interface RouteParams {
   params: { roomId: string }
@@ -172,9 +172,9 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   const db = getDb()
 
-  const agent = db
-    .prepare('SELECT id FROM agents WHERE id = ?')
-    .get(parseResult.data.agentId) as { id: string } | undefined
+  const agent = db.prepare('SELECT id FROM agents WHERE id = ?').get(parseResult.data.agentId) as
+    | { id: string }
+    | undefined
 
   if (!agent) return apiError('NOT_FOUND', 'Agent not found', 404)
 
@@ -188,16 +188,21 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   } catch (e) {
     // A duplicate (room_id, agent_id) violates room_members_agent_unique — the
     // SQLite equivalent of Postgres 23505 — meaning the agent is already in the room.
-    if (e && typeof e === 'object' && 'code' in e && String((e as { code: unknown }).code).startsWith('SQLITE_CONSTRAINT')) {
+    if (
+      e &&
+      typeof e === 'object' &&
+      'code' in e &&
+      String((e as { code: unknown }).code).startsWith('SQLITE_CONSTRAINT')
+    ) {
       return apiError('CONFLICT', 'Agent is already in the room', 409)
     }
     return internalError('room members add agent', e)
   }
 
   try {
-    const row = db
-      .prepare(`${MEMBER_SELECT} WHERE m.id = ?`)
-      .get(insertedId) as RoomAgentMemberJoinRow | undefined
+    const row = db.prepare(`${MEMBER_SELECT} WHERE m.id = ?`).get(insertedId) as
+      | RoomAgentMemberJoinRow
+      | undefined
 
     if (!row) return internalError('room members add agent', new Error('insert returned no row'))
 

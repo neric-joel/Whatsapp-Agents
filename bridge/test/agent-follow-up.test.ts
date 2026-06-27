@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import { afterEach, beforeEach, test } from 'node:test'
 
 import { maybeScheduleAgentMentionFollowUps } from '../src/lib/agent-follow-up.js'
-
 import {
   freshTestDb,
   seedAgent,

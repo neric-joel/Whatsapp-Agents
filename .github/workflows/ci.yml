@@ -16,10 +16,6 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     env:
-      # Dummy build-time env so `next build` runs without secrets. NOT real values.
-      NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
-      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-dummy-publishable-key
-      SUPABASE_SERVICE_ROLE_KEY: ci-dummy-service-role-key
       NEXT_PUBLIC_APP_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v7

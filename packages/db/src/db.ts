@@ -62,9 +62,27 @@ function seedIfEmpty(db: Database.Database): void {
   if (c > 0) return
 
   const seed = db.transaction(() => {
-    const agents: Array<{ id: string; name: string; slug: string; provider: string; adapter: string }> = [
-      { id: newId(), name: 'Claude Thinker', slug: 'claude_thinker', provider: 'claude_code', adapter: 'claude-code' },
-      { id: newId(), name: 'Codex Builder', slug: 'codex_builder', provider: 'codex_cli', adapter: 'codex-cli' },
+    const agents: Array<{
+      id: string
+      name: string
+      slug: string
+      provider: string
+      adapter: string
+    }> = [
+      {
+        id: newId(),
+        name: 'Claude Thinker',
+        slug: 'claude_thinker',
+        provider: 'claude_code',
+        adapter: 'claude-code',
+      },
+      {
+        id: newId(),
+        name: 'Codex Builder',
+        slug: 'codex_builder',
+        provider: 'codex_cli',
+        adapter: 'codex-cli',
+      },
       { id: newId(), name: 'Reviewer', slug: 'reviewer', provider: 'mock', adapter: 'mock' },
     ]
     const insertAgent = db.prepare(

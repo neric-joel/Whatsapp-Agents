@@ -1,7 +1,6 @@
+import { getDb, jsonText, newId } from '@agentroom/db'
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
-
-import { getDb, jsonText, newId } from '@agentroom/db'
 
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { internalError } from '@/lib/api-security'
@@ -80,7 +79,10 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   }
 
   try {
-    db.prepare('UPDATE messages SET metadata = ? WHERE id = ?').run(jsonText(nextMetadata), messageId)
+    db.prepare('UPDATE messages SET metadata = ? WHERE id = ?').run(
+      jsonText(nextMetadata),
+      messageId,
+    )
   } catch (e) {
     return internalError('hallucination update metadata', e)
   }

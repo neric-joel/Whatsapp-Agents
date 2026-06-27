@@ -1,3 +1,4 @@
+import { getDb, intBool, newId, rowToMemoryEntry } from '@agentroom/db'
 import { scanMemoryContent } from '@agentroom/shared'
 import { NextRequest } from 'next/server'
 
@@ -6,7 +7,6 @@ import { assertSameOrigin, enforceRateLimit, internalError } from '@/lib/api-sec
 import { createMemorySchema } from '@/lib/api-validation'
 import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomMember } from '@/lib/permissions'
-import { getDb, intBool, newId, rowToMemoryEntry } from '@agentroom/db'
 
 interface RouteParams {
   params: { roomId: string }

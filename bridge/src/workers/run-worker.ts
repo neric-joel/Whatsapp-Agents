@@ -1,6 +1,6 @@
+import { getDb, intBool, jsonText, newId, nowIso } from '@agentroom/db'
 import type { AgentEvent } from '@agentroom/shared'
 import { detectChallenge, readDiscussionMetadata } from '@agentroom/shared'
-import { getDb, newId, nowIso, jsonText, intBool } from '@agentroom/db'
 
 import { getAdapter as defaultGetAdapter } from '../adapters/registry.js'
 import { handleHandoffRequest } from '../agents/handoff.js'
@@ -126,7 +126,10 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
           system_prompt: agentRaw.system_prompt,
           provider: agentRaw.provider,
           adapter_type: agentRaw.adapter_type,
-          tool_permissions: JSON.parse(agentRaw.tool_permissions || '{}') as Record<string, unknown>,
+          tool_permissions: JSON.parse(agentRaw.tool_permissions || '{}') as Record<
+            string,
+            unknown
+          >,
           credential_id: agentRaw.credential_id,
           created_by_user_id: agentRaw.created_by_user_id,
         }
@@ -257,9 +260,10 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
           if (tc) {
             const commandArg = (event.arguments['command'] as string | undefined) ?? ''
             if (isDeniedCommand(commandArg)) {
-              db.prepare(
-                "UPDATE tool_calls SET status = 'denied', error = ? WHERE id = ?",
-              ).run('Command blocked by denylist', tc.id)
+              db.prepare("UPDATE tool_calls SET status = 'denied', error = ? WHERE id = ?").run(
+                'Command blocked by denylist',
+                tc.id,
+              )
               log('warn', 'tool.denied', {
                 run_id: runId,
                 tool_name: event.tool_name,
@@ -295,9 +299,10 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
               })
               db.prepare("UPDATE tool_calls SET status = 'running' WHERE id = ?").run(tc.id)
               const result = { ok: true, stdout: 'approved' }
-              db.prepare(
-                "UPDATE tool_calls SET status = 'succeeded', output = ? WHERE id = ?",
-              ).run(redact(JSON.stringify(result)), tc.id)
+              db.prepare("UPDATE tool_calls SET status = 'succeeded', output = ? WHERE id = ?").run(
+                redact(JSON.stringify(result)),
+                tc.id,
+              )
             } else {
               log(
                 finalStatus === 'denied' ? 'info' : 'warn',
@@ -316,9 +321,10 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
             }
           } else if (tc) {
             const result = { ok: true, stdout: 'executed' }
-            db.prepare(
-              "UPDATE tool_calls SET status = 'succeeded', output = ? WHERE id = ?",
-            ).run(redact(JSON.stringify(result)), tc.id)
+            db.prepare("UPDATE tool_calls SET status = 'succeeded', output = ? WHERE id = ?").run(
+              redact(JSON.stringify(result)),
+              tc.id,
+            )
           }
         } else if (event.type === 'memory_op') {
           // Agent-curated memory: the bridge validates, injection-scans, and

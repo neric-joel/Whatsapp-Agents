@@ -1,3 +1,4 @@
+import { getDb, rowToAgentRun } from '@agentroom/db'
 import { NextRequest } from 'next/server'
 
 import {
@@ -9,7 +10,6 @@ import { apiError, apiSuccess } from '@/lib/api-error'
 import { internalError } from '@/lib/api-security'
 import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomMember } from '@/lib/permissions'
-import { getDb, rowToAgentRun } from '@agentroom/db'
 
 interface RouteParams {
   params: { runId: string }

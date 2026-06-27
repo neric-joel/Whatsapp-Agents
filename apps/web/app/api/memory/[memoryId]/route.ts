@@ -1,11 +1,11 @@
+import { getDb, intBool, rowToMemoryEntry } from '@agentroom/db'
 import { NextRequest } from 'next/server'
 
-import { getAuthenticatedUser } from '@/lib/auth'
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { assertSameOrigin, enforceRateLimit, internalError } from '@/lib/api-security'
 import { updateMemorySchema } from '@/lib/api-validation'
+import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomMember } from '@/lib/permissions'
-import { getDb, intBool, rowToMemoryEntry } from '@agentroom/db'
 
 interface RouteParams {
   params: { memoryId: string }

@@ -90,7 +90,7 @@ export default tseslint.config(
   {
     files: [
       'bridge/**/*.{ts,tsx,js,jsx,mjs,cjs}',
-      'packages/shared/**/*.{ts,tsx,js,jsx,mjs,cjs}',
+      'packages/**/*.{ts,tsx,js,jsx,mjs,cjs}',
       'scripts/**/*.{ts,tsx,js,jsx,mjs,cjs}',
       'e2e/**/*.{ts,tsx,js,jsx,mjs,cjs}',
       'playwright.config.ts',
