@@ -9,6 +9,8 @@
     "pnpm": ">=11.0.0"
   },
   "scripts": {
+    "start": "node scripts/launch.mjs",
+    "build": "pnpm --filter web build",
     "dev": "pnpm -r --parallel dev",
     "dev:web": "pnpm --filter web dev",
     "dev:bridge": "pnpm --filter bridge dev",

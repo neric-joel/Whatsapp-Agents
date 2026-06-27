@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # AgentRoom — one-command bootstrap (macOS / Linux / WSL).
-# Windows users: use start-agentroom.bat / the desktop shortcut instead.
+# To just run the app, use `pnpm start` (Windows: double-click start-agentroom.bat).
 #
 #   bash scripts/bootstrap.sh              # full setup
 #   bash scripts/bootstrap.sh --check-only # prereq checks only

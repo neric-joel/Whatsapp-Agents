@@ -61,8 +61,9 @@ pnpm dev                # runs web (:3000) + bridge together
 env values you have already set, and only fills blank/placeholder keys from
 `supabase status`.
 
-**Windows:** use `start-agentroom.bat` (or the desktop shortcut created by
-`create-desktop-shortcut.ps1`). See the [README Quickstart](../README.md#quickstart-local-510-min-to-a-working-app).
+**Windows:** double-click `start-agentroom.bat` (a thin wrapper around `pnpm start`), or
+run `pnpm start` from a terminal. See the
+[README Quickstart](../README.md#quickstart-a-couple-of-minutes-to-a-working-app).
 
 Manual equivalent:
 
