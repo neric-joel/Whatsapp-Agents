@@ -49,6 +49,40 @@ interface MessageBubbleProps {
   onHallucinationDismiss?: () => void
 }
 
+const CANARY_BADGE: Record<string, { label: string; title: string; cls: string }> = {
+  verified: {
+    label: '✓ verified',
+    title: 'Canary lookahead found no contradictions with the known environment.',
+    cls: 'bg-green-500/15 text-green-700',
+  },
+  unverified: {
+    label: '⚠ unverified',
+    title:
+      'Canary could not confirm this reply; treat with caution. It was marked unverified to peer agents.',
+    cls: 'bg-amber-500/15 text-amber-700',
+  },
+  flagged: {
+    label: '⚑ flagged',
+    title:
+      'Canary flagged a claim that contradicts the known environment. It was NOT propagated as fact to other agents.',
+    cls: 'bg-red-500/15 text-red-700',
+  },
+}
+
+function CanaryBadge({ status }: { status: string }) {
+  const b = CANARY_BADGE[status]
+  if (!b) return null
+  return (
+    <span
+      title={b.title}
+      className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${b.cls}`}
+      aria-label={`Canary: ${status}`}
+    >
+      {b.label}
+    </span>
+  )
+}
+
 export default function MessageBubble({
   message,
   children,
@@ -75,6 +109,11 @@ export default function MessageBubble({
   const showHallucinationBanner = Boolean(
     hallucinationState?.flagged && !hallucinationState.accepted && hallucinationMeta,
   )
+  // Canary lookahead verdict (Phase D) — shown as a small badge on agent replies.
+  const canaryStatus =
+    sender_type === 'agent' && metadata?.canary && typeof metadata.canary === 'object'
+      ? ((metadata.canary as { status?: string }).status ?? null)
+      : null
 
   async function handleCopy() {
     try {
@@ -195,6 +234,7 @@ export default function MessageBubble({
               {agents?.name ?? 'Agent'}
             </span>
             <span className="text-xs text-gray-500">{formatTime(created_at)}</span>
+            {canaryStatus && <CanaryBadge status={canaryStatus} />}
           </div>
           <div
             className={`rounded-2xl border px-4 py-3 text-sm leading-6 shadow-sm ${providerStyle.bubble} ${providerStyle.border} ${providerStyle.text} ${isHallucinationRejected ? 'line-through decoration-yellow-500 decoration-2' : ''}`}

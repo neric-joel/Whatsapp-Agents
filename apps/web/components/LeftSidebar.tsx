@@ -6,7 +6,10 @@ import { FormEvent, MouseEvent, useMemo, useRef, useState } from 'react'
 
 import { useAuth } from '@/hooks/useAuth'
 import { useRooms } from '@/hooks/useRooms'
+import { useSessions } from '@/hooks/useSessions'
 import { notifyChatCleared } from '@/lib/chat-events'
+
+import SessionBar from './SessionBar'
 
 type ApiResponse<T> = { ok: true; data: T } | { ok: false; error: { message?: string } | string }
 
@@ -100,6 +103,8 @@ function getApiErrorMessage(response: ApiResponse<unknown>) {
 
 export default function LeftSidebar() {
   const { rooms, refreshRooms } = useRooms()
+  const sessions = useSessions()
+  const { active } = sessions
   const { user, signOut } = useAuth()
   const pathname = usePathname()
   const router = useRouter()
@@ -107,6 +112,9 @@ export default function LeftSidebar() {
   const [roomName, setRoomName] = useState('')
   const [createError, setCreateError] = useState<string | null>(null)
   const [isCreating, setIsCreating] = useState(false)
+  // "Select your agents" catalog (connected CLIs only) — no agents are forced on a room.
+  const [catalog, setCatalog] = useState<{ id: string; name: string; slug: string }[]>([])
+  const [selectedProfileIds, setSelectedProfileIds] = useState<Set<string>>(new Set())
   const [roomActionError, setRoomActionError] = useState<string | null>(null)
   const [busyRoomId, setBusyRoomId] = useState<string | null>(null)
   const [showArchived, setShowArchived] = useState(false)
@@ -128,7 +136,36 @@ export default function LeftSidebar() {
       typeof document !== 'undefined' ? (document.activeElement as HTMLElement) : null
     setRoomName('')
     setCreateError(null)
+    setSelectedProfileIds(new Set())
     setIsCreateOpen(true)
+    // Offer only connected CLIs as the room's agent catalog.
+    void (async () => {
+      try {
+        const res = await fetch('/api/connections')
+        const json = (await res.json()) as {
+          ok: boolean
+          data?: { profiles: { id: string; name: string; slug: string; enabled: boolean }[] }
+        }
+        if (res.ok && json.ok) {
+          setCatalog(
+            (json.data?.profiles ?? [])
+              .filter((p) => p.enabled)
+              .map((p) => ({ id: p.id, name: p.name, slug: p.slug })),
+          )
+        }
+      } catch {
+        setCatalog([])
+      }
+    })()
+  }
+
+  function toggleProfile(id: string) {
+    setSelectedProfileIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
 
   function closeCreateModal() {
@@ -174,7 +211,8 @@ export default function LeftSidebar() {
       const res = await fetch('/api/rooms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
+        // Attach the new room to the active session (Cowork working context), if any.
+        body: JSON.stringify({ name, ...(active ? { session_id: active.id } : {}) }),
       })
       const payload = (await res.json().catch(() => null)) as ApiResponse<Room> | null
       if (!res.ok || !payload?.ok) {
@@ -186,10 +224,31 @@ export default function LeftSidebar() {
         return
       }
 
+      // Attach the agents the user selected from the catalog (connected CLIs).
+      const roomId = payload.data.id
+      for (const pid of selectedProfileIds) {
+        const p = catalog.find((x) => x.id === pid)
+        if (!p) continue
+        await fetch('/api/agents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            room_id: roomId,
+            name: p.name,
+            slug: p.slug,
+            provider: 'custom',
+            adapter_type: 'cli',
+            cli_profile_id: p.id,
+          }),
+        }).catch(() => {
+          /* a single agent failing to attach shouldn't block entering the room */
+        })
+      }
+
       setIsCreateOpen(false)
       setRoomName('')
       await refreshRooms()
-      router.push(`/rooms/${payload.data.id}`)
+      router.push(`/rooms/${roomId}`)
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : 'Failed to create room')
     } finally {
@@ -221,6 +280,37 @@ export default function LeftSidebar() {
       setOpenRoomMenuId(null)
     } catch (err) {
       setRoomActionError(err instanceof Error ? err.message : 'Failed to update room')
+    } finally {
+      setBusyRoomId(null)
+    }
+  }
+
+  async function renameRoom(room: Room, event: MouseEvent<HTMLButtonElement>) {
+    event.preventDefault()
+    event.stopPropagation()
+    const next = window.prompt('Rename room', room.name)?.trim()
+    setOpenRoomMenuId(null)
+    if (!next || next === room.name) return
+    setBusyRoomId(room.id)
+    setRoomActionError(null)
+    try {
+      const res = await fetch(`/api/rooms/${room.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: next }),
+      })
+      const payload = (await res.json().catch(() => null)) as ApiResponse<Room> | null
+      if (!res.ok || !payload?.ok) {
+        setRoomActionError(
+          payload
+            ? (getApiErrorMessage(payload) ?? 'Failed to rename room')
+            : 'Failed to rename room',
+        )
+        return
+      }
+      await refreshRooms()
+    } catch (err) {
+      setRoomActionError(err instanceof Error ? err.message : 'Failed to rename room')
     } finally {
       setBusyRoomId(null)
     }
@@ -326,6 +416,14 @@ export default function LeftSidebar() {
             <div className="absolute right-0 top-9 z-20 w-40 overflow-hidden rounded-md border border-zinc-200 bg-white py-1 text-sm shadow-xl">
               <button
                 type="button"
+                onClick={(event) => renameRoom(room, event)}
+                disabled={isBusy}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-40"
+              >
+                ✎ Rename
+              </button>
+              <button
+                type="button"
                 onClick={(event) => toggleArchive(room, event)}
                 disabled={isBusy}
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-40"
@@ -384,6 +482,14 @@ export default function LeftSidebar() {
           </Link>
         </div>
       </div>
+      <SessionBar
+        sessions={sessions.sessions}
+        active={active}
+        loading={sessions.loading}
+        onCreate={sessions.createSession}
+        onRename={(id, name) => sessions.updateSession(id, { name })}
+        onSwitch={(id) => sessions.updateSession(id, { touch: true })}
+      />
       <div className="px-4 py-2 text-[11px] font-medium uppercase tracking-widest text-[var(--muted)]">
         ROOMS
       </div>
@@ -488,6 +594,37 @@ export default function LeftSidebar() {
               placeholder="Planning"
               disabled={isCreating}
             />
+            <fieldset className="mt-4">
+              <legend className="text-sm font-medium text-zinc-700">
+                Agents <span className="font-normal text-zinc-500">— pick who joins this room</span>
+              </legend>
+              {catalog.length === 0 ? (
+                <p className="mt-1 text-xs text-zinc-500">
+                  No CLIs connected yet.{' '}
+                  <Link href="/connections" className="text-violet-600 underline">
+                    Connect one
+                  </Link>{' '}
+                  to add agents (you can also add them after creating the room).
+                </p>
+              ) : (
+                <div className="mt-1 max-h-40 space-y-1 overflow-y-auto rounded-md border border-zinc-200 p-2">
+                  {catalog.map((p) => (
+                    <label
+                      key={p.id}
+                      className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm text-zinc-800 hover:bg-zinc-50"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedProfileIds.has(p.id)}
+                        onChange={() => toggleProfile(p.id)}
+                        disabled={isCreating}
+                      />
+                      {p.name} <span className="text-xs text-zinc-500">@{p.slug}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </fieldset>
             {createError && (
               <p role="alert" className="mt-3 text-sm text-red-700">
                 {createError}

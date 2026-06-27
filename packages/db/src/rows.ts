@@ -7,6 +7,7 @@ import type {
   PinnedItem,
   Room,
   RoomMember,
+  Session,
   ToolCall,
 } from '@agentroom/shared'
 
@@ -87,7 +88,20 @@ export function rowToRoom(r: DbRow): Room {
     visibility: str(r['visibility']),
     is_archived: bool(r['is_archived']),
     last_message_at: strOrNull(r['last_message_at']),
+    session_id: strOrNull(r['session_id']),
     created_by_user_id: strOrNull(r['created_by_user_id']),
+    created_at: str(r['created_at']),
+    updated_at: str(r['updated_at']),
+  }
+}
+
+export function rowToSession(r: DbRow): Session {
+  return {
+    id: str(r['id']),
+    name: str(r['name']),
+    working_dir: str(r['working_dir']),
+    created_by_user_id: strOrNull(r['created_by_user_id']),
+    last_active_at: str(r['last_active_at']),
     created_at: str(r['created_at']),
     updated_at: str(r['updated_at']),
   }

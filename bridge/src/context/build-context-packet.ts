@@ -1,4 +1,4 @@
-import { getDb, rowToFile, rowToMessage, rowToPinnedItem } from '@agentroom/db'
+import { environmentFacts, getDb, rowToFile, rowToMessage, rowToPinnedItem } from '@agentroom/db'
 import type {
   AgentProvider,
   ContextPacketV1,
@@ -199,6 +199,9 @@ export async function buildContextPacket({
       system_prompt: agentInfo.system_prompt,
       provider: agentInfo.provider as AgentProvider,
     },
+    // Authoritative grounding (real local paths) injected first into the prompt so
+    // agents stop hallucinating their own architecture (Supabase/ChatGPT-storage).
+    environment: environmentFacts(),
     trigger_message: {
       id: triggerMsg.id,
       content: triggerMsg.content,

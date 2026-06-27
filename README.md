@@ -169,6 +169,14 @@ docs/             CONNECTING_CLIS · ARCHITECTURE · OBSERVABILITY · adr/ (deci
 
 - [`docs/CONNECTING_CLIS.md`](docs/CONNECTING_CLIS.md) — connect, detect, and bring your
   own CLI; the `config.json` format; the auth model.
+- [`docs/WORKSPACE_MODEL.md`](docs/WORKSPACE_MODEL.md) — Cowork-style working folders +
+  sessions, mapped to AgentRoom.
+- [`docs/CANARY_LOOKAHEAD.md`](docs/CANARY_LOOKAHEAD.md) — the hallucination lookahead gate
+  that stops a wrong claim from spreading between agents.
+- [`docs/MEMORY_AND_INTERACTION.md`](docs/MEMORY_AND_INTERACTION.md) — memory, context
+  windowing, turn-taking, and loop guards.
+- [`docs/reviews/eval-report.md`](docs/reviews/eval-report.md) — live evaluation: grounding
+  accuracy, hallucination-bait resistance, concurrency, and an image-upload question.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — components, data-flow, the `agent_runs`
   queue contract, the adapter/subprocess model, trust boundaries.
 - [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md) — logging, health/metrics, run state machine.

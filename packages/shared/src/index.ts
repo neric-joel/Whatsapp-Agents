@@ -1,5 +1,6 @@
 export const AGENTROOM_VERSION = '0.1.0'
 
+export * from './canary.js'
 export * from './commands.js'
 // NOTE: credential-crypto is intentionally NOT re-exported here — it imports
 // `node:crypto`, which would poison the browser bundle (the barrel is imported by
@@ -82,7 +83,21 @@ export interface Room {
   visibility: string
   is_archived: boolean
   last_message_at: string | null
+  /** The Cowork-style session (working context) this room belongs to, if any. */
+  session_id: string | null
   created_by_user_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** A Cowork-style working context: a named session bound to a folder on disk. */
+export interface Session {
+  id: string
+  name: string
+  /** Absolute path to the working folder this session is scoped to. */
+  working_dir: string
+  created_by_user_id: string | null
+  last_active_at: string
   created_at: string
   updated_at: string
 }
@@ -287,6 +302,13 @@ export interface ContextPacketV1 {
   run_id: string
   room: Pick<Room, 'id' | 'name' | 'reply_mode' | 'max_agent_rounds' | 'discussion_mode'>
   agent: Pick<Agent, 'id' | 'name' | 'slug' | 'system_prompt' | 'provider'>
+  /**
+   * Authoritative, auto-generated grounding facts about THIS runtime (local SQLite
+   * paths, no cloud/Supabase/login). Built from the real app-data config so it can't
+   * drift, and rendered to the agent first — stops agents from hallucinating their own
+   * architecture (e.g. claiming Supabase/ChatGPT-workspace storage).
+   */
+  environment?: string
   trigger_message: Pick<Message, 'id' | 'content' | 'sender_type' | 'created_at'>
   recent_messages: Array<
     Pick<Message, 'id' | 'content' | 'sender_type' | 'sender_agent_id' | 'created_at' | 'metadata'>

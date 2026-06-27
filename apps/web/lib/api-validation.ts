@@ -6,11 +6,36 @@ export const createRoomSchema = z.object({
   reply_mode: z.enum(['all', 'mentioned_only']).optional(),
   discussion_mode: z.enum(['independent', 'tag_turns']).optional(),
   visibility: z.enum(['private', 'public']).optional(),
+  // The Cowork-style session this room belongs to (optional; legacy rooms have none).
+  session_id: z.string().uuid().optional(),
 })
+
+// Sessions — a named working context bound to a folder on disk (Cowork "project").
+export const createSessionSchema = z.object({
+  // Absolute path the user "opens"; the route verifies it exists + is a directory.
+  working_dir: z.string().min(1).max(4096),
+  name: z.string().min(1).max(120).optional(),
+})
+
+export const updateSessionSchema = z
+  .object({
+    name: z.string().min(1).max(120).optional(),
+    // Bump last_active_at to mark this the active session (used when switching).
+    touch: z.boolean().optional(),
+  })
+  .refine((d) => Object.keys(d).length > 0, 'At least one field required')
 
 export const updateRoomArchiveSchema = z.object({
   is_archived: z.boolean(),
 })
+
+// Rename and/or archive a room.
+export const updateRoomSchema = z
+  .object({
+    name: z.string().min(1).max(100).optional(),
+    is_archived: z.boolean().optional(),
+  })
+  .refine((d) => Object.keys(d).length > 0, 'At least one field required')
 
 export const sendMessageSchema = z.object({
   content: z.string().min(1),

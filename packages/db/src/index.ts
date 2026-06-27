@@ -16,6 +16,7 @@ export {
   writeConfig,
 } from './config.js'
 export { closeDb, getDb, LOCAL_USER, LOCAL_USER_ID } from './db.js'
+export { environmentFacts } from './environment.js'
 export { newId, nowIso } from './ids.js'
 export { appDataDir, configPath, dbPath, ensureAppDirs, filesDir } from './paths.js'
 export {
@@ -29,6 +30,7 @@ export {
   rowToPinnedItem,
   rowToRoom,
   rowToRoomMember,
+  rowToSession,
   rowToToolCall,
 } from './rows.js'
 export { SCHEMA_SQL } from './schema.js'

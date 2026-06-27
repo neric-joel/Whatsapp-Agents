@@ -1,6 +1,6 @@
 import { getDb, intBool, jsonText, newId, nowIso } from '@agentroom/db'
 import type { AgentEvent } from '@agentroom/shared'
-import { detectChallenge, readDiscussionMetadata } from '@agentroom/shared'
+import { detectChallenge, readDiscussionMetadata, runCanary } from '@agentroom/shared'
 
 import { getAdapter as defaultGetAdapter } from '../adapters/registry.js'
 import { handleHandoffRequest } from '../agents/handoff.js'
@@ -352,6 +352,18 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
     const replyContent = redact(sanitizeAgentOutput(finalContent))
     const isConclusion = conclusionDetected(replyContent)
     const hallucination = detectHallucination(replyContent)
+    // Canary lookahead (HalluCana): grounds claims against the real architecture and gates
+    // propagation. Fail safe — any error becomes 'unverified', never 'verified'.
+    let canary: { status: 'verified' | 'unverified' | 'flagged'; reasons: string[] }
+    try {
+      canary = runCanary(replyContent)
+    } catch (err) {
+      canary = {
+        status: 'unverified',
+        reasons: [`Canary error: ${err instanceof Error ? err.message : String(err)}`],
+      }
+    }
+    log('info', 'canary.check', { run_id: runId, status: canary.status })
     log('info', 'hallucination.check', {
       run_id: runId,
       flagged: hallucination.flagged,
@@ -371,6 +383,11 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
         flagged: hallucination.flagged,
         confidence: hallucination.confidence,
         reasons: hallucination.reasons,
+        checked_at: new Date().toISOString(),
+      },
+      canary: {
+        status: canary.status,
+        reasons: canary.reasons,
         checked_at: new Date().toISOString(),
       },
       ...(disc
