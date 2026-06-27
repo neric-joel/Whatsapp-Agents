@@ -1,11 +1,12 @@
 import 'dotenv/config'
 
+import { getDb, nowIso } from '@agentroom/db'
+
 import { loadBridgeEnv } from './lib/env.js'
 import { errorTrackingEnabled } from './lib/error-tracking.js'
 import { createHealthServer } from './lib/health-server.js'
 import { log } from './lib/logger.js'
 import { recoverStaleRuns } from './lib/stale-runs.js'
-import { createServiceClient } from './lib/supabase.js'
 import { processRun } from './workers/run-worker.js'
 
 // Fail fast on a bad environment, naming the offending var(s).
@@ -25,12 +26,10 @@ async function pollOnce() {
   lastPollAt = new Date().toISOString()
   if (activeRuns.size >= MAX_CONC) return
   log('debug', 'poll.start')
-  const supabase = createServiceClient()
-  const { data: runs } = await supabase
-    .from('agent_runs')
-    .select('id')
-    .eq('status', 'queued')
-    .limit(MAX_CONC - activeRuns.size)
+  const db = getDb()
+  const runs = db
+    .prepare('SELECT id FROM agent_runs WHERE status = ? LIMIT ?')
+    .all('queued', MAX_CONC - activeRuns.size) as { id: string }[]
   if (!runs || runs.length === 0) {
     log('debug', 'poll.empty')
     return
@@ -52,9 +51,7 @@ async function pollOnce() {
 }
 
 async function recoverStaleRunsOnce(reason: string) {
-  const supabase = createServiceClient()
   const count = await recoverStaleRuns({
-    supabase,
     staleMs: STALE_MS,
     reason,
     logRecovered: (runId) => {
@@ -67,11 +64,10 @@ async function recoverStaleRunsOnce(reason: string) {
 async function sendHeartbeat() {
   if (activeRuns.size === 0) return
   const runIds = [...activeRuns]
-  const supabase = createServiceClient()
-  await supabase
-    .from('agent_runs')
-    .update({ heartbeat_at: new Date().toISOString() })
-    .in('id', runIds)
+  const db = getDb()
+  db.prepare(
+    `UPDATE agent_runs SET heartbeat_at = ? WHERE id IN (${runIds.map(() => '?').join(',')})`,
+  ).run(nowIso(), ...runIds)
   for (const runId of runIds) {
     log('debug', 'heartbeat.sent', { run_id: runId })
   }
@@ -79,12 +75,11 @@ async function sendHeartbeat() {
 
 async function countQueuedRuns(): Promise<number | null> {
   try {
-    const supabase = createServiceClient()
-    const { count } = await supabase
-      .from('agent_runs')
-      .select('id', { count: 'exact', head: true })
-      .eq('status', 'queued')
-    return count ?? 0
+    const db = getDb()
+    const row = db
+      .prepare('SELECT count(*) AS count FROM agent_runs WHERE status = ?')
+      .get('queued') as { count: number } | undefined
+    return row?.count ?? 0
   } catch {
     return null
   }

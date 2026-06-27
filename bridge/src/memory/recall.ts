@@ -1,5 +1,5 @@
 import type { ContextPacketV1, MemoryEntry, UserProfileSummary } from '@agentroom/shared'
-import type { SupabaseClient } from '@supabase/supabase-js'
+import { getDb, rowToMemoryEntry } from '@agentroom/db'
 
 import { log } from '../lib/logger.js'
 
@@ -16,7 +16,7 @@ function readMemoryMaxChars(env: NodeJS.ProcessEnv = process.env): number {
 
 /**
  * Apply the count + character budget to ranked memory rows. Pure so it can be
- * unit-tested without a DB: keeps the highest-ranked entries (RPC returns them
+ * unit-tested without a DB: keeps the highest-ranked entries (recall returns them
  * ranked) until either the entry cap or the cumulative char budget is hit.
  *
  * The char budget bounds RAW title+content only — the rendered prompt block adds
@@ -50,11 +50,10 @@ interface RecallParams {
 }
 
 /**
- * Build the ContextPacketV1.memory field via ranked Postgres FTS. Resilient:
+ * Build the ContextPacketV1.memory field via ranked recall over SQLite. Resilient:
  * any failure logs and returns undefined rather than breaking the run.
  */
 export async function recallMemory(
-  supabase: SupabaseClient,
   params: RecallParams,
 ): Promise<ContextPacketV1['memory'] | undefined> {
   const maxEntries = readMemoryMaxEntries()
@@ -63,18 +62,14 @@ export async function recallMemory(
 
   let agent: MemoryEntry[] = []
   try {
-    const { data, error } = await supabase.rpc('recall_agent_memory', {
-      p_agent_id: params.agentId,
-      p_room_id: params.roomId,
-      p_query: params.queryText ?? '',
-      p_limit: maxEntries,
-      p_user_id: params.userId ?? null,
+    const data = recallAgentMemory({
+      agentId: params.agentId,
+      roomId: params.roomId,
+      query: params.queryText ?? '',
+      limit: maxEntries,
+      userId: params.userId ?? null,
     })
-    if (error) {
-      log('warn', 'memory.recall.failed', { error: error.message, room_id: params.roomId })
-    } else if (Array.isArray(data)) {
-      agent = applyMemoryBudget(data as MemoryEntry[], maxEntries, maxChars)
-    }
+    agent = applyMemoryBudget(data, maxEntries, maxChars)
   } catch (err) {
     log('warn', 'memory.recall.error', {
       error: err instanceof Error ? err.message : String(err),
@@ -82,27 +77,119 @@ export async function recallMemory(
     })
   }
 
-  const user = params.userId ? await recallUserProfile(supabase, params.userId) : undefined
+  const user = params.userId ? recallUserProfile(params.userId) : undefined
 
   if (agent.length === 0 && !user) return undefined
   return { agent, ...(user ? { user } : {}) }
 }
 
-async function recallUserProfile(
-  supabase: SupabaseClient,
-  userId: string,
-): Promise<UserProfileSummary | undefined> {
+interface RecallAgentMemoryArgs {
+  agentId: string | null
+  roomId: string
+  query: string
+  limit: number
+  userId: string | null
+}
+
+/**
+ * JS reimplementation of the former Postgres `recall_agent_memory` RPC over
+ * SQLite (NO FTS). Selects the active memory visible to (agent within room):
+ * room-shared notes + this agent's room memory, this agent's global memory, and
+ * the triggering user's personal global notes. When a query string is given,
+ * keeps only rows whose title/content contain a query term (LIKE). Ranked by
+ * pinned DESC, then query-match DESC, then confidence DESC, then created_at DESC,
+ * limited to GREATEST(limit, 1).
+ */
+function recallAgentMemory(args: RecallAgentMemoryArgs): MemoryEntry[] {
+  const db = getDb()
+  // Scope predicate mirrors recall_agent_memory: is_active AND
+  //   (room-shared notes + this agent's room memory)
+  //   OR (this agent's global memory)
+  //   OR (the triggering user's personal global notes)
+  const rows = db
+    .prepare(
+      `SELECT * FROM agent_memory m
+       WHERE m.is_active = 1
+         AND (
+           (m.scope = 'room' AND m.room_id = ?
+             AND (? IS NULL OR m.agent_id = ? OR m.agent_id IS NULL))
+           OR (m.scope = 'global' AND ? IS NOT NULL AND m.agent_id = ?)
+           OR (m.scope = 'global' AND ? IS NOT NULL AND m.created_by_user_id = ?)
+         )`,
+    )
+    .all(
+      args.roomId,
+      args.agentId,
+      args.agentId,
+      args.agentId,
+      args.agentId,
+      args.userId,
+      args.userId,
+    )
+    .map((r) => rowToMemoryEntry(r as Record<string, unknown>))
+
+  const query = args.query ?? ''
+  const hasQuery = query !== ''
+  const terms = hasQuery
+    ? query
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((t) => t.length > 0)
+    : []
+
+  // Score of a row against the query terms (0 when no query) — the LIKE analog of
+  // ts_rank: count of distinct query terms found in the title+content haystack.
+  const score = (row: MemoryEntry): number => {
+    if (!hasQuery) return 0
+    const haystack = `${row.title ?? ''} ${row.content}`.toLowerCase()
+    let n = 0
+    for (const term of terms) {
+      if (haystack.includes(term)) n += 1
+    }
+    return n
+  }
+
+  // When a query string is given, prefer rows whose title/content LIKE a query
+  // term — drop rows that match none (mirrors the `search_tsv @@ tsquery` filter).
+  const filtered = hasQuery ? rows.filter((row) => score(row) > 0) : rows
+
+  filtered.sort((a, b) => {
+    // pinned DESC
+    const pinnedDiff = Number(b.pinned) - Number(a.pinned)
+    if (pinnedDiff !== 0) return pinnedDiff
+    // query-rank DESC (0 when no query)
+    const rankDiff = score(b) - score(a)
+    if (rankDiff !== 0) return rankDiff
+    // confidence DESC
+    const confDiff = b.confidence - a.confidence
+    if (confDiff !== 0) return confDiff
+    // created_at DESC (ISO-8601 text sorts lexicographically)
+    if (a.created_at < b.created_at) return 1
+    if (a.created_at > b.created_at) return -1
+    return 0
+  })
+
+  const limit = Math.max(args.limit, 1)
+  return filtered.slice(0, limit)
+}
+
+function recallUserProfile(userId: string): UserProfileSummary | undefined {
   try {
-    const { data, error } = await supabase
-      .from('user_profile')
-      .select('summary, details, consented')
-      .eq('user_id', userId)
-      .maybeSingle()
-    if (error || !data) return undefined
-    const row = data as {
-      summary: string | null
-      details: Record<string, unknown>
-      consented: boolean
+    const db = getDb()
+    const data = db
+      .prepare('SELECT summary, details, consented FROM user_profile WHERE user_id = ?')
+      .get(userId) as
+      | {
+          summary: string | null
+          details: string
+          consented: number
+        }
+      | undefined
+    if (!data) return undefined
+    const row = {
+      summary: data.summary,
+      details: parseDetails(data.details),
+      consented: data.consented === 1,
     }
     // Agents see the profile only with explicit consent (Hermes USER.md gate).
     if (!row.consented || !row.summary?.trim()) return undefined
@@ -114,6 +201,20 @@ async function recallUserProfile(
     })
     return undefined
   }
+}
+
+function parseDetails(value: string | null | undefined): Record<string, unknown> {
+  if (typeof value === 'string' && value) {
+    try {
+      const parsed = JSON.parse(value)
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {}
+    } catch {
+      return {}
+    }
+  }
+  return {}
 }
 
 function readBoundedInt(

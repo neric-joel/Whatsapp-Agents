@@ -1,4 +1,7 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+
+import { getDb, filesDir, jsonText } from '@agentroom/db'
 
 import { log } from '../lib/logger.js'
 
@@ -48,13 +51,12 @@ export function formatFilesForPrompt(files?: ContextFilePreview[]): string | nul
 }
 
 export async function hydrateFilePreviews(
-  supabase: SupabaseClient,
   fileRows: FilePreviewRow[],
 ): Promise<ContextFilePreview[]> {
   const hydrated: ContextFilePreview[] = []
 
   for (const file of fileRows) {
-    const extractedText = file.extracted_text ?? (await extractAndPersistImageText(supabase, file))
+    const extractedText = file.extracted_text ?? (await extractAndPersistImageText(file))
     hydrated.push({
       id: file.id,
       filename: file.filename,
@@ -79,10 +81,7 @@ function imageExtractionEnabled(): boolean {
   return process.env.ENABLE_IMAGE_TEXT_EXTRACTION === 'true' && Boolean(process.env.OPENAI_API_KEY)
 }
 
-async function extractAndPersistImageText(
-  supabase: SupabaseClient,
-  file: FilePreviewRow,
-): Promise<string | null> {
+async function extractAndPersistImageText(file: FilePreviewRow): Promise<string | null> {
   if (!imageExtractionEnabled()) return null
   if (!file.mime_type.startsWith('image/')) return null
   if (file.size_bytes > MAX_IMAGE_BYTES) return null
@@ -91,12 +90,10 @@ async function extractAndPersistImageText(
   if (!apiKey) return null
 
   try {
-    const { data, error } = await supabase.storage
-      .from(file.storage_bucket)
-      .download(file.storage_path)
-    if (error || !data) return null
+    const data = await readFile(join(filesDir(), file.storage_path))
+    if (!data) return null
 
-    const base64 = Buffer.from(await data.arrayBuffer()).toString('base64')
+    const base64 = Buffer.from(data).toString('base64')
     const extractedText = await extractImageTextWithOpenAI({
       apiKey,
       mimeType: file.mime_type,
@@ -106,19 +103,18 @@ async function extractAndPersistImageText(
 
     if (!extractedText) return null
 
-    await supabase
-      .from('files')
-      .update({
-        extracted_text: extractedText,
-        metadata: {
-          ...(file.metadata ?? {}),
-          extraction: {
-            provider: 'openai',
-            model: process.env.OPENAI_VISION_MODEL ?? DEFAULT_VISION_MODEL,
-          },
+    const db = getDb()
+    db.prepare('UPDATE files SET extracted_text = ?, metadata = ? WHERE id = ?').run(
+      extractedText,
+      jsonText({
+        ...(file.metadata ?? {}),
+        extraction: {
+          provider: 'openai',
+          model: process.env.OPENAI_VISION_MODEL ?? DEFAULT_VISION_MODEL,
         },
-      })
-      .eq('id', file.id)
+      }),
+      file.id,
+    )
 
     return extractedText
   } catch (error) {

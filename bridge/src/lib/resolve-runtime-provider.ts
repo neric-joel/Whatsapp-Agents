@@ -1,10 +1,10 @@
+import { getDb } from '@agentroom/db'
 import type { RuntimeCredential } from '@agentroom/shared'
 import {
   decryptSecret,
   getCredentialKey,
   hasCredentialKey,
 } from '@agentroom/shared/credential-crypto'
-import type { SupabaseClient } from '@supabase/supabase-js'
 
 /**
  * resolveRuntimeProvider — the Hermes analog (ADR-0010 / WS2). Given an agent's
@@ -24,7 +24,6 @@ const ADAPTER_CREDENTIAL_ENV: Record<string, { envVar: string; baseUrlEnv?: stri
 }
 
 interface ResolveRuntimeProviderArgs {
-  supabase: SupabaseClient
   adapterType: string | null | undefined
   credentialId: string | null | undefined
   /** The agent's creator — the credential MUST belong to them ("owner brings fuel"). */
@@ -33,7 +32,6 @@ interface ResolveRuntimeProviderArgs {
 }
 
 export async function resolveRuntimeProvider({
-  supabase,
   adapterType,
   credentialId,
   ownerUserId,
@@ -46,15 +44,17 @@ export async function resolveRuntimeProvider({
 
   // Owner-scoped load: the credential must belong to the agent's creator. Service-role
   // read; RLS would also deny cross-user, this is defense-in-depth at the query.
-  const { data, error } = await supabase
-    .from('user_credentials')
-    .select('secret_ciphertext, secret_nonce, base_url')
-    .eq('id', credentialId)
-    .eq('user_id', ownerUserId)
-    .maybeSingle()
-  if (error || !data) return null
+  const db = getDb()
+  const data = db
+    .prepare(
+      'SELECT secret_ciphertext, secret_nonce, base_url FROM user_credentials WHERE id = ? AND user_id = ?',
+    )
+    .get(credentialId, ownerUserId) as
+    | { secret_ciphertext: string; secret_nonce: string; base_url: string | null }
+    | undefined
+  if (!data) return null
 
-  const row = data as { secret_ciphertext: string; secret_nonce: string; base_url: string | null }
+  const row = data
   let secret: string
   try {
     secret = decryptSecret(
