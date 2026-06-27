@@ -6,6 +6,28 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added — v2: trustworthy, Cowork-style workspace
+
+- **Agent grounding.** Every agent prompt is prefixed with authoritative facts about the
+  real local architecture (built from the live `@agentroom/db` paths), so agents stop
+  hallucinating their own storage (e.g. claiming Supabase/a ChatGPT workspace) and answer
+  "local SQLite under ~/.agentroom" instead. See [docs/CANARY_LOOKAHEAD.md](docs/CANARY_LOOKAHEAD.md).
+- **Canary lookahead** (HalluCana-inspired). A pre-commit gate screens every reply and
+  flags claims that contradict the known environment; a flagged/unverified reply is
+  labelled `[UNVERIFIED]` to peer agents so a wrong claim can't become another agent's
+  premise. Fail-safe. Canary badges (✓/⚠/⚑) on agent messages.
+- **Cowork-style sessions.** Open a working folder; sessions are named, renamable, and
+  resume across restarts. Rooms belong to a session. See [docs/WORKSPACE_MODEL.md](docs/WORKSPACE_MODEL.md).
+- **Pick your agents.** No pre-built agents are forced on a room; you select which
+  connected CLIs join from a catalog at room setup. Rooms are renamable. A connected CLI
+  is one agent reused across rooms.
+- **Cowork surfaces.** An Outputs panel (room files) alongside the existing progress
+  (run cards) and memory surfaces.
+- **Fixed.** The Connections page rendered a duplicate sidebar (a double-`AuthGuard`),
+  pushing the panel + its Connect buttons off-screen — now a single shell.
+- **Eval harness** (`scripts/eval/run-eval.mjs`) + [report](docs/reviews/eval-report.md):
+  live grounding 4/4, hallucination-bait 2/2 resisted, concurrency stable.
+
 ### Changed — local-only rewrite (no Supabase, no Docker, no login)
 
 AgentRoom is now a **local, single-user desktop app**. It runs entirely on `localhost`
