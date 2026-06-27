@@ -131,7 +131,10 @@ async function main() {
     // BUILD_ID exists only after `next build` — a `next dev` run leaves a `.next` WITHOUT it,
     // so checking the dir alone would wrongly "reuse" a dev build that `next start` can't run.
     if (!existsSync(join(ROOT, 'apps/web/.next/BUILD_ID'))) {
-      emit('launch', 'AGENTROOM_SKIP_BUILD=1 but no production build found (apps/web/.next/BUILD_ID missing).')
+      emit(
+        'launch',
+        'AGENTROOM_SKIP_BUILD=1 but no production build found (apps/web/.next/BUILD_ID missing).',
+      )
       emit('launch', 'Run `pnpm start` once without AGENTROOM_SKIP_BUILD to build first.')
       process.exit(1)
     }
