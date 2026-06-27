@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server'
 
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { internalError } from '@/lib/api-security'
-import { updateRoomArchiveSchema } from '@/lib/api-validation'
+import { updateRoomSchema } from '@/lib/api-validation'
 import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomOwner } from '@/lib/permissions'
 
@@ -32,19 +32,29 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   if ('error' in auth) return auth.error
 
   const body = await req.json().catch(() => null)
-  const parseResult = updateRoomArchiveSchema.safeParse(body)
+  const parseResult = updateRoomSchema.safeParse(body)
   if (!parseResult.success) {
     return apiError('VALIDATION_ERROR', 'Invalid request body', 400, parseResult.error.flatten())
   }
+
+  const sets: string[] = []
+  const args: unknown[] = []
+  if (parseResult.data.name !== undefined) {
+    sets.push('name = ?')
+    args.push(parseResult.data.name.trim())
+  }
+  if (parseResult.data.is_archived !== undefined) {
+    sets.push('is_archived = ?')
+    args.push(intBool(parseResult.data.is_archived))
+  }
+  args.push(params.roomId)
 
   const db = getDb()
   let data: Record<string, unknown> | undefined
   try {
     data = db
-      .prepare('UPDATE rooms SET is_archived = ? WHERE id = ? RETURNING *')
-      .get(intBool(parseResult.data.is_archived), params.roomId) as
-      | Record<string, unknown>
-      | undefined
+      .prepare(`UPDATE rooms SET ${sets.join(', ')} WHERE id = ? RETURNING *`)
+      .get(...args) as Record<string, unknown> | undefined
   } catch (e) {
     return internalError('room update', e)
   }

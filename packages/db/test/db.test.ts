@@ -22,15 +22,16 @@ after(() => {
 
 test('fresh install seeds one room with three agents as members', () => {
   const db = getDb()
+  // v2: an empty starter room, NO forced pre-built agents (the user picks from a catalog).
   assert.equal((db.prepare('SELECT count(*) c FROM rooms').get() as { c: number }).c, 1)
-  assert.equal((db.prepare('SELECT count(*) c FROM agents').get() as { c: number }).c, 3)
+  assert.equal((db.prepare('SELECT count(*) c FROM agents').get() as { c: number }).c, 0)
   assert.equal(
     (
       db.prepare("SELECT count(*) c FROM room_members WHERE member_type='agent'").get() as {
         c: number
       }
     ).c,
-    3,
+    0,
   )
   const owner = db.prepare('SELECT created_by_user_id o FROM rooms LIMIT 1').get() as { o: string }
   assert.equal(owner.o, LOCAL_USER_ID)
@@ -61,7 +62,11 @@ test('messages round-trip with ISO timestamps and defaults', () => {
 test('agent_runs status-guarded claim is atomic (only one claimant wins)', () => {
   const db = getDb()
   const roomId = (db.prepare('SELECT id FROM rooms LIMIT 1').get() as { id: string }).id
-  const agentId = (db.prepare('SELECT id FROM agents LIMIT 1').get() as { id: string }).id
+  // No agents are seeded in v2, so create one for this run.
+  const agentId = newId()
+  db.prepare(
+    `INSERT INTO agents (id, name, slug, provider, adapter_type, created_by_user_id) VALUES (?, 'A', 'a', 'mock', 'mock', ?)`,
+  ).run(agentId, LOCAL_USER_ID)
   const runId = newId()
   db.prepare(
     `INSERT INTO agent_runs (id, room_id, agent_id, status) VALUES (?, ?, ?, 'queued')`,

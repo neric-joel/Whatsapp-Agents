@@ -29,6 +29,14 @@ export const updateRoomArchiveSchema = z.object({
   is_archived: z.boolean(),
 })
 
+// Rename and/or archive a room.
+export const updateRoomSchema = z
+  .object({
+    name: z.string().min(1).max(100).optional(),
+    is_archived: z.boolean().optional(),
+  })
+  .refine((d) => Object.keys(d).length > 0, 'At least one field required')
+
 export const sendMessageSchema = z.object({
   content: z.string().min(1),
   content_type: z.string().optional(),
