@@ -8,6 +8,48 @@ All notable changes to this project are documented here. The format is based on
 
 _Nothing yet._
 
+## [1.3.0] - 2026-06-27
+
+### Added — production run path
+
+- **`pnpm start`** — one cross-platform command for end users. It installs deps if needed,
+  builds the web app (`next build`), starts the production server (`next start`) and the
+  bridge (non-watch), waits until `http://localhost:3000` is ready, opens your browser, and
+  tears the whole stack down on Ctrl-C. No more running the dev server in front of users.
+  Contributors keep `pnpm dev` (watch mode). `pnpm build` is exposed for pre-building.
+
+### Changed — launcher cleanup
+
+- `start-agentroom.bat` is now a thin wrapper around `pnpm start`; its port-killing,
+  `.next`-cache-wiping, and zombie-`tsx`-reaping logic is gone — a freshly built app started
+  with `next start` doesn't need it.
+- Removed `create-desktop-shortcut.ps1` and the now-unused `scripts/check-web-ready.{ps1,sh}`.
+- README / CONTRIBUTING / Makefile / `scripts/bootstrap.sh` / `docs/SELF_HOSTING.md` now point
+  end users at `pnpm start` and contributors at `pnpm dev` (and drop stale Supabase/Docker
+  setup steps that referenced removed scripts).
+
+### Security — issue #67 closed
+
+- **`working_dir` hardening.** A session's working folder is validated before it is stored
+  (and before it can ever become a spawned CLI's `cwd`): absolute path only, UNC/device paths
+  rejected, **realpath**-canonicalized and required to be a real directory inside an allow-root
+  (defaults to your home dir; override with `AGENTROOM_WORKSPACE_ROOT`). realpath defeats `..`
+  traversal and symlink/junction escape; a sensitive-dir denylist (`~/.ssh`, `~/.aws`,
+  `~/.gnupg`, `~/.config`, the app's own `~/.agentroom`, …) and an over-broad-root guard add
+  defense-in-depth. New `validateWorkingDir` in `@agentroom/db` with full test coverage.
+- **Canary precision.** The grounding gate no longer false-flags a generic third-party mention
+  ("Postgres is what most apps use") — it suppresses only on an explicit generic subject — while
+  still flagging real, natural storage hallucinations ("messages are stored in Supabase"). The
+  citation heuristic scans the whole sentence for a URL. Regexes stay linear (no ReDoS); the
+  fail-safe is unchanged. See [docs/CANARY_LOOKAHEAD.md](docs/CANARY_LOOKAHEAD.md).
+
+### Fixed
+
+- **Windows production build.** `next build` failed on Windows because `@vercel/nft` evaluated
+  `os.homedir()` (used by server code) and scanned the home dir, hitting the protected
+  `Application Data` junction (EPERM). Disabled `outputFileTracing` (its `.nft.json` manifests
+  are unused without `output: 'standalone'`), so `pnpm start` builds cleanly on Windows.
+
 ## [1.2.0] - 2026-06-27
 
 ### Added — v2: trustworthy, Cowork-style workspace
