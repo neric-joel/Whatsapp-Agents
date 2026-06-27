@@ -1,288 +1,329 @@
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
+import { afterEach, beforeEach, test } from 'node:test'
 
 import { maybeScheduleDiscussionContinuation } from '../src/lib/discussion-orchestrator.js'
+import {
+  freshTestDb,
+  seedAgent,
+  seedMember,
+  seedMessage,
+  seedRoom,
+  seedRun,
+  type TestDb,
+} from './helpers/test-db.js'
 
-// ── Minimal Supabase mock tailored to the exact queries the orchestrator makes ──
-// from('agent_runs').select().eq().eq()                         -> awaited  -> cfg.runs
-// from('messages').select('id').eq().eq().contains().limit()    -> challenge / existing checks
-// from('messages').select('content,...').eq()*.contains().order().limit() -> plan reply
-// from('room_members').select().eq()*4                          -> awaited  -> memberRows
-// from('messages').insert().select('id').single()               -> new message id
-// from('agent_runs').insert()                                   -> awaited  -> records rows
-function makeSupabase(cfg) {
-  const inserted = { messages: [], agent_runs: [] }
+// ── Real local-SQLite migration of the orchestrator phase-machine tests ──
+// The orchestrator now reads everything via getDb() (no supabase param). Each test seeds:
+//   - a room + the active agent members it fans out to,
+//   - the agent_runs for the just-finished phase (the barrier reads these by
+//     trigger_msg_id + round_index),
+//   - (where the phase leaves plan/assign) the coordinator's plan reply message,
+//   - (challenge / idempotency cases) the relevant discussion messages,
+// then asserts on the actual rows the function INSERTS: the next-phase system message
+// (carrying metadata.discussion forward) and the queued agent_runs for that phase.
 
-  function builder(table) {
-    const ops = []
-    const decide = () => {
-      if (table === 'agent_runs') return { data: cfg.runs ?? [], error: null }
-      if (table === 'room_members') return { data: cfg.memberRows ?? [], error: null }
-      if (table === 'messages') {
-        const containsArg = ops.find((o) => o[0] === 'contains')?.[1]?.[1]?.discussion ?? {}
-        if (containsArg.challenge === true)
-          return { data: cfg.challengePresent ? [{ id: 'c' }] : [], error: null }
-        if (containsArg.phase)
-          return { data: cfg.existingNextPhase ? [{ id: 'e' }] : [], error: null }
-        const sel = ops.find((o) => o[0] === 'select')?.[1]?.[0] ?? ''
-        if (sel.includes('content'))
-          return { data: cfg.planReply ? [cfg.planReply] : [], error: null }
-        return { data: [], error: null }
-      }
-      return { data: [], error: null }
-    }
-    const b = {
-      select(...a) {
-        ops.push(['select', a])
-        return b
-      },
-      eq(...a) {
-        ops.push(['eq', a])
-        return b
-      },
-      contains(...a) {
-        ops.push(['contains', a])
-        return b
-      },
-      order(...a) {
-        ops.push(['order', a])
-        return b
-      },
-      limit() {
-        return Promise.resolve(decide())
-      },
-      single() {
-        return Promise.resolve(decide())
-      },
-      then(resolve) {
-        return Promise.resolve(resolve(decide()))
-      },
-      insert(rows) {
-        const ib = {
-          select() {
-            return ib
-          },
-          single() {
-            const id = `msg-${inserted.messages.length + 1}`
-            inserted.messages.push(rows)
-            return Promise.resolve({ data: { id }, error: null })
-          },
-          then(resolve) {
-            inserted.agent_runs.push(...(Array.isArray(rows) ? rows : [rows]))
-            return Promise.resolve(resolve({ data: null, error: null }))
-          },
-        }
-        return ib
-      },
-    }
-    return b
+const ROOM = 'room'
+const ROOT = 'root'
+
+// Coordinator is 'a' (matches discMeta.coordinator_agent_id below).
+const MEMBERS = [
+  { id: 'a', slug: 'alpha' },
+  { id: 'b', slug: 'bravo' },
+  { id: 'c', slug: 'charlie' },
+]
+
+let h: TestDb
+
+beforeEach(() => {
+  h = freshTestDb()
+})
+afterEach(() => h.cleanup())
+
+/** Seed the room + the given agents as active, reply-enabled, unmuted members. */
+function seedRoomWithMembers(members: Array<{ id: string; slug: string }>) {
+  seedRoom(h.db, { id: ROOM, name: 'Test Room' })
+  for (const m of members) {
+    seedAgent(h.db, { id: m.id, slug: m.slug, name: m.slug, provider: 'mock', is_active: 1 })
+    seedMember(h.db, ROOM, {
+      agent_id: m.id,
+      member_type: 'agent',
+      reply_enabled: 1,
+      muted: 0,
+    })
   }
-
-  return { from: (t) => builder(t), _inserted: inserted }
 }
 
-const member = (slug, id) => ({
-  agent_id: id,
-  agents: { id, name: slug, slug, provider: 'mock', capabilities: null, is_active: true },
-})
-const MEMBERS = [member('alpha', 'a'), member('bravo', 'b'), member('charlie', 'c')]
+/** Seed N agent_runs for the just-finished phase (the barrier query keys on these). */
+function seedPhaseRuns(triggerMsgId: string, roundIndex: number, statuses: string[]) {
+  for (const status of statuses) {
+    seedRun(h.db, ROOM, 'a', { trigger_msg_id: triggerMsgId, round_index: roundIndex, status })
+  }
+}
 
-const discMeta = (phase, command = 'discuss', extra = {}) => ({
+/** Seed the coordinator's plan reply (an agent message at the just-finished round in this thread). */
+function seedPlanReply(content: string, roundIndex: number) {
+  seedMessage(h.db, ROOM, {
+    sender_type: 'agent',
+    sender_agent_id: 'a',
+    content,
+    round_index: roundIndex,
+    metadata: JSON.stringify({
+      discussion: { enabled: true, command: 'discuss', phase: 'plan', original_message_id: ROOT },
+    }),
+  })
+}
+
+const discMeta = (
+  phase: string,
+  command: 'discuss' | 'debate' = 'discuss',
+  extra: Record<string, unknown> = {},
+) => ({
   discussion: {
     enabled: true,
     command,
     phase,
-    original_message_id: 'root',
+    original_message_id: ROOT,
     original_prompt: 'Design a thing',
     coordinator_agent_id: 'a',
     ...extra,
   },
 })
 
+/** All next-phase messages the function inserted (it inserts them as sender_type='system'). */
+function insertedMessages(): Array<{ id: string; round_index: number; metadata: any }> {
+  return (
+    h.db
+      .prepare(`SELECT id, round_index, metadata FROM messages WHERE sender_type = 'system'`)
+      .all() as Array<{ id: string; round_index: number; metadata: string }>
+  ).map((r) => ({ id: r.id, round_index: r.round_index, metadata: JSON.parse(r.metadata) }))
+}
+
+/** All agent_runs the function queued for the next phase (it inserts them with status='queued'). */
+function insertedRuns(): Array<{
+  agent_id: string
+  round_index: number
+  deliberation_depth: number
+  deliberation_root_id: string | null
+}> {
+  return h.db
+    .prepare(
+      `SELECT agent_id, round_index, deliberation_depth, deliberation_root_id
+         FROM agent_runs WHERE status = 'queued'`,
+    )
+    .all() as Array<{
+    agent_id: string
+    round_index: number
+    deliberation_depth: number
+    deliberation_root_id: string | null
+  }>
+}
+
 test('plan→execute: parses the plan reply into assignments and fans to all agents', async () => {
-  const sb = makeSupabase({
-    runs: [{ id: 'r1', status: 'completed' }],
-    memberRows: MEMBERS,
-    challengePresent: false,
-    existingNextPhase: false,
-    planReply: {
-      content: '@alpha: design API\n@bravo: implement\n@charlie: tests',
-      sender_agent_id: 'a',
-    },
-  })
+  seedRoomWithMembers(MEMBERS)
+  seedPhaseRuns('plan-msg', 0, ['completed'])
+  seedPlanReply('@alpha: design API\n@bravo: implement\n@charlie: tests', 0)
+
   await maybeScheduleDiscussionContinuation({
-    supabase: sb,
-    roomId: 'room',
+    roomId: ROOM,
     currentRoundIndex: 0,
     triggerMessage: { id: 'plan-msg', content: '', metadata: discMeta('plan') },
   })
-  assert.equal(sb._inserted.messages.length, 1)
-  const msg = sb._inserted.messages[0]
+
+  const msgs = insertedMessages()
+  assert.equal(msgs.length, 1)
+  const msg = msgs[0]!
   assert.equal(msg.metadata.discussion.phase, 'execute')
   assert.equal(msg.metadata.discussion.assignments.length, 3)
-  assert.equal(sb._inserted.agent_runs.length, 3) // all active agents execute
+
+  const runs = insertedRuns()
+  assert.equal(runs.length, 3) // all active agents execute
   // deliberation_depth carried forward as the phase number (NOT reset to 0); root stays null
   // (the FK references agent_runs(id); handoffs self-root)
-  assert.equal(sb._inserted.agent_runs[0].deliberation_root_id, null)
-  assert.equal(sb._inserted.agent_runs[0].round_index, 1)
-  assert.equal(sb._inserted.agent_runs[0].deliberation_depth, 2) // execute is stage 2
+  assert.equal(runs[0]!.deliberation_root_id, null)
+  assert.equal(runs[0]!.round_index, 1)
+  assert.equal(runs[0]!.deliberation_depth, 2) // execute is stage 2
 })
 
 test('plan→execute: malformed plan falls back to round-robin (never stalls)', async () => {
-  const sb = makeSupabase({
-    runs: [{ id: 'r1', status: 'completed' }],
-    memberRows: MEMBERS,
-    planReply: { content: 'no assignments here at all', sender_agent_id: 'a' },
-  })
+  seedRoomWithMembers(MEMBERS)
+  seedPhaseRuns('plan-msg', 0, ['completed'])
+  seedPlanReply('no assignments here at all', 0)
+
   await maybeScheduleDiscussionContinuation({
-    supabase: sb,
-    roomId: 'room',
+    roomId: ROOM,
     currentRoundIndex: 0,
     triggerMessage: { id: 'plan-msg', content: '', metadata: discMeta('plan') },
   })
-  assert.equal(sb._inserted.messages[0].metadata.discussion.assignments.length, 3)
-  assert.equal(sb._inserted.agent_runs.length, 3)
+
+  const msgs = insertedMessages()
+  assert.equal(msgs[0]!.metadata.discussion.assignments.length, 3)
+  assert.equal(insertedRuns().length, 3)
 })
 
 test('integrate→dissent when no challenge (anti-sycophancy)', async () => {
-  const sb = makeSupabase({
-    runs: [{ status: 'completed' }, { status: 'completed' }, { status: 'completed' }],
-    memberRows: MEMBERS,
-    challengePresent: false,
-  })
+  seedRoomWithMembers(MEMBERS)
+  seedPhaseRuns('int-msg', 2, ['completed', 'completed', 'completed'])
+  // no challenge message present in the thread
+
   await maybeScheduleDiscussionContinuation({
-    supabase: sb,
-    roomId: 'room',
+    roomId: ROOM,
     currentRoundIndex: 2,
     triggerMessage: { id: 'int-msg', content: '', metadata: discMeta('integrate') },
   })
-  assert.equal(sb._inserted.messages[0].metadata.discussion.phase, 'dissent')
-  assert.equal(sb._inserted.agent_runs.length, 3) // dissent fans to all
+
+  assert.equal(insertedMessages()[0]!.metadata.discussion.phase, 'dissent')
+  assert.equal(insertedRuns().length, 3) // dissent fans to all
 })
 
 test('integrate→converge when a challenge exists; converge is coordinator-only', async () => {
-  const sb = makeSupabase({
-    runs: [{ status: 'completed' }, { status: 'completed' }, { status: 'completed' }],
-    memberRows: MEMBERS,
-    challengePresent: true,
+  seedRoomWithMembers(MEMBERS)
+  seedPhaseRuns('int-msg', 2, ['completed', 'completed', 'completed'])
+  // a peer reply substantively challenged: metadata.discussion.challenge = true
+  seedMessage(h.db, ROOM, {
+    sender_type: 'agent',
+    sender_agent_id: 'b',
+    content: 'I disagree, @alpha overlooks a risk',
+    round_index: 2,
+    metadata: JSON.stringify({
+      discussion: {
+        enabled: true,
+        command: 'discuss',
+        phase: 'integrate',
+        original_message_id: ROOT,
+        challenge: true,
+      },
+    }),
   })
+
   await maybeScheduleDiscussionContinuation({
-    supabase: sb,
-    roomId: 'room',
+    roomId: ROOM,
     currentRoundIndex: 2,
     triggerMessage: { id: 'int-msg', content: '', metadata: discMeta('integrate') },
   })
-  assert.equal(sb._inserted.messages[0].metadata.discussion.phase, 'converge')
-  assert.equal(sb._inserted.agent_runs.length, 1) // only the coordinator converges
-  assert.equal(sb._inserted.agent_runs[0].agent_id, 'a')
+
+  const msgs = insertedMessages()
+  assert.equal(msgs[0]!.metadata.discussion.phase, 'converge')
+  const runs = insertedRuns()
+  assert.equal(runs.length, 1) // only the coordinator converges
+  assert.equal(runs[0]!.agent_id, 'a')
 })
 
 test('converge is terminal — schedules nothing further', async () => {
-  const sb = makeSupabase({ runs: [{ status: 'completed' }], memberRows: MEMBERS })
+  seedRoomWithMembers(MEMBERS)
+  seedPhaseRuns('conv-msg', 3, ['completed'])
+
   await maybeScheduleDiscussionContinuation({
-    supabase: sb,
-    roomId: 'room',
+    roomId: ROOM,
     currentRoundIndex: 3,
     triggerMessage: { id: 'conv-msg', content: '', metadata: discMeta('converge') },
   })
-  assert.equal(sb._inserted.messages.length, 0)
-  assert.equal(sb._inserted.agent_runs.length, 0)
+
+  assert.equal(insertedMessages().length, 0)
+  assert.equal(insertedRuns().length, 0)
 })
 
 test('does not advance when the phase produced no completed run (all failed)', async () => {
-  const sb = makeSupabase({
-    runs: [{ status: 'failed' }, { status: 'failed' }],
-    memberRows: MEMBERS,
-  })
+  seedRoomWithMembers(MEMBERS)
+  seedPhaseRuns('exec-msg', 1, ['failed', 'failed'])
+
   await maybeScheduleDiscussionContinuation({
-    supabase: sb,
-    roomId: 'room',
+    roomId: ROOM,
     currentRoundIndex: 1,
     triggerMessage: { id: 'exec-msg', content: '', metadata: discMeta('execute') },
   })
-  assert.equal(sb._inserted.messages.length, 0)
+
+  assert.equal(insertedMessages().length, 0)
 })
 
 test('idempotency: does not schedule a phase that already exists', async () => {
-  const sb = makeSupabase({
-    runs: [{ status: 'completed' }],
-    memberRows: MEMBERS,
-    existingNextPhase: true,
-    planReply: { content: '@alpha: a', sender_agent_id: 'a' },
+  seedRoomWithMembers(MEMBERS)
+  seedPhaseRuns('plan-msg', 0, ['completed'])
+  seedPlanReply('@alpha: a', 0)
+  // The next phase (execute) message already exists in this thread.
+  seedMessage(h.db, ROOM, {
+    sender_type: 'system',
+    content: 'already scheduled execute',
+    round_index: 1,
+    metadata: JSON.stringify({
+      discussion: { enabled: true, command: 'discuss', phase: 'execute', original_message_id: ROOT },
+    }),
   })
+
+  const before = insertedMessages().length // 1 (the pre-seeded execute message)
   await maybeScheduleDiscussionContinuation({
-    supabase: sb,
-    roomId: 'room',
+    roomId: ROOM,
     currentRoundIndex: 0,
     triggerMessage: { id: 'plan-msg', content: '', metadata: discMeta('plan') },
   })
-  assert.equal(sb._inserted.messages.length, 0)
+
+  // No NEW message inserted, and no runs queued.
+  assert.equal(insertedMessages().length, before)
+  assert.equal(insertedRuns().length, 0)
 })
 
 test('debate: assign→argue fans to all with distinct positions; rebut→adjudicate is coordinator', async () => {
-  const sb = makeSupabase({
-    runs: [{ status: 'completed' }],
-    memberRows: MEMBERS,
-    planReply: { content: 'no parse', sender_agent_id: 'a' },
-  })
+  seedRoomWithMembers(MEMBERS)
+  seedPhaseRuns('assign-msg', 0, ['completed'])
+  seedPlanReply('no parse', 0)
+
   await maybeScheduleDiscussionContinuation({
-    supabase: sb,
-    roomId: 'room',
+    roomId: ROOM,
     currentRoundIndex: 0,
     triggerMessage: { id: 'assign-msg', content: '', metadata: discMeta('assign', 'debate') },
   })
-  assert.equal(sb._inserted.messages[0].metadata.discussion.phase, 'argue')
-  assert.equal(sb._inserted.agent_runs.length, 3)
+
+  const msgs = insertedMessages()
+  assert.equal(msgs[0]!.metadata.discussion.phase, 'argue')
+  assert.equal(insertedRuns().length, 3)
   // debate fallback gives distinct positions
-  const positions = sb._inserted.messages[0].metadata.discussion.assignments.map((a) => a.position)
+  const positions = msgs[0]!.metadata.discussion.assignments.map((a: any) => a.position)
   assert.deepEqual([...new Set(positions)].sort(), ['against', 'alternative', 'for'])
 })
 
 test('caps fan-out to COLLAB_MAX_AGENTS in a large room (keeps coordinator)', async () => {
-  const big = ['a', 'b', 'c', 'd', 'e'].map((s) => member(s, s))
-  const sb = makeSupabase({
-    runs: [{ status: 'completed' }],
-    memberRows: big,
-    planReply: { content: 'no parse', sender_agent_id: 'a' },
-  })
+  const big = ['a', 'b', 'c', 'd', 'e'].map((s) => ({ id: s, slug: s }))
+  seedRoomWithMembers(big)
+  seedPhaseRuns('plan', 0, ['completed'])
+  seedPlanReply('no parse', 0)
+
   await maybeScheduleDiscussionContinuation({
-    supabase: sb,
-    roomId: 'room',
+    roomId: ROOM,
     currentRoundIndex: 0,
     triggerMessage: { id: 'plan', content: '', metadata: discMeta('plan') },
   })
+
+  const runs = insertedRuns()
   // 5 active agents, but execute fans to at most COLLAB_MAX_AGENTS (3)
-  assert.equal(sb._inserted.agent_runs.length, 3)
+  assert.equal(runs.length, 3)
   // the coordinator (a) is retained
-  assert.ok(sb._inserted.agent_runs.some((r) => r.agent_id === 'a'))
+  assert.ok(runs.some((r) => r.agent_id === 'a'))
 })
 
 test('stamps anti_sycophancy when converging from dissent with no challenge', async () => {
-  const sb = makeSupabase({
-    runs: [{ status: 'completed' }, { status: 'completed' }, { status: 'completed' }],
-    memberRows: MEMBERS,
-    challengePresent: false,
-  })
+  seedRoomWithMembers(MEMBERS)
+  seedPhaseRuns('dissent-msg', 3, ['completed', 'completed', 'completed'])
+  // no challenge message in the thread
+
   await maybeScheduleDiscussionContinuation({
-    supabase: sb,
-    roomId: 'room',
+    roomId: ROOM,
     currentRoundIndex: 3,
     triggerMessage: { id: 'dissent-msg', content: '', metadata: discMeta('dissent') },
   })
-  assert.equal(sb._inserted.messages[0].metadata.discussion.phase, 'converge')
-  assert.equal(
-    sb._inserted.messages[0].metadata.discussion.anti_sycophancy,
-    'no_challenge_after_dissent',
-  )
+
+  const msg = insertedMessages()[0]!
+  assert.equal(msg.metadata.discussion.phase, 'converge')
+  assert.equal(msg.metadata.discussion.anti_sycophancy, 'no_challenge_after_dissent')
 })
 
 test('not a discussion → no-op', async () => {
-  const sb = makeSupabase({ runs: [{ status: 'completed' }] })
+  seedRoomWithMembers(MEMBERS)
+  seedPhaseRuns('m', 0, ['completed'])
+
   await maybeScheduleDiscussionContinuation({
-    supabase: sb,
-    roomId: 'room',
+    roomId: ROOM,
     currentRoundIndex: 0,
     triggerMessage: { id: 'm', content: '', metadata: {} },
   })
-  assert.equal(sb._inserted.messages.length, 0)
+
+  assert.equal(insertedMessages().length, 0)
 })
