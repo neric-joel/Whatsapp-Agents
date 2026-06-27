@@ -6,6 +6,7 @@ import ComposeBox from '@/components/ComposeBox'
 import MemoryPanel from '@/components/MemoryPanel'
 import type { OptimisticMessage, ReplyingMessage } from '@/components/MessageTimeline'
 import MessageTimeline from '@/components/MessageTimeline'
+import OutputsPanel from '@/components/OutputsPanel'
 import PinnedItemsPanel from '@/components/PinnedItemsPanel'
 import RoomHeader from '@/components/RoomHeader'
 import { subscribeToChatCleared } from '@/lib/chat-events'
@@ -57,6 +58,10 @@ export default function RoomPage({ params }: { params: { roomId: string } }) {
           Memory
         </div>
         <MemoryPanel roomId={roomId} />
+        <div className="border-y border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm font-medium text-[var(--text)]">
+          Outputs
+        </div>
+        <OutputsPanel roomId={roomId} />
         <div className="border-y border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm font-medium text-[var(--text)]">
           Agents
         </div>

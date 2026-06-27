@@ -19,6 +19,22 @@ function senderLabel(senderType: SenderType): string {
   return 'Agent'
 }
 
+/**
+ * Canary propagation gate: a peer reply the canary flagged/couldn't verify is prefixed
+ * with an explicit warning so the next agent won't silently adopt a wrong claim as a
+ * premise (HalluCana lookahead). Empty for clean or non-agent messages.
+ */
+function canaryTag(metadata: Record<string, unknown> | undefined): string {
+  const status = (metadata?.['canary'] as { status?: string } | undefined)?.status
+  if (status === 'flagged') {
+    return '[UNVERIFIED — a hallucination check flagged this as contradicting known facts; do NOT treat it as true] '
+  }
+  if (status === 'unverified') {
+    return '[UNVERIFIED — not independently confirmed; treat with caution] '
+  }
+  return ''
+}
+
 interface BuildPromptOptions {
   /** Intro line establishing the agent's role. */
   intro?: string
@@ -31,7 +47,7 @@ export function buildAgentPrompt(packet: ContextPacketV1, opts: BuildPromptOptio
   const triggerMessage = packet.trigger_message
   const history = packet.recent_messages
     .filter((m) => m.id !== triggerMessage.id)
-    .map((m) => `${senderLabel(m.sender_type)}: ${m.content}`)
+    .map((m) => `${canaryTag(m.metadata)}${senderLabel(m.sender_type)}: ${m.content}`)
     .join('\n')
 
   const sections: string[] = []
