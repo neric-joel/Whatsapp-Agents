@@ -1,50 +1,27 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { checkDatabase } from '../health'
-
-const selectMock = vi.fn()
-
-vi.mock('../supabase/server', () => ({
-  createSupabaseServiceClient: () => ({
-    from: () => ({ select: selectMock }),
-  }),
+// Mock the local DB layer (avoids loading the native better-sqlite3 module in vitest).
+const getMock = vi.fn()
+vi.mock('@agentroom/db', () => ({
+  getDb: () => ({ prepare: () => ({ get: getMock }) }),
 }))
 
-// Each test sets its own mock implementation (overwriting the prior one), so no
-// beforeEach reset is needed — and a mockReset() followed by a throwing
-// mockImplementation hits a vitest v4 quirk that surfaces the caught error.
+import { checkDatabase } from '../health'
+
 describe('checkDatabase', () => {
   it('reports up with a latency when the DB query succeeds', async () => {
-    selectMock.mockImplementation(async () => ({ error: null, count: 3 }))
+    getMock.mockReturnValue({ c: 3 })
     const result = await checkDatabase()
     expect(result.status).toBe('up')
     expect(typeof result.latency_ms).toBe('number')
   })
 
-  it('reports down when the DB query returns an error', async () => {
-    selectMock.mockImplementation(async () => ({ error: { message: 'relation does not exist' } }))
-    const result = await checkDatabase()
-    expect(result.status).toBe('down')
-    expect(result.latency_ms).toBeUndefined()
-  })
-
-  it('reports down (never throws) when the client/query throws', async () => {
-    selectMock.mockImplementation(() => {
-      throw new Error('ECONNREFUSED')
+  it('reports down (never throws) when the DB query throws', async () => {
+    getMock.mockImplementation(() => {
+      throw new Error('disk I/O error')
     })
     const result = await checkDatabase()
     expect(result.status).toBe('down')
-  })
-
-  it('reports down when the DB query exceeds the 2s timeout (never hangs)', async () => {
-    vi.useFakeTimers()
-    try {
-      selectMock.mockImplementation(() => new Promise(() => {})) // never settles
-      const pending = checkDatabase()
-      await vi.advanceTimersByTimeAsync(2000)
-      expect((await pending).status).toBe('down')
-    } finally {
-      vi.useRealTimers()
-    }
+    expect(result.latency_ms).toBeUndefined()
   })
 })

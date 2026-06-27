@@ -6,8 +6,10 @@ import {
   isCancellableRunStatus,
 } from '@/lib/agent-run-cancellation'
 import { apiError, apiSuccess } from '@/lib/api-error'
+import { internalError } from '@/lib/api-security'
+import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomMember } from '@/lib/permissions'
-import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
+import { getDb, rowToAgentRun } from '@agentroom/db'
 
 interface RouteParams {
   params: { runId: string }
@@ -26,18 +28,22 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   } = await getAuthenticatedUser(req)
   if (authErr || !user) return apiError('UNAUTHORIZED', 'Unauthorized', 401)
 
-  const supabase = createSupabaseServiceClient()
-  const { data: runRaw } = await supabase
-    .from('agent_runs')
-    .select('id, room_id, status')
-    .eq('id', params.runId)
-    .single()
+  const db = getDb()
+
+  let runRaw: AgentRunRow | undefined
+  try {
+    runRaw = db
+      .prepare('SELECT id, room_id, status FROM agent_runs WHERE id = ?')
+      .get(params.runId) as AgentRunRow | undefined
+  } catch (e) {
+    return internalError('agent-runs.cancel.lookup', e)
+  }
 
   if (!runRaw) return apiError('NOT_FOUND', 'Agent run not found', 404)
-  const run = runRaw as AgentRunRow
+  const run = runRaw
 
   try {
-    await requireRoomMember(supabase, run.room_id, user.id)
+    await requireRoomMember(run.room_id, user.id)
   } catch (e) {
     return e as Response
   }
@@ -46,15 +52,25 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     return apiError('CONFLICT', 'Agent run is not running', 409)
   }
 
-  const { data, error } = await supabase
-    .from('agent_runs')
-    .update(buildCancelledRunPatch())
-    .eq('id', params.runId)
-    .in('status', ['queued', 'claimed', 'running'])
-    .select()
-    .single()
+  const patch = buildCancelledRunPatch()
 
-  if (error || !data) return apiError('CONFLICT', error?.message ?? 'Agent run is not running', 409)
+  let updated: Record<string, unknown> | undefined
+  try {
+    updated = db
+      .prepare(
+        `UPDATE agent_runs
+            SET status = ?, error_message = ?, completed_at = ?
+          WHERE id = ? AND status IN ('queued', 'claimed', 'running')
+        RETURNING *`,
+      )
+      .get(patch.status, patch.error_message, patch.completed_at, params.runId) as
+      | Record<string, unknown>
+      | undefined
+  } catch (e) {
+    return internalError('agent-runs.cancel.update', e)
+  }
 
-  return apiSuccess(data)
+  if (!updated) return apiError('CONFLICT', 'Agent run is not running', 409)
+
+  return apiSuccess(rowToAgentRun(updated))
 }

@@ -1,33 +1,33 @@
 import { NextRequest } from 'next/server'
 
+import { getDb, intBool, rowToPinnedItem } from '@agentroom/db'
+
+import { getAuthenticatedUser } from '@/lib/auth'
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { internalError } from '@/lib/api-security'
 import { updatePinSchema } from '@/lib/api-validation'
 import { requireRoomMember } from '@/lib/permissions'
-import { createSupabaseServerClient, createSupabaseServiceClient } from '@/lib/supabase/server'
 
 interface RouteParams {
   params: { pinId: string }
 }
 
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
-  const supabaseUser = createSupabaseServerClient()
   const {
     data: { user },
     error: authErr,
-  } = await supabaseUser.auth.getUser()
+  } = await getAuthenticatedUser(req)
   if (authErr || !user) return apiError('UNAUTHORIZED', 'Unauthorized', 401)
 
-  const supabase = createSupabaseServiceClient()
-  const { data: pin } = await supabase
-    .from('pinned_items')
-    .select('id, room_id')
-    .eq('id', params.pinId)
-    .single()
+  const db = getDb()
+
+  const pin = db
+    .prepare('SELECT id, room_id FROM pinned_items WHERE id = ?')
+    .get(params.pinId) as { id: string; room_id: string } | undefined
   if (!pin) return apiError('NOT_FOUND', 'Pin not found', 404)
 
   try {
-    await requireRoomMember(supabase, (pin as { room_id: string }).room_id, user.id)
+    await requireRoomMember(pin.room_id, user.id)
   } catch (e) {
     return e as Response
   }
@@ -39,13 +39,28 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   }
   const updates = parseResult.data
 
-  const { data, error } = await supabase
-    .from('pinned_items')
-    .update(updates)
-    .eq('id', params.pinId)
-    .select()
-    .single()
-  if (error || !data) return internalError('pins update', error)
+  try {
+    // Build the SET clause from the provided fields only. `is_active` is stored as
+    // INTEGER 0/1 in SQLite, so it goes through intBool(); `sort_order` is a plain int.
+    const sets: string[] = []
+    const vals: unknown[] = []
 
-  return apiSuccess(data)
+    if (updates.is_active !== undefined) {
+      sets.push('is_active = ?')
+      vals.push(intBool(updates.is_active))
+    }
+    if (updates.sort_order !== undefined) {
+      sets.push('sort_order = ?')
+      vals.push(updates.sort_order)
+    }
+
+    const data = db
+      .prepare(`UPDATE pinned_items SET ${sets.join(', ')} WHERE id = ? RETURNING *`)
+      .get(...vals, params.pinId) as Record<string, unknown> | undefined
+    if (!data) return internalError('pins update', new Error('update returned no row'))
+
+    return apiSuccess(rowToPinnedItem(data))
+  } catch (e) {
+    return internalError('pins update', e)
+  }
 }

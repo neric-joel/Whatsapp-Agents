@@ -1,46 +1,52 @@
-import { apiError, apiSuccess } from '@/lib/api-error'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { apiError } from '@/lib/api-error'
 import { internalError } from '@/lib/api-security'
+import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomMember } from '@/lib/permissions'
-import { createSupabaseServerClient, createSupabaseServiceClient } from '@/lib/supabase/server'
+import { getDb, rowToFile, filesDir } from '@agentroom/db'
 
 interface RouteParams {
   params: { fileId: string }
 }
 
-interface FileRow {
-  id: string
-  room_id: string
-  storage_path: string
-  storage_bucket: string
-}
-
-export async function GET(_req: Request, { params }: RouteParams) {
-  const supabaseUser = createSupabaseServerClient()
+export async function GET(req: Request, { params }: RouteParams) {
   const {
     data: { user },
     error: authErr,
-  } = await supabaseUser.auth.getUser()
+  } = await getAuthenticatedUser(req)
   if (authErr || !user) return apiError('UNAUTHORIZED', 'Unauthorized', 401)
 
-  const supabase = createSupabaseServiceClient()
-  const { data: fileRaw } = await supabase
-    .from('files')
-    .select('id, room_id, storage_path, storage_bucket')
-    .eq('id', params.fileId)
-    .single()
+  const db = getDb()
+  let fileRaw: Record<string, unknown> | undefined
+  try {
+    fileRaw = db.prepare('SELECT * FROM files WHERE id = ?').get(params.fileId) as
+      | Record<string, unknown>
+      | undefined
+  } catch (e) {
+    return internalError('signed-download lookup file', e)
+  }
   if (!fileRaw) return apiError('NOT_FOUND', 'File not found', 404)
 
-  const file = fileRaw as FileRow
+  const file = rowToFile(fileRaw)
   try {
-    await requireRoomMember(supabase, file.room_id, user.id)
+    await requireRoomMember(file.room_id, user.id)
   } catch (e) {
     return e as Response
   }
 
-  const { data: signedData, error: signedErr } = await supabase.storage
-    .from('agentroom-files')
-    .createSignedUrl(file.storage_path, 3600)
-  if (signedErr || !signedData) return internalError('signed-download create url', signedErr)
+  let buf: Buffer
+  try {
+    buf = await readFile(join(filesDir(), file.storage_path))
+  } catch {
+    return apiError('NOT_FOUND', 'File not found', 404)
+  }
 
-  return apiSuccess({ signed_url: signedData.signedUrl })
+  return new Response(new Uint8Array(buf), {
+    headers: {
+      'Content-Type': file.mime_type,
+      'Content-Disposition': `inline; filename="${file.filename}"`,
+      'Cache-Control': 'private, max-age=3600',
+    },
+  })
 }

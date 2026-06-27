@@ -1,56 +1,14 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
-
-import { apiError } from './api-error'
-
-async function getRoomMembership(
-  supabase: SupabaseClient,
-  roomId: string,
-  userId: string,
-): Promise<{ isMember: boolean; isAdmin: boolean; isOwner: boolean; role: string | null }> {
-  const { data } = await supabase
-    .from('room_members')
-    .select('role')
-    .eq('room_id', roomId)
-    .eq('user_id', userId)
-    .maybeSingle()
-  if (!data) return { isMember: false, isAdmin: false, isOwner: false, role: null }
-  const role = data.role as string
-  return {
-    isMember: true,
-    isAdmin: role === 'admin' || role === 'owner',
-    isOwner: role === 'owner',
-    role,
-  }
-}
-
-export async function requireRoomMember(
-  supabase: SupabaseClient,
-  roomId: string,
-  userId: string,
-): Promise<void> {
-  const { isMember } = await getRoomMembership(supabase, roomId, userId)
-  if (!isMember) throw apiError('FORBIDDEN', 'Not a room member', 403)
-}
-
-export async function requireRoomOwner(
-  supabase: SupabaseClient,
-  roomId: string,
-  userId: string,
-): Promise<void> {
-  const { isOwner } = await getRoomMembership(supabase, roomId, userId)
-  if (!isOwner) throw apiError('FORBIDDEN', 'Owner required', 403)
-}
-
 /**
- * Admin+ gate (admin or owner). Used by RBAC-gated commands (`/reset`) and by
- * user-created-agent management — server-side enforcement, never UI-only.
+ * RBAC gates for room actions.
+ *
+ * Local single-user app: the one user owns every room, so these always pass. They
+ * are kept as named functions (and called at the same sites) so route code still
+ * reads intentionally — e.g. `/reset` and agent management remain "admin only" in
+ * spirit, and re-introducing multi-user later means filling these in, not finding
+ * every call site.
  */
-export async function requireRoomAdmin(
-  supabase: SupabaseClient,
-  roomId: string,
-  userId: string,
-): Promise<void> {
-  const { isMember, isAdmin } = await getRoomMembership(supabase, roomId, userId)
-  if (!isMember) throw apiError('FORBIDDEN', 'Not a room member', 403)
-  if (!isAdmin) throw apiError('FORBIDDEN', 'Admin required', 403)
-}
+export async function requireRoomMember(_roomId: string, _userId?: string): Promise<void> {}
+
+export async function requireRoomOwner(_roomId: string, _userId?: string): Promise<void> {}
+
+export async function requireRoomAdmin(_roomId: string, _userId?: string): Promise<void> {}

@@ -1,39 +1,17 @@
 'use client'
 
-import type { User } from '@supabase/supabase-js'
-import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useState } from 'react'
-
-import { createSupabaseBrowserClient } from '@/lib/supabase/client'
-
+/**
+ * Local single-user app — there are no accounts and no login.
+ *
+ * This hook is kept as a stub so the existing shell components (sidebar, header,
+ * settings) compile and render unchanged: the app always has "a user", never
+ * shows a loading gate, and never redirects to a login page. `signOut` is a no-op
+ * (there's nothing to sign out of locally).
+ */
 export function useAuth() {
-  const router = useRouter()
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    const supabase = createSupabaseBrowserClient()
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      setLoading(false)
-    })
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
-      setLoading(false)
-    })
-
-    return () => subscription.unsubscribe()
-  }, [])
-
-  const signOut = useCallback(async () => {
-    const supabase = createSupabaseBrowserClient()
-    await supabase.auth.signOut()
-    router.push('/auth')
-  }, [router])
-
-  return { user, loading, signOut }
+  return {
+    user: { id: 'local-user' } as { id: string; email?: string },
+    loading: false,
+    signOut: async () => {},
+  }
 }

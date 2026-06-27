@@ -1,10 +1,12 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 
+import { getDb, jsonText, newId } from '@agentroom/db'
+
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { internalError } from '@/lib/api-security'
+import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomMember } from '@/lib/permissions'
-import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
 
 interface RouteParams {
   params: { messageId: string }
@@ -16,6 +18,18 @@ const bodySchema = z.object({
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function parseMetadata(value: unknown): Record<string, unknown> {
+  if (typeof value === 'string' && value) {
+    try {
+      const parsed = JSON.parse(value)
+      return isRecord(parsed) ? parsed : {}
+    } catch {
+      return {}
+    }
+  }
+  return isRecord(value) ? value : {}
 }
 
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
@@ -33,23 +47,28 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     return apiError('VALIDATION_ERROR', 'Invalid request body', 400, parsed.error.flatten())
   }
 
-  const supabase = createSupabaseServiceClient()
-  const { data: message, error: fetchErr } = await supabase
-    .from('messages')
-    .select('id, room_id, metadata, round_index')
-    .eq('id', messageId)
-    .maybeSingle()
+  const db = getDb()
 
-  if (fetchErr) return internalError('hallucination fetch message', fetchErr)
+  let message: { id: string; room_id: string; metadata: unknown; round_index: number } | undefined
+  try {
+    message = db
+      .prepare('SELECT id, room_id, metadata, round_index FROM messages WHERE id = ?')
+      .get(messageId) as
+      | { id: string; room_id: string; metadata: unknown; round_index: number }
+      | undefined
+  } catch (e) {
+    return internalError('hallucination fetch message', e)
+  }
+
   if (!message) return apiError('NOT_FOUND', 'Message not found', 404)
 
   try {
-    await requireRoomMember(supabase, message.room_id as string, user.id)
+    await requireRoomMember(message.room_id, user.id)
   } catch (e) {
     return e as Response
   }
 
-  const metadata = isRecord(message.metadata) ? message.metadata : {}
+  const metadata = parseMetadata(message.metadata)
   const hallucination = isRecord(metadata.hallucination) ? metadata.hallucination : {}
   const nextMetadata = {
     ...metadata,
@@ -60,24 +79,29 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     },
   }
 
-  const { error: updateErr } = await supabase
-    .from('messages')
-    .update({ metadata: nextMetadata })
-    .eq('id', messageId)
-
-  if (updateErr) return internalError('hallucination update metadata', updateErr)
+  try {
+    db.prepare('UPDATE messages SET metadata = ? WHERE id = ?').run(jsonText(nextMetadata), messageId)
+  } catch (e) {
+    return internalError('hallucination update metadata', e)
+  }
 
   if (!parsed.data.accepted) {
-    const { error: systemErr } = await supabase.from('messages').insert({
-      room_id: message.room_id,
-      sender_type: 'system',
-      content: 'User rejected this response as potentially inaccurate.',
-      content_type: 'text',
-      round_index: message.round_index ?? 0,
-      metadata: { hallucination_rejection_for: messageId },
-    })
-
-    if (systemErr) return internalError('hallucination insert system message', systemErr)
+    try {
+      db.prepare(
+        `INSERT INTO messages (id, room_id, sender_type, content, content_type, round_index, metadata)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        newId(),
+        message.room_id,
+        'system',
+        'User rejected this response as potentially inaccurate.',
+        'text',
+        message.round_index ?? 0,
+        jsonText({ hallucination_rejection_for: messageId }),
+      )
+    } catch (e) {
+      return internalError('hallucination insert system message', e)
+    }
   }
 
   return apiSuccess({ updated: true })
