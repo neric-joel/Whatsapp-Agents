@@ -21,7 +21,9 @@ export default defineConfig({
   testDir: './e2e',
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 2 : undefined,
+  // Single worker: this is a single-user app backed by ONE shared SQLite DB, so specs
+  // that create rooms/sessions would race each other if run in parallel. Serialize.
+  workers: 1,
   reporter: process.env.CI
     ? [['github'], ['html', { open: 'never', outputFolder: 'playwright-report' }]]
     : [['list'], ['html', { open: 'on-failure', outputFolder: 'playwright-report' }]],

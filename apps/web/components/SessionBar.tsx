@@ -67,7 +67,11 @@ export default function SessionBar({
   const showForm = creating || (!loading && sessions.length === 0)
 
   return (
-    <div className="border-b border-[var(--border)] px-4 py-3" aria-label="Working session">
+    <div
+      className="border-b border-[var(--border)] px-4 py-3"
+      role="group"
+      aria-label="Working session"
+    >
       <div className="mb-1 flex items-center justify-between">
         <span className="text-[11px] font-medium uppercase tracking-widest text-[var(--muted)]">
           Session

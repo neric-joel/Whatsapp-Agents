@@ -43,10 +43,14 @@ const NEGATION =
 
 // Split into clauses (sentence boundaries + commas/semicolons/em–en dashes) so a negation
 // in one clause ("it's NOT local — data lives in Supabase") can't disarm a backend claim in
-// the next. Hyphenated words aren't split (the dash split requires surrounding spaces).
+// the next. Two passes over simple character classes (no `\s+…\s+` alternation) keeps this
+// LINEAR — a `\s+[—–]\s+` form is a polynomial-ReDoS risk on adversarial reply text. Plain
+// hyphens are NOT split on (only em/en dashes), so hyphenated words stay intact; trim()
+// drops the surrounding spaces.
 function splitSentences(content: string): string[] {
   return content
-    .split(/(?<=[.!?\n,;])\s+|\s+[—–]\s+/)
+    .split(/[.!?\n,;]+/)
+    .flatMap((part) => part.split(/[—–]/))
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
 }
