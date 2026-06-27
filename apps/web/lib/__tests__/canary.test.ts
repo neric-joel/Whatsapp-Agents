@@ -54,3 +54,36 @@ describe('runCanary — weaker signals', () => {
     expect(runCanary('The capital of France is Paris.').status).toBe('verified')
   })
 })
+
+describe('runCanary — precision fixes (#67)', () => {
+  it('does NOT flag a generic, non-app-referential backend mention (off-topic FP)', () => {
+    // The reported false positive: a generic statement about other apps must not flag.
+    expect(runCanary('Postgres is what most apps use.').status).toBe('verified')
+    expect(runCanary('Most applications store their data in a Postgres database.').status).toBe(
+      'verified',
+    )
+    expect(runCanary('Supabase is a popular backend choice for many teams.').status).toBe(
+      'verified',
+    )
+  })
+
+  it('STILL flags an app-referential storage claim about a forbidden backend', () => {
+    expect(runCanary('The app is backed by Postgres.').status).toBe('flagged')
+    expect(runCanary('It uses Firebase for storage.').status).toBe('flagged')
+    expect(runCanary('Your messages are stored in a Supabase database.').status).toBe('flagged')
+    expect(runCanary('AgentRoom is backed by a cloud database.').status).toBe('flagged')
+  })
+
+  it('citation: flags an attribution with no URL in the sentence', () => {
+    expect(runCanary('According to Professor Lee, the result holds.').status).toBe('unverified')
+  })
+
+  it('citation: a URL LATER in the same sentence suppresses the flag', () => {
+    // The old anchored negative-lookahead only checked right after the name; a URL further
+    // along the sentence now correctly counts as a verifiable source.
+    expect(
+      runCanary('According to the project README at https://example.com/readme, it is fine.')
+        .status,
+    ).toBe('verified')
+  })
+})

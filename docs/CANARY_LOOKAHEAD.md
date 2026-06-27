@@ -32,11 +32,16 @@ model internals.
 1. **Grounding (strongest → `flagged`).** A storage/architecture assertion that names a
    backend this app does not use — Supabase, Postgres, Firebase, Mongo, a cloud/hosted
    database, a "ChatGPT/OpenAI workspace", etc. The ground truth (local SQLite under
-   `~/.agentroom`, no cloud) is fixed, so this is deterministic. A **negation guard** keeps
-   correct denials ("this is *not* in Supabase, it's local SQLite") from being flagged.
+   `~/.agentroom`, no cloud) is fixed, so this is deterministic. Two guards keep precision
+   high: a **negation guard** keeps correct denials ("this is *not* in Supabase, it's local
+   SQLite") from being flagged, and an **app-referential-subject guard** (issue #67) only
+   flags claims about *this* app — "the app is backed by Postgres" / "it uses Firebase" /
+   "your messages are stored in Supabase" flag, while a generic "Postgres is what most apps
+   use" does not.
 2. **Weaker behavioral signals (→ `unverified`).** Hedging without grounding, unqualified
    absolutes ("guaranteed", "scientifically proven"), and citations with no verifiable
-   source.
+   source. The citation check scans the **whole sentence** for a URL (issue #67), so
+   "according to the docs at https://…" is treated as sourced and not flagged.
 3. Otherwise **`verified`** — meaning "no problematic signal found", not a proof of truth.
 
 ## The gate + fail-safe
@@ -57,6 +62,7 @@ multi-agent thread — impossible to propagate unlabelled, and to surface weaker
 
 - `runCanary`: flags Supabase/ChatGPT-workspace/Postgres/Firebase storage claims; respects
   the negation guard; verifies the correct local-SQLite answer; marks hedging/absolutes
-  unverified (`apps/web/lib/__tests__/canary.test.ts`).
+  unverified; and (issue #67) does **not** flag generic non-app-referential mentions or a
+  citation that carries a URL later in the sentence (`apps/web/lib/__tests__/canary.test.ts`).
 - Propagation gate: a flagged peer reply is prefixed `[UNVERIFIED …]` in the next agent's
   prompt; clean replies are not (`bridge/test/canary-gate.test.ts`).

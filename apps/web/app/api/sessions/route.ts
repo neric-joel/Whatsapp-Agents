@@ -1,7 +1,6 @@
-import { statSync } from 'node:fs'
-import { basename, isAbsolute, resolve } from 'node:path'
+import { basename } from 'node:path'
 
-import { getDb, newId, rowToSession } from '@agentroom/db'
+import { getDb, newId, rowToSession, validateWorkingDir } from '@agentroom/db'
 import { NextRequest } from 'next/server'
 
 import { apiError, apiSuccess } from '@/lib/api-error'
@@ -54,18 +53,14 @@ export async function POST(req: NextRequest) {
   }
   const input = parsed.data
 
-  const dir = input.working_dir.trim()
-  if (!isAbsolute(dir)) {
-    return apiError('VALIDATION_ERROR', 'working_dir must be an absolute path', 400)
+  // Harden the working folder before it is stored (issue #67): absolute, no UNC/device
+  // paths, realpath inside the allow-root, a real directory — defeats traversal + symlink
+  // escape. The canonical path is what gets persisted and (eventually) used as a spawn cwd.
+  const check = validateWorkingDir(input.working_dir)
+  if (!check.ok || !check.path) {
+    return apiError('VALIDATION_ERROR', check.reason ?? 'Invalid working_dir', 400)
   }
-  const abs = resolve(dir)
-  try {
-    if (!statSync(abs).isDirectory()) {
-      return apiError('VALIDATION_ERROR', 'working_dir is not a directory', 400)
-    }
-  } catch {
-    return apiError('VALIDATION_ERROR', `Folder not found: ${abs}`, 400)
-  }
+  const abs = check.path
 
   const name =
     input.name?.trim() || `${basename(abs) || abs} · ${new Date().toISOString().slice(0, 10)}`

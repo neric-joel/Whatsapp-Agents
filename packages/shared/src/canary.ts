@@ -41,6 +41,15 @@ const STORAGE_ASSERTION =
 const NEGATION =
   /\b(no|not|n't|never|without|isn't|aren't|doesn't|don't|instead of|rather than|unlike)\b/i
 
+// The claim must be ABOUT this app, not a generic statement about software at large. We
+// require an app-referential subject in the SAME clause as the backend assertion. Fixes
+// the #67 off-topic false positive: "Postgres is what most apps use" (subject = other apps)
+// no longer flags, while "the app is backed by Postgres" / "it uses Firebase" / "your
+// messages are stored in Supabase" / "AgentRoom is backed by a cloud database" still do.
+// Flat alternation of literal phrases — linear, no ReDoS.
+const APP_SUBJECT =
+  /\b(this app|the app|agentroom|this (?:chat|conversation|tool|room|workspace|project|service)|the (?:chat|conversation|conversation history)|your (?:data|messages?|files?|conversation|chat)|our (?:data|messages?|files?)|everything (?:here|in here)|it|its|we (?:store|save|keep|use|using|persist))\b/i
+
 // Split into clauses (sentence boundaries + commas/semicolons/em–en dashes) so a negation
 // in one clause ("it's NOT local — data lives in Supabase") can't disarm a backend claim in
 // the next. Two passes over simple character classes (no `\s+…\s+` alternation) keeps this
@@ -65,6 +74,8 @@ export function runCanary(content: string): CanaryResult {
     const m = s.match(FORBIDDEN_BACKENDS)
     if (!m || m.index === undefined) continue
     if (!STORAGE_ASSERTION.test(s)) continue
+    // Only flag if the clause is talking about THIS app (not "most apps", "other teams").
+    if (!APP_SUBJECT.test(s)) continue
     // Within this clause, a negation BEFORE the backend term is a denial ("not stored in
     // Supabase"). A negation in a different clause was already split off above, so it can't
     // disarm the flag — that was the bypass ("it's NOT local — data lives in Supabase").
@@ -92,8 +103,17 @@ export function runCanary(content: string): CanaryResult {
   ) {
     weak.push('Unqualified absolute claim')
   }
-  if (/according to \[?[A-Z][^[\]]{2,40}\]?(?![^\s]*https?:\/\/)/i.test(content)) {
-    weak.push('Citation without a verifiable source')
+  // Citation heuristic: "according to <Name>" with NO URL anywhere in the same sentence is
+  // an unverifiable attribution. (#67: the old anchored negative-lookahead only looked right
+  // after the name, so a URL later in the sentence was missed and the claim wrongly flagged.)
+  // Sentence-level split + a whole-sentence URL test; both patterns are linear (bounded class,
+  // no nested quantifier) to stay ReDoS-free.
+  const CITATION = /\baccording to \[?[a-z][^.\n]{2,60}/i
+  for (const sentence of content.split(/[.!?\n]+/)) {
+    if (CITATION.test(sentence) && !/https?:\/\//i.test(sentence)) {
+      weak.push('Citation without a verifiable source')
+      break
+    }
   }
   reasons.push(...weak)
 
