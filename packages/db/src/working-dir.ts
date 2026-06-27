@@ -73,12 +73,22 @@ function sensitiveDirs(): string[] {
 }
 
 /**
+ * Strip trailing path separators. Done with a scan, NOT a regex: a `/[\\/]+$/` replace is a
+ * polynomial-ReDoS (quadratic on a string of many separators) — flagged by CodeQL js/polynomial-redos.
+ */
+function stripTrailingSeparators(s: string): string {
+  let end = s.length
+  while (end > 0 && (s[end - 1] === '/' || s[end - 1] === '\\')) end--
+  return s.slice(0, end)
+}
+
+/**
  * Reject a workspace root so broad it disables containment: the filesystem root, a bare drive
  * root (`C:\`), or the parent of all home dirs (`/home`, `/Users`). `realRoot` is realpath'd.
  */
 function isTooBroadRoot(realRoot: string): boolean {
-  const norm = realRoot.replace(/[\\/]+$/, '') // strip trailing separators
-  const fsRoot = parse(realRoot).root.replace(/[\\/]+$/, '')
+  const norm = stripTrailingSeparators(realRoot)
+  const fsRoot = stripTrailingSeparators(parse(realRoot).root)
   if (norm === '' || norm === fsRoot) return true // '/', 'C:\'
   if (process.platform === 'win32') {
     if (/^[A-Za-z]:$/.test(norm)) return true // bare drive root
