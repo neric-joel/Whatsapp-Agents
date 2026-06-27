@@ -12,11 +12,16 @@
  * `..` collapsed) is a real directory that lives inside an allow-root. The allow-root
  * defaults to the user's home directory and is overridable with AGENTROOM_WORKSPACE_ROOT —
  * broad enough for the "open any of my project folders" use case, narrow enough to keep the
- * cwd out of system directories and to defeat traversal/symlink escapes.
+ * cwd out of system directories and to defeat traversal/symlink escapes. Two extra guards
+ * (defense-in-depth, since the default root is all of $HOME): an over-broad root (`/`, a bare
+ * drive root, `/home`, `/Users`) is rejected, and the app's own store + credential dirs
+ * (`.ssh`, `.aws`, `.gnupg`, `.config`, `~/.agentroom`, …) are never allowed even inside the root.
  */
 import { realpathSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { isAbsolute, resolve, sep } from 'node:path'
+import { isAbsolute, join, parse, resolve, sep } from 'node:path'
+
+import { appDataDir } from './paths.js'
 
 export interface WorkingDirResult {
   ok: boolean
@@ -38,6 +43,49 @@ export function workspaceRoot(): string {
 /** UNC (`\\server\share`, `//server/share`) and Windows device paths (`\\?\`, `\\.\`). */
 function isUncOrDevicePath(p: string): boolean {
   return /^[\\/]{2}/.test(p)
+}
+
+/**
+ * Directories that must NEVER be a working_dir (and so never a spawn cwd) even though they
+ * sit inside the allow-root: the app's own SQLite + credential store, and the user's
+ * credential/secret dirs. Defense-in-depth — the default allow-root is the whole home dir,
+ * so without this a "working folder" could point an (eventually-spawned) CLI at ~/.ssh or
+ * the app's own data. Only paths that exist can contain a child, so non-existent ones are
+ * skipped by the caller.
+ */
+function sensitiveDirs(): string[] {
+  const home = homedir()
+  const dots = [
+    '.ssh',
+    '.aws',
+    '.gnupg',
+    '.gpg',
+    '.config',
+    '.kube',
+    '.docker',
+    '.azure',
+    '.gcloud',
+  ]
+  const list = dots.map((d) => join(home, d))
+  if (process.platform === 'darwin') list.push(join(home, 'Library', 'Keychains'))
+  list.push(appDataDir()) // ~/.agentroom or %APPDATA%\AgentRoom — the app's own store
+  return list
+}
+
+/**
+ * Reject a workspace root so broad it disables containment: the filesystem root, a bare drive
+ * root (`C:\`), or the parent of all home dirs (`/home`, `/Users`). `realRoot` is realpath'd.
+ */
+function isTooBroadRoot(realRoot: string): boolean {
+  const norm = realRoot.replace(/[\\/]+$/, '') // strip trailing separators
+  const fsRoot = parse(realRoot).root.replace(/[\\/]+$/, '')
+  if (norm === '' || norm === fsRoot) return true // '/', 'C:\'
+  if (process.platform === 'win32') {
+    if (/^[A-Za-z]:$/.test(norm)) return true // bare drive root
+  } else if (norm === '/home' || norm === '/Users') {
+    return true
+  }
+  return false
 }
 
 /** True iff `child` is `root` or a descendant of it (case-insensitive on Windows). */
@@ -76,6 +124,12 @@ export function validateWorkingDir(input: unknown, opts?: { root?: string }): Wo
   } catch {
     return { ok: false, reason: 'workspace root does not exist' }
   }
+  if (isTooBroadRoot(realRoot)) {
+    return {
+      ok: false,
+      reason: 'workspace root is too broad — set AGENTROOM_WORKSPACE_ROOT to a specific folder',
+    }
+  }
   let realChild: string
   try {
     realChild = realpathSync(resolve(raw))
@@ -94,5 +148,20 @@ export function validateWorkingDir(input: unknown, opts?: { root?: string }): Wo
   if (!isWithin(realChild, realRoot)) {
     return { ok: false, reason: `working_dir must be inside the workspace root (${realRoot})` }
   }
+
+  // Defense-in-depth: never allow a sensitive/credential dir or the app's own store, even
+  // though it lives inside the allow-root.
+  for (const dir of sensitiveDirs()) {
+    let realDir: string
+    try {
+      realDir = realpathSync(dir)
+    } catch {
+      continue // doesn't exist → can't contain the child
+    }
+    if (isWithin(realChild, realDir)) {
+      return { ok: false, reason: 'working_dir points at a protected or sensitive directory' }
+    }
+  }
+
   return { ok: true, path: realChild }
 }

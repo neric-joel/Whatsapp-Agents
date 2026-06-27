@@ -8,24 +8,23 @@ change. By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 - **Node ≥ 22.13** and **pnpm ≥ 11** (the repo pins `pnpm@11.0.8`; `corepack` or
   `npm i -g pnpm@11.0.8`).
-- **Docker** + the **Supabase CLI** for the local database (`supabase start`).
 - Optional: the agent CLIs you want to exercise (`claude`, `codex`, …). Without them,
-  the **mock adapter** works end-to-end.
+  the **mock adapter** works end-to-end. No Docker, no database, no accounts — state is
+  local SQLite under `~/.agentroom`.
 
-See the [Quickstart in the README](README.md#quickstart-local-510-min-to-a-working-app) for the
-fast path and [`docs/SELF_HOSTING.md`](docs/SELF_HOSTING.md) for the full setup, including the
-Docker/devcontainer paths.
+See the [Quickstart in the README](README.md#quickstart-a-couple-of-minutes-to-a-working-app)
+for the fast path. End users run `pnpm start` (the built app); contributors use `pnpm dev`
+(watch mode) below.
 
 ## Local setup
 
 ```bash
 pnpm install
-cp apps/web/.env.example apps/web/.env.local   # fill in values
-cp bridge/.env.example bridge/.env             # fill in values
-pnpm dev:supabase        # start local Supabase (Docker)
-pnpm db:reset            # apply migrations + seed
-pnpm dev                 # web (:3000) + bridge in parallel
+pnpm dev                 # web (:3000) + bridge in parallel, watch mode
 ```
+
+The first run creates `~/.agentroom/` (SQLite DB + a `files/` folder) and seeds a starter
+room — no env files needed for local use (the `.env.example` files document optional vars).
 
 Env vars are documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#environment-variables);
 the **core connection vars** are validated at boot (zod) — a missing/invalid one fails

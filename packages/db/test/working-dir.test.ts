@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { homedir, tmpdir } from 'node:os'
+import { join, parse } from 'node:path'
 import { after, before, test } from 'node:test'
 
 import { validateWorkingDir, workspaceRoot } from '../src/working-dir.js'
@@ -86,6 +86,35 @@ test('rejects empty input and a null byte', () => {
   assert.equal(validateWorkingDir('', { root }).ok, false)
   assert.equal(validateWorkingDir('   ', { root }).ok, false)
   assert.equal(validateWorkingDir(join(root, 'a\0b'), { root }).ok, false)
+})
+
+test('rejects the app’s own data dir (~/.agentroom / %APPDATA%/AgentRoom) even inside the root', () => {
+  const prevHome = process.env['AGENTROOM_HOME']
+  // Point appDataDir() at a temp folder under `base`, then try to "open" a folder inside it.
+  const appHome = join(base, 'app-store')
+  const insideAppHome = join(appHome, 'sub')
+  mkdirSync(insideAppHome, { recursive: true })
+  try {
+    process.env['AGENTROOM_HOME'] = appHome
+    const r = validateWorkingDir(insideAppHome, { root: base })
+    assert.equal(r.ok, false, 'a folder inside the app’s own store must be rejected')
+    assert.match(r.reason ?? '', /protected|sensitive/i)
+  } finally {
+    if (prevHome === undefined) delete process.env['AGENTROOM_HOME']
+    else process.env['AGENTROOM_HOME'] = prevHome
+  }
+})
+
+test('never accepts ~/.ssh (denied if it exists, not-found otherwise — always ok:false)', () => {
+  // Either the sensitive-dir guard rejects it, or it doesn't exist → not found. Both ok:false.
+  assert.equal(validateWorkingDir(join(homedir(), '.ssh'), { root: homedir() }).ok, false)
+})
+
+test('rejects an over-broad workspace root (filesystem/drive root, /home, /Users)', () => {
+  const broad = process.platform === 'win32' ? parse(process.cwd()).root : '/'
+  const r = validateWorkingDir(inside, { root: broad })
+  assert.equal(r.ok, false)
+  assert.match(r.reason ?? '', /too broad/i)
 })
 
 test('workspaceRoot honors AGENTROOM_WORKSPACE_ROOT, else defaults to home', () => {

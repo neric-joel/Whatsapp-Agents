@@ -27,8 +27,9 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
 const PORT = Number(process.env.PORT ?? 3000)
-const URL = `http://localhost:${PORT}`
-const READY_PROBE = `${URL}/api/health`
+// Not named `URL`: that would shadow the Node `URL` global constructor in this module.
+const APP_URL = `http://localhost:${PORT}`
+const READY_PROBE = `${APP_URL}/api/health`
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const isWin = process.platform === 'win32'
 
@@ -90,10 +91,10 @@ function killTree(child) {
 function openBrowser() {
   if (process.env.AGENTROOM_NO_OPEN === '1') return
   const cmd = isWin
-    ? `start "" "${URL}"`
+    ? `start "" "${APP_URL}"`
     : process.platform === 'darwin'
-      ? `open "${URL}"`
-      : `xdg-open "${URL}"`
+      ? `open "${APP_URL}"`
+      : `xdg-open "${APP_URL}"`
   spawn(cmd, { shell: true, stdio: 'ignore' }).on('error', () => {})
 }
 
@@ -124,12 +125,20 @@ async function main() {
   }
 
   // 2. Build the web app (skippable for fast restarts). Building each launch keeps `.next`
-  //    fresh, which is precisely why no cache-clearing hack is needed.
+  //    fresh, which is precisely why no cache-clearing hack is needed. Uses the root `build`
+  //    script so there is one source of truth for what "build" means.
   if (process.env.AGENTROOM_SKIP_BUILD === '1') {
-    emit('launch', 'AGENTROOM_SKIP_BUILD=1 — reusing existing build')
+    // BUILD_ID exists only after `next build` — a `next dev` run leaves a `.next` WITHOUT it,
+    // so checking the dir alone would wrongly "reuse" a dev build that `next start` can't run.
+    if (!existsSync(join(ROOT, 'apps/web/.next/BUILD_ID'))) {
+      emit('launch', 'AGENTROOM_SKIP_BUILD=1 but no production build found (apps/web/.next/BUILD_ID missing).')
+      emit('launch', 'Run `pnpm start` once without AGENTROOM_SKIP_BUILD to build first.')
+      process.exit(1)
+    }
+    emit('launch', 'AGENTROOM_SKIP_BUILD=1 — reusing existing production build')
   } else {
     emit('launch', 'Building web app (next build)…')
-    if ((await run('build', 'pnpm --filter web build')) !== 0) {
+    if ((await run('build', 'pnpm build')) !== 0) {
       emit('launch', 'Build failed — see output above.')
       process.exit(1)
     }
@@ -158,7 +167,7 @@ async function main() {
   // 4. Wait for readiness, then open the browser.
   emit('launch', `Waiting for ${READY_PROBE}…`)
   if (await waitForReady()) {
-    emit('launch', `Ready at ${URL} — opening browser.`)
+    emit('launch', `Ready at ${APP_URL} — opening browser.`)
     openBrowser()
     emit(
       'launch',
