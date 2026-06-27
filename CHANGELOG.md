@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.2.0] - 2026-06-27
+
 ### Added — v2: trustworthy, Cowork-style workspace
 
 - **Agent grounding.** Every agent prompt is prefixed with authoritative facts about the
