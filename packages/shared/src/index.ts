@@ -287,6 +287,13 @@ export interface ContextPacketV1 {
   run_id: string
   room: Pick<Room, 'id' | 'name' | 'reply_mode' | 'max_agent_rounds' | 'discussion_mode'>
   agent: Pick<Agent, 'id' | 'name' | 'slug' | 'system_prompt' | 'provider'>
+  /**
+   * Authoritative, auto-generated grounding facts about THIS runtime (local SQLite
+   * paths, no cloud/Supabase/login). Built from the real app-data config so it can't
+   * drift, and rendered to the agent first — stops agents from hallucinating their own
+   * architecture (e.g. claiming Supabase/ChatGPT-workspace storage).
+   */
+  environment?: string
   trigger_message: Pick<Message, 'id' | 'content' | 'sender_type' | 'created_at'>
   recent_messages: Array<
     Pick<Message, 'id' | 'content' | 'sender_type' | 'sender_agent_id' | 'created_at' | 'metadata'>
