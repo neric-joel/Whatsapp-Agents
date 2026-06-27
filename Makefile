@@ -1,12 +1,12 @@
 # AgentRoom — cross-platform developer tasks (POSIX / macOS / Linux / WSL).
 # Thin wrappers over pnpm. AgentRoom is a local, single-user app: no Docker, no
-# Supabase, no login. Windows users have the same flows via start-agentroom.bat /
-# the desktop shortcut; see the README Quickstart.
+# Supabase, no login. To just RUN it, use `make start` (or `pnpm start`); Windows users
+# can double-click start-agentroom.bat. The dev-* targets are for contributors.
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
-.PHONY: help bootstrap doctor install env \
+.PHONY: help bootstrap doctor install env start \
         dev dev-web dev-bridge typecheck lint format test e2e build clean
 
 help: ## Show this help
@@ -27,7 +27,10 @@ env: ## Create env files from the examples if missing (never overwrites)
 	@[ -f bridge/.env ] || cp bridge/.env.example bridge/.env
 	@echo "env files ready — all values are optional for local use"
 
-dev: ## Run web + bridge together (host dev)
+start: ## Run it (end users): build + start web + bridge, open the browser
+	pnpm start
+
+dev: ## Develop it (contributors): run web + bridge together in watch mode
 	pnpm dev
 
 dev-web: ## Run only the Next.js web app

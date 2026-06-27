@@ -2,10 +2,11 @@
 
 > **Outdated — kept as history.** AgentRoom is now a **local, single-user desktop app**:
 > there is nothing to host. It runs on `localhost` against a local SQLite database and a
-> files folder under `~/.agentroom` — no Supabase, no Docker, no accounts. Just
-> `pnpm install` then `pnpm dev` (see the [README](../README.md)), and connect your CLIs
-> ([CONNECTING_CLIS.md](CONNECTING_CLIS.md)). Everything below describes the previous
-> hosted/Supabase design and no longer applies.
+> files folder under `~/.agentroom` — no Supabase, no Docker, no accounts. To run it, just
+> `pnpm start` (end users) or `pnpm dev` (contributors, watch mode) — see the
+> [README](../README.md#quickstart-a-couple-of-minutes-to-a-working-app) — and connect your
+> CLIs ([CONNECTING_CLIS.md](CONNECTING_CLIS.md)). Everything below describes the previous
+> hosted/Supabase design (including its `/auth` flow) and no longer applies.
 
 AgentRoom is fully self-hostable on free, open-source infrastructure. **No paid plan
 is required anywhere** — the default path uses a local Supabase stack via the Supabase
@@ -61,8 +62,9 @@ pnpm dev                # runs web (:3000) + bridge together
 env values you have already set, and only fills blank/placeholder keys from
 `supabase status`.
 
-**Windows:** use `start-agentroom.bat` (or the desktop shortcut created by
-`create-desktop-shortcut.ps1`). See the [README Quickstart](../README.md#quickstart-local-510-min-to-a-working-app).
+**Windows:** double-click `start-agentroom.bat` (a thin wrapper around `pnpm start`), or
+run `pnpm start` from a terminal. See the
+[README Quickstart](../README.md#quickstart-a-couple-of-minutes-to-a-working-app).
 
 Manual equivalent:
 

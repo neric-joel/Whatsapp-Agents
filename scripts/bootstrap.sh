@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # AgentRoom — one-command bootstrap (macOS / Linux / WSL).
-# Windows users: use start-agentroom.bat / the desktop shortcut instead.
+# To just run the app, use `pnpm start` (Windows: double-click start-agentroom.bat).
 #
 #   bash scripts/bootstrap.sh              # full setup
 #   bash scripts/bootstrap.sh --check-only # prereq checks only
@@ -51,6 +51,6 @@ bold "Installing dependencies (pnpm install)..."
 pnpm install
 
 bold "Done. Next steps:"
-echo "  pnpm dev          # run web + bridge"
-echo "  open http://localhost:3000"
+echo "  pnpm start        # build + run the app (web + bridge), opens your browser"
+echo "  pnpm dev          # contributors only: run web + bridge in watch mode"
 echo "  Then open Connections to detect/add your agent CLIs (see docs/CONNECTING_CLIS.md)."

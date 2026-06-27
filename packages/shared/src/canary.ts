@@ -41,6 +41,16 @@ const STORAGE_ASSERTION =
 const NEGATION =
   /\b(no|not|n't|never|without|isn't|aren't|doesn't|don't|instead of|rather than|unlike)\b/i
 
+// EXCLUSION list (not an inclusion list — see #67). Only suppress the grounding flag when the
+// clause has an EXPLICIT third-party / generic subject ("Postgres is what most apps use",
+// "many teams choose Firebase"). A bare-noun subject ("Messages are stored in Supabase",
+// "Conversations are saved to Firebase") is the NATURAL phrasing of a real hallucination and
+// MUST still flag: an earlier inclusion-list version (requiring "the app"/"your messages"/etc.)
+// silently dropped those flags — trading one cosmetic false positive for several false
+// negatives in the exact class this gate exists to catch. Flat alternation — linear, no ReDoS.
+const GENERIC_SUBJECT =
+  /\b(?:most|many|some|other|several|various|certain|all|numerous)\s+(?:apps?|applications?|programs?|tools?|projects?|systems?|services?|websites?|platforms?|teams?|companies|developers?|people|users?|clients?|databases?|backends?|frameworks?|stacks?)\b|\b(?:people|developers|other apps|many apps|the industry)\b/i
+
 // Split into clauses (sentence boundaries + commas/semicolons/em–en dashes) so a negation
 // in one clause ("it's NOT local — data lives in Supabase") can't disarm a backend claim in
 // the next. Two passes over simple character classes (no `\s+…\s+` alternation) keeps this
@@ -65,6 +75,9 @@ export function runCanary(content: string): CanaryResult {
     const m = s.match(FORBIDDEN_BACKENDS)
     if (!m || m.index === undefined) continue
     if (!STORAGE_ASSERTION.test(s)) continue
+    // Skip only EXPLICIT generic/third-party statements ("Postgres is what most apps use").
+    // A bare-noun app statement ("Messages are stored in Supabase") still flags — see above.
+    if (GENERIC_SUBJECT.test(s)) continue
     // Within this clause, a negation BEFORE the backend term is a denial ("not stored in
     // Supabase"). A negation in a different clause was already split off above, so it can't
     // disarm the flag — that was the bypass ("it's NOT local — data lives in Supabase").
@@ -92,8 +105,17 @@ export function runCanary(content: string): CanaryResult {
   ) {
     weak.push('Unqualified absolute claim')
   }
-  if (/according to \[?[A-Z][^[\]]{2,40}\]?(?![^\s]*https?:\/\/)/i.test(content)) {
-    weak.push('Citation without a verifiable source')
+  // Citation heuristic: "according to <Name>" with NO URL anywhere in the same sentence is
+  // an unverifiable attribution. (#67: the old anchored negative-lookahead only looked right
+  // after the name, so a URL later in the sentence was missed and the claim wrongly flagged.)
+  // Sentence-level split + a whole-sentence URL test; both patterns are linear (bounded class,
+  // no nested quantifier) to stay ReDoS-free.
+  const CITATION = /\baccording to \[?[a-z][^.\n]{2,60}/i
+  for (const sentence of content.split(/[.!?\n]+/)) {
+    if (CITATION.test(sentence) && !/https?:\/\//i.test(sentence)) {
+      weak.push('Citation without a verifiable source')
+      break
+    }
   }
   reasons.push(...weak)
 

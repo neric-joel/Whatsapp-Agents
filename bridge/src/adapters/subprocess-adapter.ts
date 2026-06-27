@@ -142,6 +142,11 @@ export abstract class SubprocessAdapter implements AgentAdapter {
     // wins over the base allowlist for exactly the vars the user opted into.
     for (const [k, v] of Object.entries(this.extraChildEnv())) childEnv[k] = v
 
+    // SECURITY (issue #67): no user-controlled `cwd` is set — the child inherits the
+    // bridge's working directory. A session's `working_dir` is NOT wired here yet; if it
+    // ever is, it MUST first pass `validateWorkingDir` from @agentroom/db (realpath +
+    // allow-root, rejects UNC/traversal/symlink-escape) and ONLY the returned canonical
+    // path may be used as `cwd`. Never pass a raw stored/user path to spawn().
     const child = spawn(target.command, target.args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: false, // never spawn through a shell — no command-injection surface

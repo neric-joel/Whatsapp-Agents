@@ -32,11 +32,18 @@ model internals.
 1. **Grounding (strongest → `flagged`).** A storage/architecture assertion that names a
    backend this app does not use — Supabase, Postgres, Firebase, Mongo, a cloud/hosted
    database, a "ChatGPT/OpenAI workspace", etc. The ground truth (local SQLite under
-   `~/.agentroom`, no cloud) is fixed, so this is deterministic. A **negation guard** keeps
-   correct denials ("this is *not* in Supabase, it's local SQLite") from being flagged.
+   `~/.agentroom`, no cloud) is fixed, so this is deterministic. Two guards refine it: a
+   **negation guard** keeps correct denials ("this is *not* in Supabase, it's local SQLite")
+   from being flagged, and a **generic-subject guard** (issue #67) suppresses the flag only
+   when the clause has an *explicit* third-party subject — "Postgres is what **most apps**
+   use", "many teams choose Firebase". It is an exclusion list, not an inclusion list: a
+   bare-noun claim ("messages are stored in Supabase", "data is persisted in a cloud
+   database") is the natural phrasing of a real hallucination and still flags. (The gate errs
+   toward flagging — a fail-safe trust signal favours recall over precision.)
 2. **Weaker behavioral signals (→ `unverified`).** Hedging without grounding, unqualified
    absolutes ("guaranteed", "scientifically proven"), and citations with no verifiable
-   source.
+   source. The citation check scans the **whole sentence** for a URL (issue #67), so
+   "according to the docs at https://…" is treated as sourced and not flagged.
 3. Otherwise **`verified`** — meaning "no problematic signal found", not a proof of truth.
 
 ## The gate + fail-safe
@@ -55,8 +62,11 @@ multi-agent thread — impossible to propagate unlabelled, and to surface weaker
 
 ## Tested
 
-- `runCanary`: flags Supabase/ChatGPT-workspace/Postgres/Firebase storage claims; respects
-  the negation guard; verifies the correct local-SQLite answer; marks hedging/absolutes
-  unverified (`apps/web/lib/__tests__/canary.test.ts`).
+- `runCanary`: flags Supabase/ChatGPT-workspace/Postgres/Firebase storage claims — including
+  **bare-noun** phrasings ("messages are stored in Supabase") and a comma-split subject;
+  respects the negation guard; verifies the correct local-SQLite answer; marks
+  hedging/absolutes unverified; and (issue #67) does **not** flag an explicit generic subject
+  ("most apps use Postgres") or a citation carrying a URL later in the sentence
+  (`packages/shared/test/canary.test.ts`).
 - Propagation gate: a flagged peer reply is prefixed `[UNVERIFIED …]` in the next agent's
   prompt; clean replies are not (`bridge/test/canary-gate.test.ts`).

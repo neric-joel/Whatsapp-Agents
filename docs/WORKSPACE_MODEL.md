@@ -37,8 +37,13 @@ produced files belong.
 - **D-W1 — Folder is a server-side path, not a browser handle.** A browser can't hand the
   server an arbitrary filesystem path (and the File System Access API only yields an opaque
   handle). Since AgentRoom is local and the bridge runs CLIs on this machine, the working
-  folder is an **absolute path the user enters**, validated server-side (must exist + be a
-  directory). This mirrors Cowork's "use an existing folder on your computer".
+  folder is an **absolute path the user enters**, validated server-side. This mirrors Cowork's
+  "use an existing folder on your computer". Validation (issue #67) requires the folder to
+  exist, be a real directory, and — after resolving symlinks — live **inside an allow-root**
+  that defaults to your **home directory** (it also rejects UNC/device paths, traversal, and
+  credential dirs like `~/.ssh` / the app's own `~/.agentroom`). To open a folder outside your
+  home (e.g. projects on another drive), set the env var **`AGENTROOM_WORKSPACE_ROOT`** to an
+  absolute path before starting; working folders must then live under it.
 - **D-W2 — Auto-name then rename.** New sessions are named `<folder basename> · <date>`;
   the user can rename anytime. No blank-name sessions.
 - **D-W3 — Active session = most recently active.** `sessions.last_active_at` tracks the

@@ -43,20 +43,17 @@ using the built-in **mock** agent.
 git clone https://github.com/neric-joel/Whatsapp-Agents.git
 cd Whatsapp-Agents
 
-# 2. Install dependencies  (no pnpm? run `corepack enable` first)
-pnpm install
-
-# 3. Run the web app and the bridge daemon — each in its OWN terminal (both stay running)
-pnpm dev:web      # terminal A → http://localhost:3000
-pnpm dev:bridge   # terminal B → runs your CLIs and produces replies
+# 2. Start AgentRoom — one command, cross-platform
+pnpm start
 ```
 
-On first run AgentRoom creates `~/.agentroom/` (the SQLite DB + a `files/` folder) and
-seeds a starter room. Open **http://localhost:3000** — you're straight in, no sign-up.
+`pnpm start` installs dependencies on first run, builds the app, starts the web server and
+the bridge daemon, waits until **http://localhost:3000** is ready, and opens it in your
+browser. Press **Ctrl-C** to stop both. (On Windows you can double-click
+**`start-agentroom.bat`**, which just runs `pnpm start`.)
 
-> **One command instead.** On macOS/Linux/WSL, `make bootstrap` checks your tools and
-> installs deps; on Windows, double-click **`start-agentroom.bat`** to launch both
-> processes and open the browser.
+On first run AgentRoom creates `~/.agentroom/` (the SQLite DB + a `files/` folder) and
+seeds a starter room — you're straight in, no sign-up.
 
 ### Use it
 
@@ -81,10 +78,10 @@ seeds a starter room. Open **http://localhost:3000** — you're straight in, no 
 `{"ok":true,…,"db":"up"}`, and a message in a room with at least one connected, unmuted
 agent gets a reply within a few seconds.
 
-**Not getting a reply?** Check that (a) `pnpm dev:bridge` is running, (b) the room has at
-least one agent and it isn't muted, and (c) the CLI is logged in — if a reply fails with
-an auth error, run that CLI's login in your terminal (e.g. `claude login`). Stale runs
-auto-recover if you restart the bridge.
+**Not getting a reply?** Check that (a) the bridge is running (`pnpm start` runs it; if it
+stopped, run `pnpm start` again), (b) the room has at least one agent and it isn't muted,
+and (c) the CLI is logged in — if a reply fails with an auth error, run that CLI's login in
+your terminal (e.g. `claude login`). Stale runs auto-recover on restart.
 
 ## Connect your own CLI
 
@@ -185,13 +182,20 @@ docs/             CONNECTING_CLIS · ARCHITECTURE · OBSERVABILITY · adr/ (deci
 ## Common commands
 
 ```bash
-pnpm dev                  # run web + bridge together
+# Run it (end users)
+pnpm start                # build + start web + bridge, then open the browser
+pnpm build                # just build the web app
+
+# Develop it (contributors — hot reload, no build step)
+pnpm dev                  # run web + bridge together in watch mode
 pnpm typecheck            # type-check all workspaces
 pnpm test                 # web + bridge + db tests
 pnpm lint                 # eslint
-pnpm --filter web build   # production build of the web app
 pnpm e2e                  # Playwright end-to-end tests
 ```
+
+> **Users run `pnpm start`** (the built production app). **Contributors run `pnpm dev`**
+> for hot reload. `pnpm dev` is for development only — it's not what you ship to people.
 
 ## Contributing · Security · License
 

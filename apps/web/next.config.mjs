@@ -27,6 +27,12 @@ const securityHeaders = [
 ]
 
 const nextConfig = {
+  // No @vercel/nft build-trace. Server code legitimately calls os.homedir() (the working_dir
+  // validator + app-data paths); nft statically evaluates that and scans the user's home dir,
+  // which on Windows hits the protected `Application Data` junction and fails the build with
+  // EPERM. The `.nft.json` manifests are only consumed by `output: 'standalone'` / serverless
+  // packaging — this app runs via `next start` from the repo, so tracing is pure overhead.
+  outputFileTracing: false,
   // Local desktop app (no Docker image), so no 'standalone' output — it only added
   // a heavy trace/copy of the native better-sqlite3 binary.
   // @agentroom/shared and @agentroom/db ship raw TypeScript (no build step), so

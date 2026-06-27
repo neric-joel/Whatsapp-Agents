@@ -44,6 +44,10 @@ export default defineConfig({
     env: {
       AGENTROOM_HOME: E2E_HOME,
       NEXT_PUBLIC_APP_URL: 'http://localhost:3000',
+      // The sessions spec "opens" a throwaway temp folder; allow the OS temp root so the
+      // hardened working_dir validator (issue #67) accepts it on every platform (Linux
+      // tmpdir is /tmp, outside $HOME — the default allow-root).
+      AGENTROOM_WORKSPACE_ROOT: tmpdir(),
     },
   },
 })
