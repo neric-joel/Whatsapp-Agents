@@ -1,6 +1,6 @@
+import { getDb, intBool, jsonText, newId, nowIso } from '@agentroom/db'
 import type { AgentEvent } from '@agentroom/shared'
 import { detectChallenge, readDiscussionMetadata } from '@agentroom/shared'
-import type { SupabaseClient } from '@supabase/supabase-js'
 
 import { getAdapter as defaultGetAdapter } from '../adapters/registry.js'
 import { handleHandoffRequest } from '../agents/handoff.js'
@@ -21,12 +21,10 @@ import {
 } from '../lib/metrics.js'
 import { redact } from '../lib/redact.js'
 import { resolveRuntimeProvider } from '../lib/resolve-runtime-provider.js'
-import { createServiceClient } from '../lib/supabase.js'
 import { persistMemoryOp } from '../memory/persist-memory-op.js'
 
-/** Injectable dependencies — defaults are the real Supabase client + adapter registry. */
+/** Injectable dependencies — defaults are the real adapter registry. */
 interface ProcessRunDeps {
-  supabase?: SupabaseClient
   getAdapter?: typeof defaultGetAdapter
 }
 
@@ -73,7 +71,7 @@ interface AgentRunRow {
 }
 
 export async function processRun(runId: string, deps: ProcessRunDeps = {}): Promise<void> {
-  const supabase = deps.supabase ?? createServiceClient()
+  const db = getDb()
   const getAdapter = deps.getAdapter ?? defaultGetAdapter
   const startedAt = Date.now()
   // Gates the terminal metrics: only count an outcome for a run we actually moved
@@ -82,26 +80,69 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
   let started = false
 
   // a. Fetch run with agent data
-  const { data: runRaw } = await supabase
-    .from('agent_runs')
-    .select(
-      'id, room_id, agent_id, trigger_msg_id, status, round_index, discussion_mode, deliberation_depth, deliberation_root_id, agents!agent_id(id, name, slug, system_prompt, provider, adapter_type, tool_permissions, credential_id, created_by_user_id)',
+  const runBase = db
+    .prepare(
+      'SELECT id, room_id, agent_id, trigger_msg_id, status, round_index, discussion_mode, deliberation_depth, deliberation_root_id FROM agent_runs WHERE id = ?',
     )
-    .eq('id', runId)
-    .single()
+    .get(runId) as
+    | {
+        id: string
+        room_id: string
+        agent_id: string
+        trigger_msg_id: string | null
+        status: string
+        round_index: number
+        discussion_mode: DiscussionMode
+        deliberation_depth: number
+        deliberation_root_id: string | null
+      }
+    | undefined
 
-  if (!runRaw) return
-  const runRow = runRaw as unknown as AgentRunRow
+  if (!runBase) return
+  const agentRaw = db
+    .prepare(
+      'SELECT id, name, slug, system_prompt, provider, adapter_type, tool_permissions, credential_id, created_by_user_id FROM agents WHERE id = ?',
+    )
+    .get(runBase.agent_id) as
+    | {
+        id: string
+        name: string
+        slug: string
+        system_prompt: string | null
+        provider: string
+        adapter_type: string
+        tool_permissions: string
+        credential_id: string | null
+        created_by_user_id: string | null
+      }
+    | undefined
+  const runRow: AgentRunRow = {
+    ...runBase,
+    agents: agentRaw
+      ? {
+          id: agentRaw.id,
+          name: agentRaw.name,
+          slug: agentRaw.slug,
+          system_prompt: agentRaw.system_prompt,
+          provider: agentRaw.provider,
+          adapter_type: agentRaw.adapter_type,
+          tool_permissions: JSON.parse(agentRaw.tool_permissions || '{}') as Record<
+            string,
+            unknown
+          >,
+          credential_id: agentRaw.credential_id,
+          created_by_user_id: agentRaw.created_by_user_id,
+        }
+      : null,
+  }
 
   try {
     // b. Atomically claim
-    const { data: claimed } = await supabase
-      .from('agent_runs')
-      .update({ status: 'claimed', worker_id: WORKER_ID, started_at: new Date().toISOString() })
-      .eq('id', runId)
-      .eq('status', 'queued')
-      .select('id')
-      .single()
+    const claimed = db
+      .prepare(
+        "UPDATE agent_runs SET status = 'claimed', worker_id = ?, started_at = ? WHERE id = ? AND status = 'queued' RETURNING id",
+      )
+      .get(WORKER_ID, nowIso(), runId) as { id: string } | undefined
 
     if (!claimed) {
       log('debug', 'run.skipped', { run_id: runId, reason: 'already_claimed' })
@@ -110,13 +151,11 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
     log('info', 'run.start', { run_id: runId, agent_id: runRow.agent_id, room_id: runRow.room_id })
 
     // c. Update to running
-    const { data: running } = await supabase
-      .from('agent_runs')
-      .update({ status: 'running' })
-      .eq('id', runId)
-      .eq('status', 'claimed')
-      .select('id')
-      .single()
+    const running = db
+      .prepare(
+        "UPDATE agent_runs SET status = 'running' WHERE id = ? AND status = 'claimed' RETURNING id",
+      )
+      .get(runId) as { id: string } | undefined
     if (!running) {
       log('debug', 'run.skipped', { run_id: runId, reason: 'cancelled_before_running' })
       return
@@ -136,12 +175,25 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
     }
     let triggerMsg = fallbackMsg
     if (runRow.trigger_msg_id) {
-      const { data: tm } = await supabase
-        .from('messages')
-        .select('id, content, sender_type, sender_user_id, created_at, metadata')
-        .eq('id', runRow.trigger_msg_id)
-        .single()
-      if (tm) triggerMsg = tm as typeof triggerMsg
+      const tm = db
+        .prepare(
+          'SELECT id, content, sender_type, sender_user_id, created_at, metadata FROM messages WHERE id = ?',
+        )
+        .get(runRow.trigger_msg_id) as
+        | {
+            id: string
+            content: string
+            sender_type: string
+            sender_user_id: string | null
+            created_at: string
+            metadata: string
+          }
+        | undefined
+      if (tm)
+        triggerMsg = {
+          ...tm,
+          metadata: JSON.parse(tm.metadata || '{}') as Record<string, unknown>,
+        } as typeof triggerMsg
     }
 
     const agentInfo = runRow.agents
@@ -149,7 +201,6 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
 
     // f. Build ContextPacketV1
     const packet = await buildContextPacket({
-      supabase,
       run: {
         id: runId,
         room_id: runRow.room_id,
@@ -167,13 +218,12 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
     // the packet/stdin/argv/logs). null = unchanged host-login behavior.
     const adapter = getAdapter(agentInfo.adapter_type ?? 'mock')
     const runtimeCredential = await resolveRuntimeProvider({
-      supabase,
       adapterType: agentInfo.adapter_type,
       credentialId: agentInfo.credential_id,
       ownerUserId: agentInfo.created_by_user_id,
     })
     const controller = new AbortController()
-    const stopCancellationWatcher = watchRunCancellation(supabase, runId, controller)
+    const stopCancellationWatcher = watchRunCancellation(runId, controller)
     let finalContent = ''
     const handoffEvents: HandoffRequestedEvent[] = []
 
@@ -191,31 +241,29 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
         } else if (event.type === 'tool_call_requested') {
           const requiresApproval = event.requires_approval
 
-          const { data: tc } = await supabase
-            .from('tool_calls')
-            .insert({
-              room_id: runRow.room_id,
-              run_id: runRow.id,
-              agent_id: agentInfo.id,
-              tool_name: event.tool_name,
-              tool_category: event.tool_category ?? null,
-              input_args: event.arguments,
-              status: requiresApproval ? 'waiting_approval' : 'queued',
-              requires_approval: requiresApproval,
-            })
-            .select()
-            .single()
+          const tc = db
+            .prepare(
+              'INSERT INTO tool_calls (id, room_id, run_id, agent_id, tool_name, tool_category, input_args, status, requires_approval) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
+            )
+            .get(
+              newId(),
+              runRow.room_id,
+              runRow.id,
+              agentInfo.id,
+              event.tool_name,
+              event.tool_category ?? null,
+              jsonText(event.arguments),
+              requiresApproval ? 'waiting_approval' : 'queued',
+              intBool(requiresApproval),
+            ) as { id: string } | undefined
 
           if (tc) {
             const commandArg = (event.arguments['command'] as string | undefined) ?? ''
             if (isDeniedCommand(commandArg)) {
-              await supabase
-                .from('tool_calls')
-                .update({
-                  status: 'denied',
-                  error: 'Command blocked by denylist',
-                })
-                .eq('id', tc.id)
+              db.prepare("UPDATE tool_calls SET status = 'denied', error = ? WHERE id = ?").run(
+                'Command blocked by denylist',
+                tc.id,
+              )
               log('warn', 'tool.denied', {
                 run_id: runId,
                 tool_name: event.tool_name,
@@ -231,11 +279,9 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
             for (let i = 0; i < 15; i++) {
               if (controller.signal.aborted) throw new RunCancelledError()
               await new Promise<void>((r) => setTimeout(r, 2000))
-              const { data: updated } = await supabase
-                .from('tool_calls')
-                .select('status')
-                .eq('id', tc.id)
-                .single()
+              const updated = db
+                .prepare('SELECT status FROM tool_calls WHERE id = ?')
+                .get(tc.id) as { status?: string } | undefined
               if (updated?.status === 'approved') {
                 finalStatus = 'approved'
                 break
@@ -251,12 +297,12 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
                 tool_name: event.tool_name,
                 approved: true,
               })
-              await supabase.from('tool_calls').update({ status: 'running' }).eq('id', tc.id)
+              db.prepare("UPDATE tool_calls SET status = 'running' WHERE id = ?").run(tc.id)
               const result = { ok: true, stdout: 'approved' }
-              await supabase
-                .from('tool_calls')
-                .update({ status: 'succeeded', output: redact(JSON.stringify(result)) })
-                .eq('id', tc.id)
+              db.prepare("UPDATE tool_calls SET status = 'succeeded', output = ? WHERE id = ?").run(
+                redact(JSON.stringify(result)),
+                tc.id,
+              )
             } else {
               log(
                 finalStatus === 'denied' ? 'info' : 'warn',
@@ -267,27 +313,24 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
                   ...(finalStatus === 'denied' ? { approved: false } : {}),
                 },
               )
-              await supabase
-                .from('tool_calls')
-                .update({
-                  status: finalStatus === 'denied' ? 'denied' : 'failed',
-                  error: finalStatus === 'denied' ? null : 'approval timeout',
-                })
-                .eq('id', tc.id)
+              db.prepare('UPDATE tool_calls SET status = ?, error = ? WHERE id = ?').run(
+                finalStatus === 'denied' ? 'denied' : 'failed',
+                finalStatus === 'denied' ? null : 'approval timeout',
+                tc.id,
+              )
             }
           } else if (tc) {
             const result = { ok: true, stdout: 'executed' }
-            await supabase
-              .from('tool_calls')
-              .update({ status: 'succeeded', output: redact(JSON.stringify(result)) })
-              .eq('id', tc.id)
+            db.prepare("UPDATE tool_calls SET status = 'succeeded', output = ? WHERE id = ?").run(
+              redact(JSON.stringify(result)),
+              tc.id,
+            )
           }
         } else if (event.type === 'memory_op') {
           // Agent-curated memory: the bridge validates, injection-scans, and
           // persists (the agent never writes the DB). A bad op is logged + skipped
           // — it must never fail the run.
           await persistMemoryOp(event, {
-            supabase,
             agentId: runRow.agent_id,
             roomId: runRow.room_id,
             triggerMessageId: runRow.trigger_msg_id ?? null,
@@ -343,34 +386,32 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
           }
         : {}),
     }
-    const { data: insertedMessage, error: insertMessageError } = await supabase
-      .from('messages')
-      .insert({
-        room_id: runRow.room_id,
-        sender_type: 'agent',
-        sender_agent_id: runRow.agent_id,
-        content: replyContent,
-        content_type: 'text',
-        round_index: runRow.round_index,
-        metadata,
-      })
-      .select('id')
-      .single()
+    const insertedMessage = db
+      .prepare(
+        "INSERT INTO messages (id, room_id, sender_type, sender_agent_id, content, content_type, round_index, metadata) VALUES (?, ?, 'agent', ?, ?, 'text', ?, ?) RETURNING id",
+      )
+      .get(
+        newId(),
+        runRow.room_id,
+        runRow.agent_id,
+        replyContent,
+        runRow.round_index,
+        jsonText(metadata),
+      ) as { id: string } | undefined
 
-    if (insertMessageError || !insertedMessage) {
-      throw new Error(insertMessageError?.message ?? 'Failed to insert agent reply')
+    if (!insertedMessage) {
+      throw new Error('Failed to insert agent reply')
     }
 
     // i. Mark run completed — STATUS-GUARDED so a concurrent cancellation (the user
     // cancels while the adapter is finishing) is never clobbered completed→... If the
     // run is no longer claimed/running it was finalized elsewhere (e.g. cancelled),
     // so skip the success follow-ups and leave the terminal state intact (R3/F6).
-    const { data: completedRows } = await supabase
-      .from('agent_runs')
-      .update({ status: 'completed', completed_at: new Date().toISOString() })
-      .eq('id', runId)
-      .in('status', ['claimed', 'running'])
-      .select('id')
+    const completedRows = db
+      .prepare(
+        "UPDATE agent_runs SET status = 'completed', completed_at = ? WHERE id = ? AND status IN ('claimed', 'running') RETURNING id",
+      )
+      .all(nowIso(), runId) as { id: string }[]
     if (!completedRows || completedRows.length === 0) {
       log('warn', 'run.complete_skipped_terminal', { run_id: runId })
       return
@@ -400,7 +441,6 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
         }
         for (const handoff of handoffEvents.slice(0, MAX_HANDOFFS_PER_RUN)) {
           await handleHandoffRequest(handoff, {
-            supabase,
             roomId: runRow.room_id,
             sourceAgentId: runRow.agent_id,
             sourceMessageId: insertedMessage.id,
@@ -414,7 +454,6 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
           })
         }
         await maybeScheduleAgentMentionFollowUps({
-          supabase,
           currentRun: {
             id: runRow.id,
             discussion_mode: runRow.discussion_mode,
@@ -429,7 +468,6 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
         })
       }
       await maybeScheduleDiscussionContinuation({
-        supabase,
         roomId: runRow.room_id,
         currentRoundIndex: runRow.round_index,
         triggerMessage: triggerMsg,
@@ -447,15 +485,9 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
   } catch (err) {
     const message = redact(err instanceof Error ? err.message : String(err))
     if (err instanceof RunCancelledError) {
-      await supabase
-        .from('agent_runs')
-        .update({
-          status: 'cancelled',
-          error_message: message,
-          completed_at: new Date().toISOString(),
-        })
-        .eq('id', runId)
-        .in('status', ['claimed', 'running'])
+      db.prepare(
+        "UPDATE agent_runs SET status = 'cancelled', error_message = ?, completed_at = ? WHERE id = ? AND status IN ('claimed', 'running')",
+      ).run(message, nowIso(), runId)
       if (started) recordRunCancelled()
       log('warn', 'run.cancelled', { run_id: runId })
       return
@@ -463,11 +495,9 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
     // STATUS-GUARDED: only a still-in-flight run becomes 'failed'. Never clobber a
     // run that already reached a terminal state (completed/cancelled) — this is the
     // core R3 protection against an error after the completed write.
-    await supabase
-      .from('agent_runs')
-      .update({ status: 'failed', error_message: message })
-      .eq('id', runId)
-      .in('status', ['claimed', 'running'])
+    db.prepare(
+      "UPDATE agent_runs SET status = 'failed', error_message = ? WHERE id = ? AND status IN ('claimed', 'running')",
+    ).run(message, runId)
     if (started) recordRunFailed()
     captureError(err, { run_id: runId, where: 'processRun' })
     log('error', 'run.failed', { run_id: runId, error: message })
@@ -475,24 +505,21 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
   }
 }
 
-function watchRunCancellation(
-  supabase: SupabaseClient,
-  runId: string,
-  controller: AbortController,
-): () => void {
+function watchRunCancellation(runId: string, controller: AbortController): () => void {
+  const db = getDb()
   const interval = setInterval(() => {
     if (controller.signal.aborted) return
 
-    void (async () => {
-      try {
-        const { data } = await supabase.from('agent_runs').select('status').eq('id', runId).single()
-        if ((data as { status?: string } | null)?.status === 'cancelled') {
-          controller.abort()
-        }
-      } catch {
-        // Best-effort cancellation watcher; the main run path owns error handling.
+    try {
+      const data = db.prepare('SELECT status FROM agent_runs WHERE id = ?').get(runId) as
+        | { status?: string }
+        | undefined
+      if (data?.status === 'cancelled') {
+        controller.abort()
       }
-    })()
+    } catch {
+      // Best-effort cancellation watcher; the main run path owns error handling.
+    }
   }, CANCEL_POLL_MS)
 
   return () => clearInterval(interval)

@@ -101,9 +101,37 @@ export const updateMemorySchema = z
 // user-set `system_prompt` is attacker-influenced: the bridge delivers it to the
 // CLI via stdin only, never argv (see bridge/src/lib/subprocess-security.ts and
 // the subprocess-security tests) — this schema does not relax that invariant.
-export const AGENT_ADAPTER_TYPES = ['mock', 'claude-code', 'subprocess', 'codex-cli'] as const
+export const AGENT_ADAPTER_TYPES = [
+  'mock',
+  'claude-code',
+  'subprocess',
+  'codex-cli',
+  'cli',
+] as const
 
 export const AGENT_PROVIDERS = ['claude_code', 'codex', 'mock', 'openai', 'custom'] as const
+
+// Connections — a connected CLI profile (config.json). Records WHERE a binary is
+// and HOW to invoke it; auth stays the CLI's own job (no API keys requested). The
+// optional `env` exists only for the rare CLI that needs an extra variable.
+const CLI_KINDS = ['claude-code', 'codex-cli', 'generic'] as const
+
+const cliSlug = z
+  .string()
+  .min(1)
+  .max(40)
+  .regex(/^[a-z0-9][a-z0-9_-]*$/, 'slug must be lowercase letters, numbers, _ or -')
+
+export const upsertCliProfileSchema = z.object({
+  id: z.string().min(1).max(80).optional(),
+  name: z.string().min(1).max(80),
+  slug: cliSlug,
+  bin: z.string().min(1).max(1000),
+  args: z.array(z.string().max(1000)).max(64).optional(),
+  env: z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), z.string().max(8000)).optional(),
+  kind: z.enum(CLI_KINDS).optional(),
+  enabled: z.boolean().optional(),
+})
 
 const agentSlug = z
   .string()
@@ -127,6 +155,9 @@ export const createAgentSchema = z.object({
   avatar_url: avatarUrl.optional(),
   provider: z.enum(AGENT_PROVIDERS),
   adapter_type: z.enum(AGENT_ADAPTER_TYPES).optional(),
+  // For adapter_type 'cli': the connected CLI profile (config.json) this agent runs.
+  // Stored in the agent's `provider` column so the bridge resolves the profile.
+  cli_profile_id: z.string().min(1).max(80).optional(),
   model: z.string().max(100).optional(),
   system_prompt: z.string().max(8000).optional(),
   capabilities: z.string().max(500).optional(),

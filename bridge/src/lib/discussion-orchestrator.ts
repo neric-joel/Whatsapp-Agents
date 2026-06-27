@@ -1,21 +1,21 @@
+import { getDb, jsonText, newId } from '@agentroom/db'
 import {
   ABS_MAX_DISCUSSION_ROUNDS,
   type Assignment,
   buildCrossReviewPairs,
-  COLLAB_MAX_AGENTS,
   buildDiscussionStagePrompt,
+  COLLAB_MAX_AGENTS,
   type CrossReviewPair,
   type DiscussCommand,
+  DISCUSSION_MAX_PHASES,
   type DiscussionPhase,
   discussionStageNumber,
-  DISCUSSION_MAX_PHASES,
   formatBlackboard,
   nextDiscussionStage,
   parseTaskList,
   readDiscussionMetadata,
   selectCoordinatorIndex,
 } from '@agentroom/shared'
-import type { SupabaseClient } from '@supabase/supabase-js'
 
 // ADR-0011 — team-collaboration /discuss + adversarial /debate orchestration. Replaces the old
 // individual→critique→consensus engine. After each agent run completes the worker calls
@@ -67,18 +67,43 @@ const DEBATE_FALLBACK = [
   { task: 'argue a strong ALTERNATIVE the others are missing', position: 'alternative' as const },
 ]
 
-async function loadActiveMembers(
-  supabase: SupabaseClient,
-  roomId: string,
-): Promise<ActiveMember[]> {
-  const { data } = await supabase
-    .from('room_members')
-    .select('agent_id, agents!inner(id, name, slug, provider, capabilities, is_active)')
-    .eq('room_id', roomId)
-    .eq('member_type', 'agent')
-    .eq('reply_enabled', true)
-    .eq('muted', false)
-  return ((data ?? []) as unknown as AgentMemberRow[])
+function loadActiveMembers(roomId: string): ActiveMember[] {
+  const db = getDb()
+  const rows = db
+    .prepare(
+      `SELECT rm.agent_id AS agent_id,
+              a.id AS id, a.name AS name, a.slug AS slug,
+              a.provider AS provider, a.capabilities AS capabilities, a.is_active AS is_active
+         FROM room_members rm
+         JOIN agents a ON a.id = rm.agent_id
+        WHERE rm.room_id = ?
+          AND rm.member_type = 'agent'
+          AND rm.reply_enabled = 1
+          AND rm.muted = 0`,
+    )
+    .all(roomId) as Array<{
+    agent_id: string
+    id: string
+    name: string
+    slug: string
+    provider: string
+    capabilities: string | null
+    is_active: number
+  }>
+  return rows
+    .map(
+      (r): AgentMemberRow => ({
+        agent_id: r.agent_id,
+        agents: {
+          id: r.id,
+          name: r.name,
+          slug: r.slug,
+          provider: r.provider,
+          capabilities: r.capabilities,
+          is_active: r.is_active === 1,
+        },
+      }),
+    )
     .filter((m) => m.agents?.is_active)
     .map((m) => ({
       agent_id: m.agent_id,
@@ -112,16 +137,15 @@ function buildBlackboard(
 }
 
 export async function maybeScheduleDiscussionContinuation({
-  supabase,
   roomId,
   currentRoundIndex,
   triggerMessage,
 }: {
-  supabase: SupabaseClient
   roomId: string
   currentRoundIndex: number
   triggerMessage: TriggerMessage
 }): Promise<void> {
+  const db = getDb()
   const discussion = readDiscussionMetadata(triggerMessage.metadata)
   if (!discussion) return
 
@@ -129,11 +153,9 @@ export async function maybeScheduleDiscussionContinuation({
   const rootId = discussion.original_message_id
 
   // 1. Barrier: only advance when EVERY run for the just-finished phase is terminal.
-  const { data: currentRuns } = await supabase
-    .from('agent_runs')
-    .select('id, status')
-    .eq('trigger_msg_id', triggerMessage.id)
-    .eq('round_index', currentRoundIndex)
+  const currentRuns = db
+    .prepare(`SELECT id, status FROM agent_runs WHERE trigger_msg_id = ? AND round_index = ?`)
+    .all(triggerMessage.id, currentRoundIndex)
   const runs = (currentRuns ?? []) as Array<{ id: string; status: RunStatus }>
   if (runs.length === 0 || runs.some((r) => !TERMINAL_STATUSES.has(r.status))) return
 
@@ -141,13 +163,16 @@ export async function maybeScheduleDiscussionContinuation({
   if (!runs.some((r) => r.status === 'completed')) return
 
   // 2. Has any reply in this thread substantively challenged a peer? (anti-sycophancy gate)
-  const { data: challengeRows } = await supabase
-    .from('messages')
-    .select('id')
-    .eq('room_id', roomId)
-    .eq('sender_type', 'agent')
-    .contains('metadata', { discussion: { original_message_id: rootId, challenge: true } })
-    .limit(1)
+  const challengeRows = db
+    .prepare(
+      `SELECT id FROM messages
+        WHERE room_id = ?
+          AND sender_type = 'agent'
+          AND json_extract(metadata, '$.discussion.original_message_id') = ?
+          AND json_extract(metadata, '$.discussion.challenge') = 1
+        LIMIT 1`,
+    )
+    .all(roomId, rootId)
   const threadHasChallenge = (challengeRows ?? []).length > 0
 
   // 3. Next stage (DAG → self-terminates at converge/adjudicate).
@@ -162,19 +187,21 @@ export async function maybeScheduleDiscussionContinuation({
   if (nextStageNumber > DISCUSSION_MAX_PHASES) return
 
   // 5. Idempotency pre-check (the partial unique index is the hard backstop).
-  const { data: existing } = await supabase
-    .from('messages')
-    .select('id')
-    .eq('room_id', roomId)
-    .contains('metadata', {
-      discussion: { enabled: true, original_message_id: rootId, phase: next.phase },
-    })
-    .limit(1)
+  const existing = db
+    .prepare(
+      `SELECT id FROM messages
+        WHERE room_id = ?
+          AND json_extract(metadata, '$.discussion.enabled') = 1
+          AND json_extract(metadata, '$.discussion.original_message_id') = ?
+          AND json_extract(metadata, '$.discussion.phase') = ?
+        LIMIT 1`,
+    )
+    .all(roomId, rootId, next.phase)
   if ((existing ?? []).length > 0) return
 
   // 6. Who runs the next phase? Bound the tight loop to COLLAB_MAX_AGENTS (ADR-0011) so fan-out
   // stays small even in a large room — keep the discussion's coordinator, then fill by membership.
-  const allActiveMembers = await loadActiveMembers(supabase, roomId)
+  const allActiveMembers = loadActiveMembers(roomId)
   if (allActiveMembers.length === 0) return
   let activeMembers = allActiveMembers
   if (allActiveMembers.length > COLLAB_MAX_AGENTS) {
@@ -204,15 +231,17 @@ export async function maybeScheduleDiscussionContinuation({
   const leavingPlan = discussion.phase === 'plan' || discussion.phase === 'assign'
   if (leavingPlan) {
     // The coordinator's plan reply is the agent message at the just-finished round in this thread.
-    const { data: planReplies } = await supabase
-      .from('messages')
-      .select('content, sender_agent_id')
-      .eq('room_id', roomId)
-      .eq('sender_type', 'agent')
-      .eq('round_index', currentRoundIndex)
-      .contains('metadata', { discussion: { original_message_id: rootId } })
-      .order('created_at', { ascending: false })
-      .limit(1)
+    const planReplies = db
+      .prepare(
+        `SELECT content, sender_agent_id FROM messages
+          WHERE room_id = ?
+            AND sender_type = 'agent'
+            AND round_index = ?
+            AND json_extract(metadata, '$.discussion.original_message_id') = ?
+          ORDER BY created_at DESC
+          LIMIT 1`,
+      )
+      .all(roomId, currentRoundIndex, rootId)
     const planContent = (planReplies?.[0] as { content?: string } | undefined)?.content ?? ''
     assignments = parseTaskList(
       planContent,
@@ -270,23 +299,26 @@ export async function maybeScheduleDiscussionContinuation({
     },
   }
 
-  const { data: nextMessage, error: nextMessageError } = await supabase
-    .from('messages')
-    .insert({
-      room_id: roomId,
-      sender_type: 'system',
-      content,
-      content_type: 'text',
-      mentions: [],
-      target_agent_ids: targetMembers.map((m) => m.agent_id),
-      round_index: nextRoundIndex,
-      metadata: nextMetadata,
-    })
-    .select('id')
-    .single()
-
-  if (nextMessageError) {
-    if (nextMessageError.code === '23505') return // lost the idempotency race — fine
+  let nextMessage: { id: string } | undefined
+  try {
+    nextMessage = db
+      .prepare(
+        `INSERT INTO messages
+           (id, room_id, sender_type, content, content_type, mentions, target_agent_ids, round_index, metadata)
+         VALUES (?, ?, 'system', ?, 'text', ?, ?, ?, ?)
+         RETURNING id`,
+      )
+      .get(
+        newId(),
+        roomId,
+        content,
+        jsonText([]),
+        jsonText(targetMembers.map((m) => m.agent_id)),
+        nextRoundIndex,
+        jsonText(nextMetadata),
+      ) as { id: string } | undefined
+  } catch (nextMessageError) {
+    if ((nextMessageError as { code?: string })?.code === 'SQLITE_CONSTRAINT_UNIQUE') return // lost the idempotency race — fine
     throw nextMessageError
   }
   if (!nextMessage) return
@@ -297,17 +329,20 @@ export async function maybeScheduleDiscussionContinuation({
   // references agent_runs(id), not a message, and a handoff self-roots at its own run id, so
   // cycle detection within any handoff subtree still works. (ADR-0011 proposed root=message id,
   // which the agent_runs_deliberation_root_id_fkey makes infeasible; the intent is preserved.)
-  const { error: runsError } = await supabase.from('agent_runs').insert(
-    targetMembers.map((m) => ({
-      room_id: roomId,
-      agent_id: m.agent_id,
-      trigger_msg_id: nextMessage.id,
-      status: 'queued',
-      round_index: nextRoundIndex,
-      discussion_mode: 'tag_turns',
-      deliberation_depth: nextStageNumber,
-      deliberation_root_id: null,
-    })),
+  const insertRun = db.prepare(
+    `INSERT INTO agent_runs
+       (id, room_id, agent_id, trigger_msg_id, status, round_index, discussion_mode, deliberation_depth, deliberation_root_id)
+     VALUES (?, ?, ?, ?, 'queued', ?, 'tag_turns', ?, ?)`,
   )
-  if (runsError) throw runsError
+  for (const m of targetMembers) {
+    insertRun.run(
+      newId(),
+      roomId,
+      m.agent_id,
+      nextMessage.id,
+      nextRoundIndex,
+      nextStageNumber,
+      null,
+    )
+  }
 }

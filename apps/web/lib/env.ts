@@ -1,38 +1,20 @@
 import { z } from 'zod'
 
 /**
- * Boot-time environment validation for the web app (server side).
+ * Boot-time environment validation for the web app (server side), run once at
+ * startup via `instrumentation.ts`.
  *
- * Validated once at server startup via `instrumentation.ts` so a
- * misconfiguration fails fast with a message that NAMES the bad var, instead of
- * surfacing as a cryptic Supabase "Invalid URL" at request time.
- *
- * CRITICAL: the publishable key var is `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` — never the
- * deprecated `NEXT_PUBLIC_SUPABASE_ANON_KEY`. We explicitly reject the deprecated name to catch
- * copy-paste mistakes early.
+ * Local single-user app: there is NO required server env anymore (no Supabase, no
+ * auth keys). The app stores everything locally via @agentroom/db. We keep a
+ * minimal validator so the boot hook has a stable entry point and any optional
+ * config is checked with a clear, named error rather than failing cryptically later.
  */
-
-const serverEnvSchema = z
-  .object({
-    NEXT_PUBLIC_SUPABASE_URL: z.string().url('must be a valid URL (e.g. http://localhost:54321)'),
-    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z
-      .string()
-      .min(1, 'is required (the publishable/anon key)'),
-    SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, 'is required (server-only service-role key)'),
-    NEXT_PUBLIC_APP_URL: z.string().url('must be a valid URL').optional(),
-    // Deprecated name — if present, the operator likely used the wrong var.
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().optional(),
-  })
-  .superRefine((val, ctx) => {
-    if (val.NEXT_PUBLIC_SUPABASE_ANON_KEY && !val.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'],
-        message:
-          'is required — you set the deprecated NEXT_PUBLIC_SUPABASE_ANON_KEY; rename it to NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
-      })
-    }
-  })
+const serverEnvSchema = z.object({
+  // Optional: sets the CSRF same-origin allowlist + absolute URLs behind a proxy.
+  NEXT_PUBLIC_APP_URL: z.string().url('must be a valid URL').optional(),
+  // Optional: where local app-data (SQLite + files) lives; defaults per-OS.
+  AGENTROOM_HOME: z.string().optional(),
+})
 
 type ServerEnv = z.infer<typeof serverEnvSchema>
 
@@ -45,9 +27,7 @@ export function validateServerEnv(
     const lines = result.error.issues.map(
       (i) => `  - ${i.path.join('.') || '(root)'}: ${i.message}`,
     )
-    throw new Error(
-      `Invalid web environment — fix apps/web/.env.local (see apps/web/.env.example):\n${lines.join('\n')}`,
-    )
+    throw new Error(`Invalid web environment:\n${lines.join('\n')}`)
   }
   return result.data
 }

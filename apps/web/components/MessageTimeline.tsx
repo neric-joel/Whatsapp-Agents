@@ -5,13 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useAgentRuns } from '@/hooks/useAgentRuns'
 import { useMessages } from '@/hooks/useMessages'
 import { useToolCalls } from '@/hooks/useToolCalls'
-import {
-  applyPinnedItemChange,
-  buildPinsByMessageId,
-  type PinMessageRow,
-  removePinnedItemById,
-} from '@/lib/pins'
-import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+import { applyPinnedItemChange, buildPinsByMessageId, type PinMessageRow } from '@/lib/pins'
 import { buildTimelineEvents } from '@/lib/timeline-events'
 
 import AgentRunCard from './AgentRunCard'
@@ -99,10 +93,8 @@ export default function MessageTimeline({
   }, [messages, optimisticMessages])
 
   useEffect(() => {
-    const supabase = createSupabaseBrowserClient()
-    supabase.auth.getUser().then(({ data }) => {
-      setCurrentUserName(data.user?.email ?? null)
-    })
+    // Local single-user app — the human is always "You".
+    setCurrentUserName('You')
   }, [])
 
   useEffect(() => {
@@ -113,73 +105,43 @@ export default function MessageTimeline({
     const missingIds = [...new Set(fileIds)].filter((id) => !filesMap[id])
     if (missingIds.length === 0) return
 
-    const supabase = createSupabaseBrowserClient()
-    supabase
-      .from('files')
-      .select('id, filename, mime_type, size_bytes')
-      .in('id', missingIds)
-      .then(({ data }) => {
-        const rows = (data as FileRow[]) ?? []
+    fetch(`/api/rooms/${roomId}/files`)
+      .then((res) => res.json())
+      .then((json) => {
+        const rows = (json?.data as FileRow[]) ?? []
         setFilesMap((prev) => ({
           ...prev,
           ...Object.fromEntries(rows.map((file) => [file.id, file])),
         }))
       })
-  }, [messages, filesMap])
+      .catch(() => {})
+  }, [messages, filesMap, roomId])
 
   useEffect(() => {
     let mounted = true
-
-    fetch(`/api/rooms/${roomId}/pins`)
-      .then(async (res) => {
-        const json = (await res.json()) as {
-          ok: boolean
-          data?: PinnedItemRow[]
-          error?: { message?: string }
-        }
-        if (!res.ok || !json.ok) throw new Error(json.error?.message ?? 'Failed to load pins')
-        return json.data ?? []
-      })
-      .then((pins) => {
-        if (mounted) setPinsByMessageId(buildPinsByMessageId(pins))
-      })
-      .catch(() => {
-        if (mounted) setPinsByMessageId({})
-      })
-
+    const loadPins = () => {
+      fetch(`/api/rooms/${roomId}/pins`)
+        .then(async (res) => {
+          const json = (await res.json()) as {
+            ok: boolean
+            data?: PinnedItemRow[]
+            error?: { message?: string }
+          }
+          if (!res.ok || !json.ok) throw new Error(json.error?.message ?? 'Failed to load pins')
+          return json.data ?? []
+        })
+        .then((pins) => {
+          if (mounted) setPinsByMessageId(buildPinsByMessageId(pins))
+        })
+        .catch(() => {
+          /* transient; the next poll retries (replaces the old realtime channel) */
+        })
+    }
+    loadPins()
+    const t = setInterval(loadPins, 2000)
     return () => {
       mounted = false
-    }
-  }, [roomId])
-
-  useEffect(() => {
-    const supabase = createSupabaseBrowserClient()
-    const sub = supabase
-      .channel(`timeline-pins:${roomId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'pinned_items',
-          filter: `room_id=eq.${roomId}`,
-        },
-        (payload) => {
-          if (payload.eventType === 'DELETE') {
-            const oldPin = payload.old as { id?: string }
-            const deletedPinId = oldPin.id
-            if (deletedPinId) setPinsByMessageId((prev) => removePinnedItemById(prev, deletedPinId))
-            return
-          }
-
-          const pin = payload.new as PinnedItemRow
-          setPinsByMessageId((prev) => applyPinnedItemChange(prev, pin))
-        },
-      )
-      .subscribe()
-
-    return () => {
-      void sub.unsubscribe()
+      clearInterval(t)
     }
   }, [roomId])
 

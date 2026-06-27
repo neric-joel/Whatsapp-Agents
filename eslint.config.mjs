@@ -25,6 +25,9 @@ export default tseslint.config(
       '**/.git/**',
       '**/pnpm-lock.yaml',
       '**/.turbo/**',
+      // AppleDouble / dot-underscore artifacts (already in .gitignore as `._*`);
+      // ignore here too so local lint matches CI when such strays exist on disk.
+      '**/._*',
     ],
   },
 
@@ -87,7 +90,7 @@ export default tseslint.config(
   {
     files: [
       'bridge/**/*.{ts,tsx,js,jsx,mjs,cjs}',
-      'packages/shared/**/*.{ts,tsx,js,jsx,mjs,cjs}',
+      'packages/**/*.{ts,tsx,js,jsx,mjs,cjs}',
       'scripts/**/*.{ts,tsx,js,jsx,mjs,cjs}',
       'e2e/**/*.{ts,tsx,js,jsx,mjs,cjs}',
       'playwright.config.ts',

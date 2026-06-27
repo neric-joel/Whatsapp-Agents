@@ -1,25 +1,10 @@
 name: E2E Tests
 
-# Trigger on pull requests and manual dispatch.
-# This workflow is the e2e gate: it runs Playwright against the Next.js app.
-#
-# Scope decision (read before changing):
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# Standing up a fully seeded local Supabase instance in GitHub Actions is
-# possible (the Supabase CLI supports `supabase start` on Linux runners) but
-# adds ~2-3 minutes of setup and requires Docker-in-Docker. For the initial
-# scaffold we split the work into two tiers:
-#
-#   Tier 1 â€” always runs (no backend needed):
-#     auth.spec.ts  â€” unauthenticated redirect + form-rendering tests
-#     chat.spec.ts  â€” "sign-in form interaction" describe block (error-path only)
-#     a11y.spec.ts  â€” axe-core WCAG scan of /auth (fails on serious/critical)
-#
-#   Tier 2 â€” requires E2E_LIVE=1 + a seeded Supabase + bridge (NOT enabled here):
-#     chat.spec.ts  â€” "chat journey" describe block
-#
-# To promote Tier 2 to CI, add the "start-supabase" and "start-bridge" steps
-# below (marked TODO) and set E2E_LIVE: '1' in the env block.
+# Playwright against the local Next.js app. AgentRoom is a local, single-user app:
+# no Supabase, no login, no Docker. The web server boots against an isolated temp
+# AGENTROOM_HOME (set in playwright.config.ts) and seeds a fresh SQLite DB on first
+# request, so these specs need no backend. The send→reply journey (chat.spec.ts) is
+# gated behind E2E_LIVE (needs the bridge + a real CLI) and is skipped here.
 
 on:
   workflow_dispatch:
@@ -34,33 +19,20 @@ concurrency:
 
 jobs:
   e2e:
-    name: Playwright E2E (Chromium, auth tier)
+    name: Playwright E2E (Chromium)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
     env:
-      # â”€â”€ Next.js build-time env (dummy values â€” app boots but Supabase calls fail) â”€â”€
-      NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
-      # CRITICAL: use PUBLISHABLE_KEY, never the deprecated ANON_KEY (rejected by apps/web/lib/env.ts)
-      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-dummy-publishable-key
-      SUPABASE_SERVICE_ROLE_KEY: ci-dummy-service-role-key
-      NEXT_PUBLIC_APP_URL: http://localhost:3000
-
-      # â”€â”€ Playwright settings â”€â”€
       CI: 'true'
-      # Uncomment and set these to enable the full chat journey (Tier 2):
-      # E2E_LIVE: '1'
-      # E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
-      # E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
-
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
 
-      - name: Setup Node 20
+      - name: Setup Node 22
         uses: actions/setup-node@v6
         with:
           node-version: 22
@@ -69,51 +41,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # â”€â”€ Tier 2 TODO: start local Supabase â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-      # Uncomment this block when promoting the chat journey to CI.
-      # Requires Docker available on the runner (ubuntu-latest has Docker).
-      #
-      # - name: Install Supabase CLI
-      #   uses: supabase/setup-cli@v1
-      #   with:
-      #     version: latest
-      #
-      # - name: Start local Supabase
-      #   run: supabase start
-      #
-      # - name: Apply migrations and seed
-      #   run: supabase db reset
-      #
-      # - name: Create E2E test user via Supabase admin API
-      #   run: |
-      #     curl -s -X POST http://localhost:54321/auth/v1/admin/users \
-      #       -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
-      #       -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
-      #       -H "Content-Type: application/json" \
-      #       -d "{\"email\":\"$E2E_EMAIL\",\"password\":\"$E2E_PASSWORD\",\"email_confirm\":true}"
-      # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-      # â”€â”€ Tier 2 TODO: start bridge with mock adapter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-      # Uncomment when promoting to Tier 2. The bridge uses MOCK_ONLY or the
-      # BRIDGE_ADAPTER env to force the mock adapter regardless of agent config.
-      #
-      # - name: Start bridge (mock adapter, background)
-      #   run: pnpm --filter bridge dev &
-      #   env:
-      #     SUPABASE_URL: http://localhost:54321
-      #     SUPABASE_SERVICE_ROLE_KEY: ci-dummy-service-role-key
-      #     BRIDGE_WORKER_ID: ci-bridge-1
-      #     BRIDGE_POLL_INTERVAL_MS: 500
-      #     BRIDGE_MAX_CONCURRENT_RUNS: 2
-      # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
       - name: Install Playwright browsers (Chromium only)
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run Playwright tests
         run: pnpm exec playwright test
-        # playwright.config.ts starts the Next.js dev server automatically.
-        # webServer.reuseExistingServer is false in CI, so a fresh server starts here.
+        # playwright.config.ts starts the Next.js dev server (fresh in CI).
 
       - name: Upload Playwright report
         if: always()

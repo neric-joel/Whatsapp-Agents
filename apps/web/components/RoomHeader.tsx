@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 
 import { getProviderStyle } from '@/lib/provider-styles'
-import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 import ThemeSwitcher from './ThemeSwitcher'
 
@@ -29,6 +28,11 @@ interface RoomAgentMember {
   agent: AgentSummary
 }
 
+interface RoomSummary {
+  id: string
+  name: string
+}
+
 export default function RoomHeader({ roomId }: Props) {
   const [roomName, setRoomName] = useState<string | null>(null)
   const [agentCount, setAgentCount] = useState(0)
@@ -42,31 +46,42 @@ export default function RoomHeader({ roomId }: Props) {
 
   useEffect(() => {
     let cancelled = false
-    const supabase = createSupabaseBrowserClient()
-    Promise.all([
-      supabase.from('rooms').select('name').eq('id', roomId).single(),
-      supabase
-        .from('room_members')
-        .select('id', { count: 'exact', head: true })
-        .eq('room_id', roomId)
-        .eq('member_type', 'agent'),
-      fetch(`/api/rooms/${roomId}/members`)
-        .then((res) => res.json().catch(() => ({})))
-        .catch(() => ({})) as Promise<{
-        ok?: boolean
-        data?: RoomAgentMember[]
-      }>,
-    ]).then(([roomRes, membersRes, roomMembersRes]) => {
+
+    async function loadHeaderData() {
+      const [roomsResult, membersResult] = await Promise.all([
+        fetch('/api/rooms')
+          .then((res) => res.json().catch(() => ({})))
+          .catch(() => ({})) as Promise<{
+          ok?: boolean
+          data?: RoomSummary[]
+        }>,
+        fetch(`/api/rooms/${roomId}/members`)
+          .then((res) => res.json().catch(() => ({})))
+          .catch(() => ({})) as Promise<{
+          ok?: boolean
+          data?: RoomAgentMember[]
+        }>,
+      ])
       if (cancelled) return
-      if (roomRes.data) setRoomName((roomRes.data as { name: string }).name)
-      if (membersRes.count != null) setAgentCount(membersRes.count)
-      if (roomMembersRes.ok && roomMembersRes.data) {
-        setMembers(roomMembersRes.data)
-        setAgentCount(roomMembersRes.data.length)
+      if (roomsResult.ok && roomsResult.data) {
+        const room = roomsResult.data.find((item) => item.id === roomId)
+        if (room) setRoomName(room.name)
       }
-    })
+      if (membersResult.ok && membersResult.data) {
+        setMembers(membersResult.data)
+        setAgentCount(membersResult.data.length)
+      }
+    }
+
+    void loadHeaderData()
+    // Local app: poll the local API as the realtime replacement.
+    const interval = setInterval(() => {
+      void loadHeaderData()
+    }, 1500)
+
     return () => {
       cancelled = true
+      clearInterval(interval)
     }
   }, [roomId])
 
@@ -292,7 +307,10 @@ export default function RoomHeader({ roomId }: Props) {
                         {member.agent.name}
                       </div>
                       <div className="truncate text-xs text-gray-500">
-                        @{member.agent.slug} / {member.agent.provider}
+                        @{member.agent.slug} /{' '}
+                        {member.agent.adapter_type === 'cli'
+                          ? 'connected CLI'
+                          : member.agent.provider}
                       </div>
                     </div>
                     <button

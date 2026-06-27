@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import { getDb, jsonText, newId } from '@agentroom/db'
 import { z } from 'zod'
 
 import { log } from '../lib/logger.js'
@@ -26,7 +26,6 @@ const handoffSchema = z.object({
 })
 
 interface HandoffContext {
-  supabase: SupabaseClient
   roomId: string
   sourceAgentId: string
   /** The agent's reply message — the trigger for the targeted peer run. */
@@ -71,28 +70,51 @@ export async function handleHandoffRequest(
   const targetSlugNorm = normalizeSlug(op.to_agent_slug)
 
   try {
+    const db = getDb()
+
     // 1. Room guards.
-    const { data: roomRaw } = await ctx.supabase
-      .from('rooms')
-      .select('allow_agent_to_agent, max_agent_rounds, max_agent_hops')
-      .eq('id', ctx.roomId)
-      .single()
-    const room = roomRaw as RoomGuards | null
+    const roomRaw = db
+      .prepare(
+        'SELECT allow_agent_to_agent, max_agent_rounds, max_agent_hops FROM rooms WHERE id = ?',
+      )
+      .get(ctx.roomId) as
+      | { allow_agent_to_agent: number; max_agent_rounds: number; max_agent_hops: number }
+      | undefined
+    const room: RoomGuards | null = roomRaw
+      ? {
+          allow_agent_to_agent: roomRaw.allow_agent_to_agent === 1,
+          max_agent_rounds: roomRaw.max_agent_rounds,
+          max_agent_hops: roomRaw.max_agent_hops,
+        }
+      : null
     if (!room) return blocked('room_missing', ctx, op)
     if (!room.allow_agent_to_agent) return blocked('agent_to_agent_disabled', ctx, op)
 
     // 2. Resolve the target peer (active, unmuted, reply-enabled room agent).
-    const { data: rawMembers } = await ctx.supabase
-      .from('room_members')
-      .select('agent_id, agents!inner(id, slug, is_active)')
-      .eq('room_id', ctx.roomId)
-      .eq('member_type', 'agent')
-      .eq('reply_enabled', true)
-      .eq('muted', false)
-    const members = ((rawMembers ?? []) as unknown as MemberRow[]).filter(
-      (m) => m.agents?.is_active,
+    const rawMembers = db
+      .prepare(
+        `SELECT rm.agent_id AS agent_id, a.id AS a_id, a.slug AS a_slug, a.is_active AS a_is_active
+           FROM room_members rm
+           JOIN agents a ON a.id = rm.agent_id
+          WHERE rm.room_id = ?
+            AND rm.member_type = 'agent'
+            AND rm.reply_enabled = 1
+            AND rm.muted = 0`,
+      )
+      .all(ctx.roomId) as Array<{
+      agent_id: string
+      a_id: string
+      a_slug: string
+      a_is_active: number
+    }>
+    const members: MemberRow[] = rawMembers.map((r) => ({
+      agent_id: r.agent_id,
+      agents: { id: r.a_id, slug: r.a_slug, is_active: r.a_is_active === 1 },
+    }))
+    const activeMembers = members.filter((m) => m.agents?.is_active)
+    const target = activeMembers.find(
+      (m) => m.agents && normalizeSlug(m.agents.slug) === targetSlugNorm,
     )
-    const target = members.find((m) => m.agents && normalizeSlug(m.agents.slug) === targetSlugNorm)
     if (!target || !target.agents) return blocked('unknown_target', ctx, op)
     const targetAgentId = target.agent_id
 
@@ -116,7 +138,7 @@ export async function handleHandoffRequest(
     //    All chain members share deliberation_root_id; include the root run's own
     //    agent (its root_id is null, so it isn't in the descendants query).
     const rootId = ctx.currentRun.deliberation_root_id ?? ctx.currentRun.id
-    const chainAgents = await collectChainAgents(ctx.supabase, rootId)
+    const chainAgents = collectChainAgents(rootId)
     chainAgents.add(ctx.sourceAgentId)
     if (chainAgents.has(targetAgentId)) {
       log('info', 'handoff.cycle_blocked', {
@@ -132,29 +154,38 @@ export async function handleHandoffRequest(
     }
 
     // 6. Dedup: don't create a second run for this target at this round/message.
-    const { data: existing } = await ctx.supabase
-      .from('agent_runs')
-      .select('id')
-      .eq('room_id', ctx.roomId)
-      .eq('trigger_msg_id', ctx.sourceMessageId)
-      .eq('agent_id', targetAgentId)
-      .eq('round_index', nextRoundIndex)
-      .limit(1)
-    if ((existing ?? []).length > 0) return { ok: false, reason: 'duplicate' }
+    const existing = db
+      .prepare(
+        `SELECT id FROM agent_runs
+          WHERE room_id = ? AND trigger_msg_id = ? AND agent_id = ? AND round_index = ?
+          LIMIT 1`,
+      )
+      .all(ctx.roomId, ctx.sourceMessageId, targetAgentId, nextRoundIndex)
+    if (existing.length > 0) return { ok: false, reason: 'duplicate' }
 
     // 7. Create the targeted peer run.
-    const { error } = await ctx.supabase.from('agent_runs').insert({
-      room_id: ctx.roomId,
-      agent_id: targetAgentId,
-      trigger_msg_id: ctx.sourceMessageId,
-      status: 'queued',
-      round_index: nextRoundIndex,
-      discussion_mode: ctx.currentRun.discussion_mode,
-      deliberation_depth: nextDepth,
-      deliberation_root_id: rootId,
-    })
-    if (error) {
-      log('warn', 'handoff.persist_failed', { error: error.message, room_id: ctx.roomId })
+    try {
+      db.prepare(
+        `INSERT INTO agent_runs (
+           id, room_id, agent_id, trigger_msg_id, status, round_index,
+           discussion_mode, deliberation_depth, deliberation_root_id
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        newId(),
+        ctx.roomId,
+        targetAgentId,
+        ctx.sourceMessageId,
+        'queued',
+        nextRoundIndex,
+        ctx.currentRun.discussion_mode,
+        nextDepth,
+        rootId,
+      )
+    } catch (error) {
+      log('warn', 'handoff.persist_failed', {
+        error: error instanceof Error ? error.message : String(error),
+        room_id: ctx.roomId,
+      })
       return { ok: false, reason: 'persist_failed' }
     }
 
@@ -177,32 +208,36 @@ export async function handleHandoffRequest(
 }
 
 /** Every agent that has appeared in the hand-off chain rooted at rootId. */
-async function collectChainAgents(supabase: SupabaseClient, rootId: string): Promise<Set<string>> {
+function collectChainAgents(rootId: string): Set<string> {
+  const db = getDb()
   const agents = new Set<string>()
-  const { data: rootRun } = await supabase
-    .from('agent_runs')
-    .select('agent_id')
-    .eq('id', rootId)
-    .single()
-  if (rootRun) agents.add((rootRun as { agent_id: string }).agent_id)
-  const { data: descendants } = await supabase
-    .from('agent_runs')
-    .select('agent_id')
-    .eq('deliberation_root_id', rootId)
-  for (const row of (descendants ?? []) as Array<{ agent_id: string }>) agents.add(row.agent_id)
+  const rootRun = db.prepare('SELECT agent_id FROM agent_runs WHERE id = ?').get(rootId) as
+    | { agent_id: string }
+    | undefined
+  if (rootRun) agents.add(rootRun.agent_id)
+  const descendants = db
+    .prepare('SELECT agent_id FROM agent_runs WHERE deliberation_root_id = ?')
+    .all(rootId) as Array<{ agent_id: string }>
+  for (const row of descendants) agents.add(row.agent_id)
   return agents
 }
 
 async function postSystemMessage(ctx: HandoffContext, content: string): Promise<void> {
-  await ctx.supabase.from('messages').insert({
-    room_id: ctx.roomId,
-    sender_type: 'system',
+  const db = getDb()
+  db.prepare(
+    `INSERT INTO messages (
+       id, room_id, sender_type, content, content_type, mentions, target_agent_ids, round_index
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    newId(),
+    ctx.roomId,
+    'system',
     content,
-    content_type: 'text',
-    mentions: [],
-    target_agent_ids: [],
-    round_index: ctx.currentRun.round_index,
-  })
+    'text',
+    jsonText([]),
+    jsonText([]),
+    ctx.currentRun.round_index,
+  )
 }
 
 function blocked(

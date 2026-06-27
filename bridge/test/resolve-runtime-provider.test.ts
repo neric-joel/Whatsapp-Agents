@@ -1,38 +1,52 @@
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
+import { afterEach, beforeEach, test } from 'node:test'
 
 import { encryptSecret, getCredentialKey } from '@agentroom/shared/credential-crypto'
-import type { SupabaseClient } from '@supabase/supabase-js'
 
 import { resolveRuntimeProvider } from '../src/lib/resolve-runtime-provider.js'
+import { freshTestDb, type TestDb } from './helpers/test-db.js'
 
 const KEY_HEX = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff'
 const env = { CREDENTIAL_ENCRYPTION_KEY: KEY_HEX } as NodeJS.ProcessEnv
 const key = getCredentialKey(env)
 
-interface CredRow {
-  secret_ciphertext: string
-  secret_nonce: string
-  base_url: string | null
-}
+let h: TestDb
 
-function fakeSupabase(row: CredRow | null): SupabaseClient {
-  const builder = {
-    select: () => builder,
-    eq: () => builder,
-    maybeSingle: () => Promise.resolve({ data: row, error: null }),
-  }
-  return { from: () => builder } as unknown as SupabaseClient
-}
+beforeEach(() => {
+  h = freshTestDb()
+})
 
-function cred(secret: string, baseUrl: string | null = null): CredRow {
+afterEach(() => {
+  h.cleanup()
+})
+
+/**
+ * Seed a user_credentials row the same way the original fakeSupabase row provided it:
+ * encrypt `secret` with the test key (AES-256-GCM envelope) and store the
+ * ciphertext/nonce (+ optional base_url). Returns the credential id.
+ *
+ * Owner-scoping: the source loads `WHERE id = ? AND user_id = ?`, so seed under the
+ * owner we will query with. Defaults to id 'c1' / user 'u1' to match the call args.
+ */
+function seedCred(
+  secret: string,
+  baseUrl: string | null = null,
+  { id = 'c1', userId = 'u1' }: { id?: string; userId?: string } = {},
+): string {
   const enc = encryptSecret(secret, key)
-  return { secret_ciphertext: enc.ciphertext, secret_nonce: enc.nonce, base_url: baseUrl }
+  h.db
+    .prepare(
+      `INSERT INTO user_credentials
+         (id, user_id, provider, label, secret_ciphertext, secret_nonce, base_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(id, userId, 'openai', 'test cred', enc.ciphertext, enc.nonce, baseUrl)
+  return id
 }
 
 test('codex-cli resolves OPENAI_API_KEY and decrypts the secret', async () => {
+  seedCred('sk-user-openai')
   const rc = await resolveRuntimeProvider({
-    supabase: fakeSupabase(cred('sk-user-openai')),
     adapterType: 'codex-cli',
     credentialId: 'c1',
     ownerUserId: 'u1',
@@ -44,8 +58,8 @@ test('codex-cli resolves OPENAI_API_KEY and decrypts the secret', async () => {
 })
 
 test('claude-code resolves ANTHROPIC_API_KEY', async () => {
+  seedCred('sk-ant')
   const rc = await resolveRuntimeProvider({
-    supabase: fakeSupabase(cred('sk-ant')),
     adapterType: 'claude-code',
     credentialId: 'c1',
     ownerUserId: 'u1',
@@ -56,8 +70,8 @@ test('claude-code resolves ANTHROPIC_API_KEY', async () => {
 })
 
 test('base_url is passed through with the per-adapter env name', async () => {
+  seedCred('sk-x', 'https://proxy.example/v1')
   const rc = await resolveRuntimeProvider({
-    supabase: fakeSupabase(cred('sk-x', 'https://proxy.example/v1')),
     adapterType: 'codex-cli',
     credentialId: 'c1',
     ownerUserId: 'u1',
@@ -68,11 +82,12 @@ test('base_url is passed through with the per-adapter env name', async () => {
 })
 
 test('returns null for the non-injectable / unconfigured cases', async () => {
-  const row = cred('x')
+  // A valid, owner-matching credential row exists for the cases that get that far.
+  seedCred('x')
+
   // adapter not in the map (host-login / mock)
   assert.equal(
     await resolveRuntimeProvider({
-      supabase: fakeSupabase(row),
       adapterType: 'mock',
       credentialId: 'c1',
       ownerUserId: 'u1',
@@ -83,7 +98,6 @@ test('returns null for the non-injectable / unconfigured cases', async () => {
   // no bound credential → host login
   assert.equal(
     await resolveRuntimeProvider({
-      supabase: fakeSupabase(row),
       adapterType: 'codex-cli',
       credentialId: null,
       ownerUserId: 'u1',
@@ -94,7 +108,6 @@ test('returns null for the non-injectable / unconfigured cases', async () => {
   // feature disabled (no decryption key)
   assert.equal(
     await resolveRuntimeProvider({
-      supabase: fakeSupabase(row),
       adapterType: 'codex-cli',
       credentialId: 'c1',
       ownerUserId: 'u1',
@@ -102,10 +115,13 @@ test('returns null for the non-injectable / unconfigured cases', async () => {
     }),
     null,
   )
-  // missing / cross-owner row (the owner-scoped query returns nothing)
+})
+
+test('returns null when the owner-scoped row is missing / cross-owner', async () => {
+  // Row exists but belongs to a DIFFERENT owner → the owner-scoped query returns nothing.
+  seedCred('x', null, { id: 'c1', userId: 'someone-else' })
   assert.equal(
     await resolveRuntimeProvider({
-      supabase: fakeSupabase(null),
       adapterType: 'codex-cli',
       credentialId: 'c1',
       ownerUserId: 'u1',
@@ -116,11 +132,12 @@ test('returns null for the non-injectable / unconfigured cases', async () => {
 })
 
 test('fails CLOSED (null) when the key cannot decrypt the secret', async () => {
+  // Stored under the real key, but resolved with a different (wrong) key.
+  seedCred('secret')
   const wrong = {
     CREDENTIAL_ENCRYPTION_KEY: 'ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100',
   } as NodeJS.ProcessEnv
   const rc = await resolveRuntimeProvider({
-    supabase: fakeSupabase(cred('secret')),
     adapterType: 'codex-cli',
     credentialId: 'c1',
     ownerUserId: 'u1',

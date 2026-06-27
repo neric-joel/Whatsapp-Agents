@@ -10,8 +10,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@agentroom/db": "workspace:*",
     "@agentroom/shared": "workspace:*",
-    "@supabase/supabase-js": "^2.106.2",
     "dotenv": "^17.4.2",
     "zod": "4.4.3"
   },

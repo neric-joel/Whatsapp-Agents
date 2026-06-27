@@ -24,11 +24,8 @@ const portFromEnv = (def: number) =>
     .pipe(z.number().int().min(0).max(65535))
 
 const bridgeEnvSchema = z.object({
-  // Required — the bridge cannot do anything without a Supabase service client.
-  SUPABASE_URL: z.string().url('must be a valid URL (e.g. http://localhost:54321)'),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, 'is required (server-only service-role key)'),
-
-  // Optional with safe defaults.
+  // Local-only: the bridge reads/writes the local SQLite DB (@agentroom/db); no
+  // Supabase service client is needed. Every field below is optional with a safe default.
   BRIDGE_WORKER_ID: z.string().min(1).default('bridge-local-1'),
   BRIDGE_POLL_INTERVAL_MS: intFromEnv(2000, 100),
   BRIDGE_MAX_CONCURRENT_RUNS: intFromEnv(3, 1),

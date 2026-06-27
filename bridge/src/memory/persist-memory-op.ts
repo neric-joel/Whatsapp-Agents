@@ -1,5 +1,5 @@
+import { getDb, intBool, newId } from '@agentroom/db'
 import { scanMemoryContent } from '@agentroom/shared'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 
 import { log } from '../lib/logger.js'
@@ -24,7 +24,6 @@ const memoryOpSchema = z.object({
 })
 
 interface PersistMemoryContext {
-  supabase: SupabaseClient
   agentId: string
   roomId: string
   triggerMessageId: string | null
@@ -52,15 +51,17 @@ export async function persistMemoryOp(
   const title = op.title ? scanMemoryContent(op.title).sanitized.slice(0, 200) : null
 
   try {
+    const db = getDb()
+
     // replace/consolidate supersede a prior entry — deactivate it, scoped to this
     // agent so an agent can never tamper with another agent's (or a user's) memory.
     if (op.op === 'replace' || op.op === 'consolidate') {
       if (op.target_id) {
-        await ctx.supabase
-          .from('agent_memory')
-          .update({ is_active: false })
-          .eq('id', op.target_id)
-          .eq('agent_id', ctx.agentId)
+        db.prepare('UPDATE agent_memory SET is_active = ? WHERE id = ? AND agent_id = ?').run(
+          intBool(false),
+          op.target_id,
+          ctx.agentId,
+        )
       } else {
         // No target → this degrades to a plain insert (a duplicate, not a replace).
         // Log it so the no-op is observable rather than silent.
@@ -72,20 +73,29 @@ export async function persistMemoryOp(
       }
     }
 
-    const { data, error } = await ctx.supabase
-      .from('agent_memory')
-      .insert({
-        agent_id: ctx.agentId,
-        room_id: op.scope === 'room' ? ctx.roomId : null,
-        scope: op.scope,
-        kind: op.kind,
-        title,
-        content: scan.sanitized,
-        source_message_id: ctx.triggerMessageId,
-        injection_flagged: scan.flagged,
-      })
-      .select('id')
-      .single()
+    let data: { id: string } | undefined
+    let error: Error | null = null
+    try {
+      data = db
+        .prepare(
+          `INSERT INTO agent_memory (id, agent_id, room_id, scope, kind, title, content, source_message_id, injection_flagged)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           RETURNING id`,
+        )
+        .get(
+          newId(),
+          ctx.agentId,
+          op.scope === 'room' ? ctx.roomId : null,
+          op.scope,
+          op.kind,
+          title,
+          scan.sanitized,
+          ctx.triggerMessageId,
+          intBool(scan.flagged),
+        ) as { id: string } | undefined
+    } catch (e) {
+      error = e instanceof Error ? e : new Error(String(e))
+    }
 
     if (error || !data) {
       log('warn', 'memory.op.persist_failed', {

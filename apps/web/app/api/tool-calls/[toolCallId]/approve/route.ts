@@ -1,42 +1,43 @@
+import { getDb, nowIso, rowToToolCall } from '@agentroom/db'
+
 import { apiError, apiSuccess } from '@/lib/api-error'
+import { internalError } from '@/lib/api-security'
+import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomMember } from '@/lib/permissions'
-import { createSupabaseServerClient, createSupabaseServiceClient } from '@/lib/supabase/server'
 
 interface RouteParams {
   params: { toolCallId: string }
 }
 
-export async function POST(_req: Request, { params }: RouteParams) {
-  const supabaseUser = createSupabaseServerClient()
+export async function POST(req: Request, { params }: RouteParams) {
   const {
     data: { user },
     error: authErr,
-  } = await supabaseUser.auth.getUser()
+  } = await getAuthenticatedUser(req)
   if (authErr || !user) return apiError('UNAUTHORIZED', 'Unauthorized', 401)
 
-  const supabase = createSupabaseServiceClient()
-  const { data: toolCall } = await supabase
-    .from('tool_calls')
-    .select('id, room_id')
-    .eq('id', params.toolCallId)
-    .single()
-  if (!toolCall) return apiError('NOT_FOUND', 'Tool call not found', 404)
-
+  const db = getDb()
   try {
-    await requireRoomMember(supabase, (toolCall as { room_id: string }).room_id, user.id)
+    const toolCall = db
+      .prepare('SELECT id, room_id FROM tool_calls WHERE id = ?')
+      .get(params.toolCallId) as { id: string; room_id: string } | undefined
+    if (!toolCall) return apiError('NOT_FOUND', 'Tool call not found', 404)
+
+    try {
+      await requireRoomMember(toolCall.room_id, user.id)
+    } catch (e) {
+      return e as Response
+    }
+
+    const updated = db
+      .prepare(
+        `UPDATE tool_calls SET status = 'approved', approved_by = ?, approved_at = ? WHERE id = ? AND status = 'waiting_approval' RETURNING *`,
+      )
+      .get(user.id, nowIso(), params.toolCallId) as Record<string, unknown> | undefined
+    if (!updated) return apiError('CONFLICT', 'Tool call is not waiting for approval', 400)
+
+    return apiSuccess(rowToToolCall(updated))
   } catch (e) {
-    return e as Response
+    return internalError('tool call approve', e)
   }
-
-  const { data, error } = await supabase
-    .from('tool_calls')
-    .update({ status: 'approved', approved_by: user.id, approved_at: new Date().toISOString() })
-    .eq('id', params.toolCallId)
-    .eq('status', 'waiting_approval')
-    .select()
-    .single()
-  if (error || !data)
-    return apiError('CONFLICT', error?.message ?? 'Tool call is not waiting for approval', 400)
-
-  return apiSuccess(data)
 }

@@ -1,11 +1,5 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
-  "workspaces": {
-    ".": {
-      "entry": ["scripts/**/*.ts"]
-    }
-  },
-  "ignoreBinaries": ["supabase"],
   "ignoreDependencies": ["axe-core"],
   "playwright": {
     "config": ["playwright.config.ts"]

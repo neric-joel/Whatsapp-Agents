@@ -1,9 +1,10 @@
+import { getDb, intBool, jsonText, rowToAgent } from '@agentroom/db'
 import { NextRequest } from 'next/server'
 
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { assertSameOrigin, enforceRateLimit, internalError } from '@/lib/api-security'
 import { updateAgentSchema } from '@/lib/api-validation'
-import { createSupabaseServiceClient, getAuthenticatedUser } from '@/lib/supabase/server'
+import { getAuthenticatedUser } from '@/lib/auth'
 
 interface RouteParams {
   params: { agentId: string }
@@ -25,18 +26,16 @@ async function requireAgentCreator(req: NextRequest, agentId: string) {
   const limited = enforceRateLimit(`agent-mutate:${user.id}`, 60, 60_000)
   if (limited) return { error: limited }
 
-  const supabase = createSupabaseServiceClient()
-  const { data: agent } = await supabase
-    .from('agents')
-    .select('id, created_by_user_id')
-    .eq('id', agentId)
-    .maybeSingle()
+  const db = getDb()
+  const agent = db
+    .prepare('SELECT id, created_by_user_id FROM agents WHERE id = ?')
+    .get(agentId) as { id: string; created_by_user_id: string | null } | undefined
 
   if (!agent) return { error: apiError('NOT_FOUND', 'Agent not found', 404) }
   if (agent.created_by_user_id !== user.id) {
     return { error: apiError('FORBIDDEN', 'Only the creator can modify this agent', 403) }
   }
-  return { supabase }
+  return { db, userId: user.id }
 }
 
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
@@ -52,15 +51,31 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     return apiError('VALIDATION_ERROR', 'Invalid request body', 400, parsed.error.flatten())
   }
 
-  const { data, error } = await auth.supabase
-    .from('agents')
-    .update(parsed.data)
-    .eq('id', params.agentId)
-    .select('id, name, slug, provider, adapter_type, capabilities, is_active')
-    .single()
+  // Build a dynamic SET clause from only the provided fields. Booleans go through
+  // intBool; json columns (tool_permissions, if ever provided) through jsonText.
+  const fields = parsed.data as Record<string, unknown>
+  const cols: string[] = []
+  const vals: unknown[] = []
+  for (const [key, value] of Object.entries(fields)) {
+    cols.push(`${key} = ?`)
+    if (key === 'is_active') {
+      vals.push(intBool(value as boolean))
+    } else if (key === 'tool_permissions') {
+      vals.push(jsonText(value))
+    } else {
+      vals.push(value)
+    }
+  }
 
-  if (error || !data) return internalError('agent update', error)
-  return apiSuccess(data)
+  try {
+    const row = auth.db
+      .prepare(`UPDATE agents SET ${cols.join(', ')} WHERE id = ? RETURNING *`)
+      .get(...vals, params.agentId)
+    if (!row) return internalError('agent update', new Error('Agent not found'))
+    return apiSuccess(rowToAgent(row as Record<string, unknown>))
+  } catch (e) {
+    return internalError('agent update', e)
+  }
 }
 
 /**
@@ -75,11 +90,12 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
   const auth = await requireAgentCreator(req, params.agentId)
   if ('error' in auth) return auth.error
 
-  const { error } = await auth.supabase
-    .from('agents')
-    .update({ is_active: false })
-    .eq('id', params.agentId)
-
-  if (error) return internalError('agent disable', error)
+  try {
+    auth.db
+      .prepare('UPDATE agents SET is_active = ? WHERE id = ?')
+      .run(intBool(false), params.agentId)
+  } catch (e) {
+    return internalError('agent disable', e)
+  }
   return apiSuccess({ id: params.agentId, is_active: false })
 }

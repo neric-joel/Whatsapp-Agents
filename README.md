@@ -4,166 +4,146 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/neric-joel/Whatsapp-Agents?sort=semver)](https://github.com/neric-joel/Whatsapp-Agents/releases/latest)
 
-**A WhatsApp/Slack-style group chat where local LLM agents are named, visible participants.**
+**A local, single-user chat room that puts the agent CLIs you already have installed
+(Claude Code, Codex, Gemini, or your own) into one conversation as named participants.**
 
-Create a room, add agents, send one message, and watch each agent reply in the same
-conversation — or run **`/discuss`** to make them work as a _team_: a coordinator breaks the
-problem into sub-tasks, assigns them by capability, the agents build on each other's work, and
-they converge on one answer **with attribution**.
+Create a room, connect your CLIs, send one message, and watch each one reply in the same
+conversation. They can `@mention` each other and, with **`/discuss`**, work as a _team_:
+a coordinator splits the problem into sub-tasks, the agents build on each other's work on
+a shared blackboard, and they converge on one answer **with attribution**.
 
 ![AgentRoom demo: a /discuss where a coordinator assigns sub-tasks by capability, two agents execute and cross-review on a shared blackboard, and the team converges on one attributed answer, then a switch to a dark theme.](docs/demo/agentroom-demo.gif)
 
 ## What it is
 
-Most "multi-agent" tools either hide the agents behind one answer or run them in isolation.
-AgentRoom puts several **named CLI agents** (Claude Code, Codex, or a built-in mock) into one
-group chat as first-class participants and gives them a real **collaboration protocol**. It runs
-entirely on your machine against a local Supabase — no hosted service required, bring your own
-agent CLIs (or none, using the mock).
+Most "multi-agent" tools hide the agents behind one answer, or make you wire up API keys
+for a hosted service. AgentRoom does neither. It runs entirely on your machine, has no
+accounts and no login, and brings in the CLIs you already use. It just runs those
+binaries, which authenticate themselves the way they already do in your terminal, so you
+never paste a Claude or Codex key into AgentRoom.
 
-It's a **pnpm monorepo**: a Next.js web app + API, a Supabase data layer (Postgres, Auth,
-Realtime, Storage), and a separate TypeScript **bridge daemon** that runs the agent CLIs.
+State lives in a single local folder (`~/.agentroom`, or `%APPDATA%\AgentRoom` on
+Windows): a SQLite database, your uploaded files, and a `config.json` of connected CLIs.
+Nothing leaves `localhost`.
 
-## Quickstart (local, ~5–10 min to a working app)
+It's a **pnpm monorepo**: a Next.js web app + API, a local SQLite data layer
+(`@agentroom/db`), and a separate TypeScript **bridge daemon** that runs the agent CLIs.
 
-**Prerequisites:** [Node.js 22.13+](https://nodejs.org) · [pnpm 11+](https://pnpm.io)
-(`corepack enable`) · [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-(for local Supabase) · [Supabase CLI](https://supabase.com/docs/guides/cli).
-**No API keys are needed for this Quickstart** — you'll use the built-in **mock** agent. (The
-`claude` / `codex` CLIs are optional and only needed to run _real_ agents.)
+## Quickstart (a couple of minutes to a working app)
 
-> **One-command setup (recommended).** First clone the repo and `cd` into it (see step 0 below).
-> Then, on **Windows**, double-click **`start-agentroom.bat`** in the repo root — it starts
-> Supabase, **auto-fills both env files** from `supabase status`, launches the web app + bridge,
-> and opens the browser. On **macOS/Linux/WSL**, run **`make bootstrap`** (requires `make`) — it
-> installs deps, starts Supabase, runs the DB reset, and copies the env templates **and auto-fills
-> the keys** — then just run step 4 (`pnpm dev:web` + `pnpm dev:bridge`). **If you used a script,
-> you're done — skip the manual steps and jump to [Use it](#use-it--reproduce-the-demo).** The
-> manual steps below are for doing it by hand or if a script can't run.
+**Prerequisites:** [Node.js 22.13+](https://nodejs.org) and [pnpm 11+](https://pnpm.io)
+(`corepack enable`). That's it — no Docker, no database to install, no login. To run
+*real* agents you'll want at least one CLI installed and logged in
+([Claude Code](https://docs.claude.com/en/docs/claude-code),
+[Codex](https://github.com/openai/codex), …); with none, you can still try everything
+using the built-in **mock** agent.
 
 ```bash
-# 0. Clone the repo and enter it (every command below runs from the repo root)
+# 1. Clone and enter the repo (every command runs from here)
 git clone https://github.com/neric-joel/Whatsapp-Agents.git
 cd Whatsapp-Agents
 
-# 1. Install dependencies  (no pnpm? run `corepack enable` first to get it)
+# 2. Install dependencies  (no pnpm? run `corepack enable` first)
 pnpm install
 
-# 2. Start the local Supabase stack (Docker), then apply migrations + seed
-pnpm dev:supabase          # brings up Supabase in Docker and returns; first run pulls images (a few min)
-pnpm db:reset              # applies migrations + seed (safe to re-run); you'll create your own agent in the UI
-
-# 3. Print the keys, create the two env files, then paste the keys into them
-supabase status                                # prints the API URL + keys (keep this output visible)
-cp apps/web/.env.example apps/web/.env.local   # Windows PowerShell: Copy-Item apps\web\.env.example apps\web\.env.local
-cp bridge/.env.example bridge/.env             # Windows PowerShell: Copy-Item bridge\.env.example bridge\.env
+# 3. Run the web app and the bridge daemon — each in its OWN terminal (both stay running)
+pnpm dev:web      # terminal A → http://localhost:3000
+pnpm dev:bridge   # terminal B → runs your CLIs and produces replies
 ```
 
-Open `apps/web/.env.local` and `bridge/.env` in an editor and paste the values from `supabase
-status` per the table below — you only need to set these; every other variable in the example
-files already has a sane default, so leave them as-is.
+On first run AgentRoom creates `~/.agentroom/` (the SQLite DB + a `files/` folder) and
+seeds a starter room. Open **http://localhost:3000** — you're straight in, no sign-up.
 
-| `supabase status` line | Goes into |
-|---|---|
-| `API URL` → `http://127.0.0.1:54321` | `NEXT_PUBLIC_SUPABASE_URL` (web) **and** `SUPABASE_URL` (bridge) |
-| **anon / publishable key** (`sb_publishable_…` or a long JWT) | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (web) |
-| **service_role / secret key** (`sb_secret_…` or a long JWT) | `SUPABASE_SERVICE_ROLE_KEY` (web **and** bridge) |
+> **One command instead.** On macOS/Linux/WSL, `make bootstrap` checks your tools and
+> installs deps; on Windows, double-click **`start-agentroom.bat`** to launch both
+> processes and open the browser.
 
-> Depending on your Supabase CLI version, the first key is labelled `anon key` **or**
-> `publishable key` (and may be a `sb_publishable_…` string or a long JWT) — either way it goes
-> into `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Likewise `service_role key` / `secret key` →
-> `SUPABASE_SERVICE_ROLE_KEY`. Tip: `supabase status -o env` prints them as `ANON_KEY=…` /
-> `SERVICE_ROLE_KEY=…`. Leave `CREDENTIAL_ENCRYPTION_KEY` **blank** — it's only for the
-> bring-your-own-key feature ([below](#bring-your-own-provider-key)), not the mock Quickstart.
+### Use it
 
-```bash
-# 4. Run the web app and the bridge daemon — each in its OWN terminal (both must stay running)
-pnpm dev:web               # terminal A → http://localhost:3000
-pnpm dev:bridge            # terminal B → claims agent_runs and produces replies
-```
+1. **Connect your CLIs.** Click **🔌 Connect** in the sidebar (or go to `/connections`).
+   AgentRoom probes your `PATH` and shows what it found —
+   `Claude Code — detected ✓`, `Codex — detected ✓`, `Antigravity — not found ✗`. Click
+   **Connect** on the ones you want. Not on the list? Add any binary by hand under **Add
+   your own CLI**. See **[Connect your own CLI](#connect-your-own-cli)** below.
+2. **Create a room** and open the **agents** panel.
+3. **Add your agents.** Click **`+ Add agent`**, pick a connected CLI under **Connected
+   CLI**, optionally give it a role, and add it. Add a **second** one too — you need at
+   least two for a real conversation (and for `/discuss`).
+4. **Send a message.** Type anything; each agent replies as its own participant within a
+   few seconds — using its own login, no keys asked.
+5. **Make them collaborate.** `@mention` one agent, or run **`/discuss <a problem>`** to
+   have the team decompose it, build on a shared blackboard, cross-review, and converge
+   on one attributed answer. `/help` lists every command.
+6. **Attach files**, **pin** replies, switch among **7 light/dark themes** from the room
+   header.
 
-### Use it — reproduce the demo
+**Verify it's working:** `curl http://localhost:3000/api/health` returns
+`{"ok":true,…,"db":"up"}`, and a message in a room with at least one connected, unmuted
+agent gets a reply within a few seconds.
 
-With the web app and bridge running, do exactly what the GIF above shows. **No API keys needed —
-you'll use the built-in `mock` adapter** (it returns canned text so you can see the flow end-to-end
-offline).
+**Not getting a reply?** Check that (a) `pnpm dev:bridge` is running, (b) the room has at
+least one agent and it isn't muted, and (c) the CLI is logged in — if a reply fails with
+an auth error, run that CLI's login in your terminal (e.g. `claude login`). Stale runs
+auto-recover if you restart the bridge.
 
-1. **Sign up.** Open **http://localhost:3000** and create an account — any email + password
-   (local auth, no email confirmation, no demo login). You're now the owner of anything you create.
-2. **Create a room.** Click **New Room**, give it a name. (The room you make is yours; the seeded
-   demo room isn't shared with new accounts, which is why you create your own.)
-3. **Add agents — create them, don't look for existing ones.** Open the room's **agents panel**
-   and click **`+ Create agent`**. Give it a name and a slug (e.g. `helper`), leave **Provider =
-   `mock`** (the default — zero keys), and save; it joins the room immediately. **Create a
-   _second_ mock agent** the same way — you need **at least two** for `/discuss` to have a team.
-4. **Send a message.** Type anything and send — each agent replies as its own participant within a
-   few seconds.
-5. **Run the team.** Type **`/discuss <a problem>`** (e.g. `/discuss how should we cache the feed?`).
-   A coordinator decomposes the problem, assigns sub-tasks, the agents build on a shared
-   blackboard, cross-review, and converge on one **attributed** answer. Try **`/debate <question>`**
-   for the adversarial variant.
-6. **Switch themes** (like the demo) from the theme picker in the **room header** — 7 light/dark
-   themes. `/help` lists every command available to you.
+## Connect your own CLI
 
-> **Mock vs. real reasoning.** The `mock` adapter is a **canned stub** — on `/discuss` you'll see
-> the real _structure_ (plan → execute → cross-review → converge) but the content is placeholder
-> text, not genuine reasoning. To get real answers, **create an agent with Provider =
-> `claude_code` or `codex_cli`**: install and log in that CLI on the host the bridge runs on
-> ([Claude Code](https://docs.claude.com/en/docs/claude-code) → run `claude`;
-> [Codex CLI](https://github.com/openai/codex) → run `codex`), then **restart `pnpm dev:bridge`**
-> so it picks up the login — or skip the host login entirely and
-> [bring your own key](#bring-your-own-provider-key) (Settings → Providers).
+AgentRoom only needs to know **where a CLI's binary is and how to invoke it** — auth is
+always the CLI's own job, so you're never asked for an API key. Two ways in:
 
-**Verify it's working:** `curl http://localhost:3000/api/health` returns `{"ok":true,…,"db":"up"}`,
-and a message in a room with at least one (unmuted) agent gets a reply within a few seconds.
+- **Auto-detect:** the Connections screen finds known CLIs on your `PATH` and reports
+  whether each one runs. One click connects it.
+- **Bring your own:** add any binary by display name, path, arguments, and output format.
+  Point it at a custom wrapper, a local model server, anything that reads a prompt on
+  stdin and prints a reply.
 
-**Not getting a reply?** Check that (a) `pnpm dev:bridge` is running in its own terminal,
-(b) both `.env` files have the keys from `supabase status`, (c) the room has at least one agent and
-it isn't muted. If a run looks stuck, restart the bridge (stale runs auto-recover).
-
-> Supabase Studio (browse the local DB) is at http://127.0.0.1:54323. Full env-var reference:
-> [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#environment-variables).
+Connections are saved to `~/.agentroom/config.json`. The full guide — detection, the
+`config.json` schema, the auth-is-the-CLI's-job rule, the health states, and the
+add-to-room flow — is in **[docs/CONNECTING_CLIS.md](docs/CONNECTING_CLIS.md)**.
 
 ## How it works
 
 ```text
-Browser (chat UI)
-  │  Supabase Auth + Realtime subscriptions
+Local browser (chat UI)
+  │  fetches the Next.js API; polls for new messages + run status
   ▼
-Supabase ── Postgres (rooms, messages, agents, agent_runs, …) · Auth · Realtime · Storage
-  │  a human message → Next.js API writes rows; `agent_runs` IS the work queue
+Next.js API ── reads/writes local SQLite (@agentroom/db) + a local files/ folder
+  │  a human message → API writes rows; `agent_runs` IS the work queue
   ▼
 Bridge daemon  ── polls `agent_runs`, claims a run, builds a ContextPacketV1,
-  │                invokes the right adapter, writes the reply back, marks the run done
+  │                spawns the right CLI, captures output, writes the reply, marks it done
   ▼
-Agent CLIs  ── Claude Code · Codex CLI · mock  (spawned as sandboxed subprocesses)
+Your agent CLIs ── Claude Code · Codex · Gemini · any custom CLI · a built-in mock
+                   (spawned as locked-down subprocesses)
 ```
 
-The browser **never writes** to `agent_runs` or `messages` directly — all writes go through the
-Next.js API (auth + RLS enforced). The bridge is the only thing that runs agent CLIs, in a
-locked-down subprocess (no shell, static args, a stripped env, an output cap, process-tree kill).
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design and trust boundaries.
+Everything is local and single-user — there are no accounts and no network service. The
+browser talks only to the Next.js API; the bridge is the only thing that runs agent CLIs,
+in a locked-down subprocess (no shell, static args, a stripped environment, an output
+cap, and a process-tree kill on timeout/cancel). See
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design and trust boundaries.
 
 ## Features
 
-- **Group chat** with named AI participants; one human message fans out to every active agent.
-- **Real team collaboration — `/discuss`**: a coordinator decomposes the problem and assigns
-  sub-tasks by capability; agents execute on a shared blackboard _seeing each other's work_,
-  cross-review, and converge on one answer **with attribution** — with an anti-sycophancy
-  _dissent_ stage so the team never rubber-stamps.
-- **Adversarial `/debate`**: agents argue distinct assigned positions, then a coordinator
-  adjudicates a winner (not a merge).
-- **Bring-your-own CLI / API key**: per-user provider credentials, AES-256-GCM encrypted at
-  rest, bound to agents (Settings → Providers).
-- **Adapters:** Claude Code, Codex CLI, and a built-in mock (needs no external CLI).
+- **Group chat** with named CLI participants; one human message fans out to every active
+  agent, each replying as itself.
+- **Connect any CLI** — auto-detection + bring-your-own registration, with auth deferred
+  entirely to each CLI ([docs/CONNECTING_CLIS.md](docs/CONNECTING_CLIS.md)).
+- **Real team collaboration — `/discuss`**: a coordinator decomposes the problem and
+  assigns sub-tasks by capability; agents execute on a shared blackboard _seeing each
+  other's work_, cross-review, and converge on one answer **with attribution** — with an
+  anti-sycophancy _dissent_ stage so the team never rubber-stamps.
+- **Adversarial `/debate`**: agents argue distinct assigned positions; a coordinator
+  adjudicates a winner.
 - Mentions (`@agent_slug` / `@everyone`); agent-to-agent tag turns with loop guards.
-- Per-room memory (`/remember`, `/recall`); message pinning; tool-approval for protected actions;
-  run cancellation; Markdown + math (KaTeX) rendering; hallucination flagging on replies.
+- Local file attachments; per-room memory (`/remember`, `/recall`); message pinning;
+  tool-approval for protected actions; run cancellation; Markdown + math (KaTeX);
+  hallucination flagging on replies.
 - **7 accessible themes** (light & dark families), WCAG 2.1 AA verified.
 
 ## Chat commands
 
-Type these in any room's message box (`/help` shows the full, role-aware list):
+Type these in any room's message box (`/help` shows the full list):
 
 | Command | What it does |
 |---|---|
@@ -172,65 +152,42 @@ Type these in any room's message box (`/help` shows the full, role-aware list):
 | `/debate <question>` | Adversarial: agents argue distinct positions; coordinator picks a winner |
 | `/remember <note>` · `/recall <query>` | Save / retrieve per-room (or `--global`) memory |
 | `/handoff @agent <task>` | Hand the thread to another agent |
-| `/pin` · `/agents` · `/reset` (admin) | Pin a reply · list room agents · reset agent context |
-
-## Bring your own provider key
-
-Agents run on the credentials of the user who creates them ("the owner brings the fuel"). To use
-your own key instead of the host CLI login:
-
-1. Set the **same** `CREDENTIAL_ENCRYPTION_KEY` in both `apps/web/.env.local` and `bridge/.env`
-   (`openssl rand -hex 32`). Without it the feature is disabled (the API returns `503`).
-2. **Settings → Providers** → add a credential (provider, label, secret, optional base URL). The
-   secret is **AES-256-GCM encrypted at rest** and never returned to the browser or logged.
-3. Bind it to an agent. At spawn, the bridge decrypts the key and injects it into _that_
-   adapter's child process only (e.g. `ANTHROPIC_API_KEY` for Claude, `OPENAI_API_KEY` +
-   `OPENAI_BASE_URL` for Codex). Design + threat model: [`docs/adr/0010-byo-credentials.md`](docs/adr/0010-byo-credentials.md).
-
-## Deploy / self-host
-
-The default Docker image runs the **mock** adapter only; running real agent CLIs needs a host or
-derived image that has them installed. See [`docs/SELF_HOSTING.md`](docs/SELF_HOSTING.md) for the
-local-Docker default, self-hosted Supabase, and the bridge trust model.
+| `/pin` · `/agents` · `/reset` | Pin a reply · list room agents · reset agent context |
 
 ## Repository layout
 
 ```text
-apps/web/        Next.js App Router app + API route handlers
-bridge/          TypeScript bridge daemon + agent adapters
-packages/shared/ Types + helpers shared by web and bridge (ContextPacketV1, discussion engine, …)
-supabase/        Supabase config, migrations, seed, and pgTAP tests
-scripts/         Local dev + stress-test scripts
-docs/            ARCHITECTURE · SELF_HOSTING · OBSERVABILITY · adr/ (decision records)
+apps/web/         Next.js App Router app + API route handlers
+bridge/           TypeScript bridge daemon + agent adapters (incl. the CLI-profile adapter)
+packages/db/      Local SQLite data layer: schema, queue, app-data paths, config.json, CLI detection
+packages/shared/  Types + helpers shared by web and bridge (ContextPacketV1, discussion engine, …)
+scripts/          Local dev helpers
+docs/             CONNECTING_CLIS · ARCHITECTURE · OBSERVABILITY · adr/ (decision records)
 ```
 
 ## Documentation
 
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — components, data-flow, the `agent_runs` queue
-  contract, the adapter/subprocess model, trust boundaries, and the full env-var reference.
-- [`docs/SELF_HOSTING.md`](docs/SELF_HOSTING.md) — Docker, self-hosted Supabase, bridge trust model.
+- [`docs/CONNECTING_CLIS.md`](docs/CONNECTING_CLIS.md) — connect, detect, and bring your
+  own CLI; the `config.json` format; the auth model.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — components, data-flow, the `agent_runs`
+  queue contract, the adapter/subprocess model, trust boundaries.
 - [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md) — logging, health/metrics, run state machine.
 - [`docs/adr/`](docs/adr/) — architecture decision records (the "why").
 
 ## Common commands
 
 ```bash
+pnpm dev                  # run web + bridge together
 pnpm typecheck            # type-check all workspaces
-pnpm test                 # web + bridge + shared tests
+pnpm test                 # web + bridge + db tests
 pnpm lint                 # eslint
 pnpm --filter web build   # production build of the web app
 pnpm e2e                  # Playwright end-to-end tests
 ```
 
-## Project status
-
-Production-ready — **v1.1.0**. The MVP, a multi-phase security/quality hardening pass, the team
-`/discuss` collaboration redesign, and bring-your-own-credentials have all shipped. Ongoing work:
-broader provider support and polishing multi-agent output quality.
-
 ## Contributing · Security · License
 
 Contributions welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md) (setup, quality gates,
-trunk-based branch/commit/PR conventions) and [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md). For
-**security** issues, follow [`SECURITY.md`](SECURITY.md) — please don't open a public issue.
-Changes are tracked in [`CHANGELOG.md`](CHANGELOG.md). Licensed under [MIT](LICENSE).
+branch/commit/PR conventions) and [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md). For
+**security** issues, follow [`SECURITY.md`](SECURITY.md) — please don't open a public
+issue. Licensed under [MIT](LICENSE).

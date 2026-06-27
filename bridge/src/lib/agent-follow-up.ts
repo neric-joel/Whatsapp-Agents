@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import { getDb, newId } from '@agentroom/db'
 
 import { parseMentions } from './mention-parser.js'
 
@@ -30,7 +30,6 @@ interface RoomDeliberationSettings {
 }
 
 export async function maybeScheduleAgentMentionFollowUps({
-  supabase,
   currentRun,
   roomId,
   sourceAgentId,
@@ -38,7 +37,6 @@ export async function maybeScheduleAgentMentionFollowUps({
   replyContent,
   roundIndex,
 }: {
-  supabase: SupabaseClient
   currentRun: CurrentRun
   roomId: string
   sourceAgentId: string
@@ -48,13 +46,13 @@ export async function maybeScheduleAgentMentionFollowUps({
 }): Promise<string[]> {
   if (currentRun.discussion_mode !== 'tag_turns') return []
 
-  const { data: room } = await supabase
-    .from('rooms')
-    .select('max_agent_rounds')
-    .eq('id', roomId)
-    .single()
+  const db = getDb()
 
-  const settings = room as RoomDeliberationSettings | null
+  const room = db.prepare('SELECT max_agent_rounds FROM rooms WHERE id = ?').get(roomId) as
+    | RoomDeliberationSettings
+    | undefined
+
+  const settings = (room ?? null) as RoomDeliberationSettings | null
   const maxDepth = Math.max((settings?.max_agent_rounds ?? 1) - 1, 0)
   if (maxDepth <= 0 || currentRun.deliberation_depth >= maxDepth) return []
 
@@ -62,17 +60,47 @@ export async function maybeScheduleAgentMentionFollowUps({
   const nextDepth = currentRun.deliberation_depth + 1
   const deliberationRootId = currentRun.deliberation_root_id ?? currentRun.id
 
-  const { data: rawMembers } = await supabase
-    .from('room_members')
-    .select('agent_id, muted, reply_enabled, agents!inner(id, name, slug, is_active)')
-    .eq('room_id', roomId)
-    .eq('member_type', 'agent')
-    .eq('reply_enabled', true)
-    .eq('muted', false)
+  const rawMembers = db
+    .prepare(
+      `SELECT rm.agent_id AS agent_id,
+              rm.muted AS muted,
+              rm.reply_enabled AS reply_enabled,
+              a.id AS a_id,
+              a.name AS a_name,
+              a.slug AS a_slug,
+              a.is_active AS a_is_active
+         FROM room_members rm
+         JOIN agents a ON a.id = rm.agent_id
+        WHERE rm.room_id = ?
+          AND rm.member_type = 'agent'
+          AND rm.reply_enabled = 1
+          AND rm.muted = 0`,
+    )
+    .all(roomId) as Array<{
+    agent_id: string
+    muted: number
+    reply_enabled: number
+    a_id: string
+    a_name: string
+    a_slug: string
+    a_is_active: number
+  }>
 
-  const members = ((rawMembers ?? []) as unknown as AgentMemberRow[]).filter(
-    (member) => member.agents?.is_active,
-  )
+  const members = rawMembers
+    .map(
+      (row): AgentMemberRow => ({
+        agent_id: row.agent_id,
+        muted: row.muted === 1,
+        reply_enabled: row.reply_enabled === 1,
+        agents: {
+          id: row.a_id,
+          name: row.a_name,
+          slug: row.a_slug,
+          is_active: row.a_is_active === 1,
+        },
+      }),
+    )
+    .filter((member) => member.agents?.is_active)
 
   const mentions = parseMentions(
     replyContent,
@@ -85,30 +113,32 @@ export async function maybeScheduleAgentMentionFollowUps({
   const targetIds = [...new Set(explicitTargetIds)].filter((agentId) => agentId !== sourceAgentId)
   if (targetIds.length === 0) return []
 
-  const { data: existingRuns } = await supabase
-    .from('agent_runs')
-    .select('agent_id')
-    .eq('trigger_msg_id', sourceMessageId)
-    .eq('round_index', nextRoundIndex)
+  const existingRuns = db
+    .prepare('SELECT agent_id FROM agent_runs WHERE trigger_msg_id = ? AND round_index = ?')
+    .all(sourceMessageId, nextRoundIndex) as Array<{ agent_id: string }>
 
-  const existingAgentIds = new Set(
-    (existingRuns ?? []).map((run) => (run as { agent_id: string }).agent_id),
-  )
+  const existingAgentIds = new Set(existingRuns.map((run) => run.agent_id))
   const newTargetIds = targetIds.filter((agentId) => !existingAgentIds.has(agentId))
   if (newTargetIds.length === 0) return []
 
-  await supabase.from('agent_runs').insert(
-    newTargetIds.map((agentId) => ({
-      room_id: roomId,
-      agent_id: agentId,
-      trigger_msg_id: sourceMessageId,
-      status: 'queued',
-      round_index: nextRoundIndex,
-      discussion_mode: 'tag_turns',
-      deliberation_depth: nextDepth,
-      deliberation_root_id: deliberationRootId,
-    })),
+  const insert = db.prepare(
+    `INSERT INTO agent_runs
+       (id, room_id, agent_id, trigger_msg_id, status, round_index, discussion_mode, deliberation_depth, deliberation_root_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
+  for (const agentId of newTargetIds) {
+    insert.run(
+      newId(),
+      roomId,
+      agentId,
+      sourceMessageId,
+      'queued',
+      nextRoundIndex,
+      'tag_turns',
+      nextDepth,
+      deliberationRootId,
+    )
+  }
 
   return newTargetIds
 }

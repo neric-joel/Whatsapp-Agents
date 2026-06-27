@@ -1,50 +1,52 @@
+import { getDb, newId, rowToPinnedItem } from '@agentroom/db'
 import { NextRequest } from 'next/server'
 
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { internalError } from '@/lib/api-security'
 import { createPinSchema } from '@/lib/api-validation'
+import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomMember } from '@/lib/permissions'
-import { createSupabaseServerClient, createSupabaseServiceClient } from '@/lib/supabase/server'
 
 interface RouteParams {
   params: { roomId: string }
 }
 
-async function requireAuthenticatedRoomMember(roomId: string) {
-  const supabaseUser = createSupabaseServerClient()
+async function requireAuthenticatedRoomMember(req: NextRequest | Request, roomId: string) {
   const {
     data: { user },
     error: authErr,
-  } = await supabaseUser.auth.getUser()
+  } = await getAuthenticatedUser(req as { headers: Headers })
   if (authErr || !user) return { error: apiError('UNAUTHORIZED', 'Unauthorized', 401) }
 
-  const supabase = createSupabaseServiceClient()
   try {
-    await requireRoomMember(supabase, roomId, user.id)
+    await requireRoomMember(roomId, user.id)
   } catch (e) {
     return { error: e as Response }
   }
 
-  return { supabase, user }
+  return { user }
 }
 
-export async function GET(_req: Request, { params }: RouteParams) {
-  const auth = await requireAuthenticatedRoomMember(params.roomId)
+export async function GET(req: Request, { params }: RouteParams) {
+  const auth = await requireAuthenticatedRoomMember(req, params.roomId)
   if ('error' in auth) return auth.error
 
-  const { data, error } = await auth.supabase
-    .from('pinned_items')
-    .select('*')
-    .eq('room_id', params.roomId)
-    .eq('is_active', true)
-    .order('sort_order', { ascending: true })
-  if (error) return internalError('room pins list', error)
-
-  return apiSuccess(data ?? [])
+  const db = getDb()
+  try {
+    const rows = db
+      .prepare(
+        'SELECT * FROM pinned_items WHERE room_id = ? AND is_active = 1 ORDER BY sort_order, created_at',
+      )
+      .all(params.roomId) as Record<string, unknown>[]
+    const pins = rows.map(rowToPinnedItem)
+    return apiSuccess(pins)
+  } catch (e) {
+    return internalError('room pins list', e)
+  }
 }
 
 export async function POST(req: NextRequest, { params }: RouteParams) {
-  const auth = await requireAuthenticatedRoomMember(params.roomId)
+  const auth = await requireAuthenticatedRoomMember(req, params.roomId)
   if ('error' in auth) return auth.error
 
   const body = await req.json().catch(() => null)
@@ -54,20 +56,28 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   }
   const pinData = parseResult.data
 
-  const { data, error } = await auth.supabase
-    .from('pinned_items')
-    .insert({
-      room_id: params.roomId,
-      message_id: pinData.source_message_id ?? null,
-      pin_type: pinData.pin_type,
-      title: pinData.title ?? null,
-      content: pinData.content ?? null,
-      visibility: pinData.visibility ?? 'primary',
-      pinned_by: auth.user.id,
-    })
-    .select()
-    .single()
-  if (error || !data) return internalError('room pins create', error)
+  const db = getDb()
+  try {
+    const row = db
+      .prepare(
+        `INSERT INTO pinned_items (id, room_id, message_id, pin_type, title, content, visibility, pinned_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         RETURNING *`,
+      )
+      .get(
+        newId(),
+        params.roomId,
+        pinData.source_message_id ?? null,
+        pinData.pin_type,
+        pinData.title ?? null,
+        pinData.content ?? null,
+        pinData.visibility ?? 'primary',
+        auth.user.id,
+      ) as Record<string, unknown> | undefined
+    if (!row) return internalError('room pins create', new Error('insert returned no row'))
 
-  return apiSuccess(data, 201)
+    return apiSuccess(rowToPinnedItem(row), 201)
+  } catch (e) {
+    return internalError('room pins create', e)
+  }
 }

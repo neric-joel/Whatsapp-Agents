@@ -1,3 +1,4 @@
+import { getDb, rowToFile, rowToMessage, rowToPinnedItem } from '@agentroom/db'
 import type {
   AgentProvider,
   ContextPacketV1,
@@ -7,7 +8,6 @@ import type {
   SenderType,
 } from '@agentroom/shared'
 import { readDiscussionMetadata } from '@agentroom/shared'
-import type { SupabaseClient } from '@supabase/supabase-js'
 
 import { recallMemory } from '../memory/recall.js'
 import {
@@ -23,7 +23,6 @@ import {
 } from './file-context.js'
 
 interface BuildContextArgs {
-  supabase: SupabaseClient
   run: {
     id: string
     room_id: string
@@ -59,19 +58,19 @@ interface RecentMsg {
 }
 
 export async function buildContextPacket({
-  supabase,
   run,
   agentInfo,
   triggerMsg,
 }: BuildContextArgs): Promise<ContextPacketV1> {
+  const db = getDb()
   const contextMessageLimit = readContextMessageLimit()
   const contextMessageMaxChars = readContextMessageMaxChars()
 
-  const { data: roomRaw } = await supabase
-    .from('rooms')
-    .select('id, name, reply_mode, max_agent_rounds, discussion_mode, context_reset_at')
-    .eq('id', run.room_id)
-    .single()
+  const roomRaw = db
+    .prepare(
+      'SELECT id, name, reply_mode, max_agent_rounds, discussion_mode, context_reset_at FROM rooms WHERE id = ?',
+    )
+    .get(run.room_id)
   if (!roomRaw) throw new Error(`Room ${run.room_id} not found`)
   const room = roomRaw as unknown as {
     id: string
@@ -98,18 +97,17 @@ export async function buildContextPacket({
 
   if (discussion && useDiscussionScope) {
     const discId = discussion.original_message_id // validated UUID — safe in a PostgREST filter
-    let threadQuery = supabase
-      .from('messages')
-      .select('id, content, sender_type, sender_agent_id, created_at, metadata')
-      .eq('room_id', run.room_id)
-      .or(`metadata->discussion->>original_message_id.eq.${discId},id.eq.${discId}`)
+    let threadSql =
+      "SELECT id, content, sender_type, sender_agent_id, created_at, metadata FROM messages WHERE room_id = ? AND (json_extract(metadata, '$.discussion.original_message_id') = ? OR id = ?)"
+    const threadParams: unknown[] = [run.room_id, discId, discId]
     if (room.context_reset_at) {
-      threadQuery = threadQuery.gte('created_at', room.context_reset_at)
+      threadSql += ' AND created_at >= ?'
+      threadParams.push(room.context_reset_at)
     }
-    const { data: threadRaw } = await threadQuery
-      .order('created_at', { ascending: true })
-      .limit(readDiscussionContextLimit())
-    const filtered = ((threadRaw ?? []) as RecentMsg[]).filter(
+    threadSql += ' ORDER BY created_at ASC LIMIT ?'
+    threadParams.push(readDiscussionContextLimit())
+    const threadRaw = db.prepare(threadSql).all(...threadParams)
+    const filtered = (threadRaw.map(toRecentMsg) as RecentMsg[]).filter(
       (m) =>
         !(
           m.sender_agent_id === agentInfo.id &&
@@ -120,29 +118,28 @@ export async function buildContextPacket({
   } else {
     // `/reset` (admin+) stamps a watermark: agents only see messages at/after it,
     // so their rolling context starts fresh while the transcript stays intact.
-    let recentQuery = supabase
-      .from('messages')
-      .select('id, content, sender_type, sender_agent_id, created_at, metadata')
-      .eq('room_id', run.room_id)
-      .lte('created_at', triggerMsg.created_at)
+    let recentSql =
+      'SELECT id, content, sender_type, sender_agent_id, created_at, metadata FROM messages WHERE room_id = ? AND created_at <= ?'
+    const recentParams: unknown[] = [run.room_id, triggerMsg.created_at]
     if (room.context_reset_at) {
-      recentQuery = recentQuery.gte('created_at', room.context_reset_at)
+      recentSql += ' AND created_at >= ?'
+      recentParams.push(room.context_reset_at)
     }
-    const { data: recentRaw } = await recentQuery
-      .order('created_at', { ascending: false })
-      .limit(contextMessageLimit)
+    recentSql += ' ORDER BY created_at DESC LIMIT ?'
+    recentParams.push(contextMessageLimit)
+    const recentRaw = db.prepare(recentSql).all(...recentParams)
     recentMessages = trimContextMessages(
-      ((recentRaw ?? []) as RecentMsg[]).reverse(),
+      (recentRaw.map(toRecentMsg) as RecentMsg[]).reverse(),
       contextMessageMaxChars,
     )
   }
 
-  const { data: pinnedItems } = await supabase
-    .from('pinned_items')
-    .select('*')
-    .eq('room_id', run.room_id)
-    .eq('is_active', true)
-    .order('sort_order', { ascending: true })
+  const pinnedRaw = db
+    .prepare(
+      'SELECT * FROM pinned_items WHERE room_id = ? AND is_active = 1 ORDER BY sort_order ASC',
+    )
+    .all(run.room_id)
+  const pinnedItems = pinnedRaw.map((r) => rowToPinnedItem(r as Record<string, unknown>))
 
   const fileIds = recentMessages.flatMap((m) => {
     const ids = (m.metadata as Record<string, unknown>)?.file_ids
@@ -152,32 +149,33 @@ export async function buildContextPacket({
   let files: ContextFilePreview[] = []
   if (fileIds.length > 0) {
     const uniqueFileIds = [...new Set(fileIds)].slice(0, 10)
-    const { data: fileRows } = await supabase
-      .from('files')
-      .select(
-        'id, filename, mime_type, size_bytes, storage_path, storage_bucket, extracted_text, metadata',
+    const fileRows = db
+      .prepare(
+        `SELECT id, filename, mime_type, size_bytes, storage_path, storage_bucket, extracted_text, metadata FROM files WHERE id IN (${uniqueFileIds.map(() => '?').join(',')})`,
       )
-      .in('id', uniqueFileIds)
-    files = await hydrateFilePreviews(supabase, (fileRows ?? []) as FilePreviewRow[])
+      .all(...uniqueFileIds)
+    files = await hydrateFilePreviews(
+      fileRows.map((r) => rowToFile(r as Record<string, unknown>)) as unknown as FilePreviewRow[],
+    )
   }
 
   // Roster of OTHER active room agents (Phase 10) — name, slug, capability blurb.
-  const { data: rosterRaw } = await supabase
-    .from('room_members')
-    .select('agent_id, agents!inner(id, name, slug, capabilities, is_active)')
-    .eq('room_id', run.room_id)
-    .eq('member_type', 'agent')
-    .eq('muted', false)
-    // Only advertise peers that are actually addressable — matches the hand-off
-    // resolver + the mention path (both require reply_enabled).
-    .eq('reply_enabled', true)
-  const roster = ((rosterRaw ?? []) as unknown as Array<{ agents: RosterAgentRow | null }>)
-    .map((r) => r.agents)
+  const rosterRaw = db
+    .prepare(
+      `SELECT a.id AS id, a.name AS name, a.slug AS slug, a.capabilities AS capabilities, a.is_active AS is_active
+       FROM room_members rm
+       JOIN agents a ON a.id = rm.agent_id
+       WHERE rm.room_id = ? AND rm.member_type = 'agent' AND rm.muted = 0 AND rm.reply_enabled = 1`,
+      // Only advertise peers that are actually addressable — matches the hand-off
+      // resolver + the mention path (both require reply_enabled).
+    )
+    .all(run.room_id)
+  const roster = (rosterRaw as unknown as RosterAgentRow[])
     .filter((a): a is RosterAgentRow => Boolean(a && a.is_active && a.id !== agentInfo.id))
     .map((a) => ({ id: a.id, name: a.name, slug: a.slug, capabilities: a.capabilities ?? null }))
 
   // Recall ranked memory (Phase 9). Resilient — never breaks the run.
-  const memory = await recallMemory(supabase, {
+  const memory = await recallMemory({
     agentId: agentInfo.id,
     roomId: run.room_id,
     queryText: triggerMsg.content,
@@ -223,6 +221,20 @@ export async function buildContextPacket({
     deliberation_root_id: run.deliberation_root_id,
     ...(roster.length > 0 ? { roster } : {}),
     ...(memory ? { memory } : {}),
+  }
+}
+
+// Raw SQLite rows store `metadata` as JSON TEXT and booleans as 0/1; rowToMessage
+// rehydrates them, and we project to the narrow RecentMsg shape used above.
+function toRecentMsg(r: unknown): RecentMsg {
+  const m = rowToMessage(r as Record<string, unknown>)
+  return {
+    id: m.id,
+    content: m.content,
+    sender_type: m.sender_type,
+    sender_agent_id: m.sender_agent_id,
+    created_at: m.created_at,
+    metadata: m.metadata,
   }
 }
 

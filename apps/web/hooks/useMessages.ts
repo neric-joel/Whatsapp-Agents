@@ -1,8 +1,6 @@
 'use client'
 import { useCallback, useEffect, useState } from 'react'
 
-import { createSupabaseBrowserClient } from '@/lib/supabase/client'
-
 interface DbMessage {
   id: string
   content: string
@@ -11,80 +9,47 @@ interface DbMessage {
   created_at: string
   sender_agent_id: string | null
   reply_to_id: string | null
+  content_type?: string
   metadata: Record<string, unknown>
   agents: { name: string; provider: string } | null
 }
 
+const POLL_MS = 1500
+
+/**
+ * Messages for a room. Local app: reads the GET API and polls for live updates
+ * (replaces the old Supabase realtime channel). `refreshSignal` forces an
+ * immediate refetch (e.g. after the compose box clears the chat).
+ */
 export function useMessages(roomId: string, refreshSignal?: number) {
   const [messages, setMessages] = useState<DbMessage[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const refetch = useCallback(() => {
-    const supabase = createSupabaseBrowserClient()
-    supabase
-      .from('messages')
-      .select(
-        'id, content, sender_type, sender_user_id, created_at, sender_agent_id, reply_to_id, metadata, agents(name, provider)',
-      )
-      .eq('room_id', roomId)
-      .order('created_at', { ascending: true })
-      .then(({ data, error: err }) => {
-        if (err) setError(err.message)
-        else setMessages((data as unknown as DbMessage[]) ?? [])
-        setLoading(false)
-      })
-  }, [roomId])
-
-  // Refetch on mount and when refreshSignal changes (optimistic clear from ComposeBox)
-  useEffect(() => {
-    refetch()
-  }, [refetch, refreshSignal])
-
-  // Realtime: upsert by id — append INSERTs, replace UPDATEs, remove DELETEs.
-  useEffect(() => {
-    const supabase = createSupabaseBrowserClient()
-    const channel = supabase
-      .channel(`messages-rt-${roomId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'messages', filter: `room_id=eq.${roomId}` },
-        async (payload) => {
-          if (payload.eventType === 'DELETE') {
-            const oldId = (payload.old as { id?: string }).id
-            if (oldId) setMessages((prev) => prev.filter((message) => message.id !== oldId))
-            return
-          }
-
-          const newId = (payload.new as { id: string }).id
-          // Fetch with agents join so we have the agent name
-          const { data } = await supabase
-            .from('messages')
-            .select(
-              'id, content, sender_type, sender_user_id, created_at, sender_agent_id, reply_to_id, metadata, agents(name, provider)',
-            )
-            .eq('id', newId)
-            .single()
-          if (data) {
-            const msg = data as unknown as DbMessage
-            // Upsert by id: replace an existing row on UPDATE (edits, soft-deletes,
-            // hallucination accept/reject) so peers see the change live; otherwise
-            // append. A plain append-or-skip silently drops every UPDATE event.
-            setMessages((prev) => {
-              const idx = prev.findIndex((m) => m.id === msg.id)
-              if (idx === -1) return [...prev, msg]
-              const next = prev.slice()
-              next[idx] = msg
-              return next
-            })
-          }
-        },
-      )
-      .subscribe()
-    return () => {
-      void supabase.removeChannel(channel)
+  const refetch = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/messages`, { cache: 'no-store' })
+      const json = await res.json()
+      if (!json.ok) setError(json.error?.message ?? 'Failed to load messages')
+      else {
+        setMessages((json.data as DbMessage[]) ?? [])
+        setError(null)
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load messages')
+    } finally {
+      setLoading(false)
     }
   }, [roomId])
+
+  useEffect(() => {
+    void refetch()
+  }, [refetch, refreshSignal])
+
+  useEffect(() => {
+    const t = setInterval(() => void refetch(), POLL_MS)
+    return () => clearInterval(t)
+  }, [refetch])
 
   return { messages, loading, error, refetch }
 }

@@ -1,7 +1,6 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import { getDb } from '@agentroom/db'
 
 interface RecoverStaleRunsOptions {
-  supabase: SupabaseClient
   staleMs: number
   now?: () => number
   reason?: string
@@ -13,12 +12,12 @@ interface StaleRunRow {
 }
 
 export async function recoverStaleRuns({
-  supabase,
   staleMs,
   now = Date.now,
   reason = 'stale: recovered by bridge',
   logRecovered,
 }: RecoverStaleRunsOptions): Promise<number> {
+  const db = getDb()
   const recoveredAt = new Date(now())
   const cutoff = new Date(recoveredAt.getTime() - staleMs).toISOString()
   // A run is stale only if its heartbeat is older than `staleMs`, OR it has no
@@ -26,30 +25,30 @@ export async function recoverStaleRuns({
   // guard on the NULL case is critical: a freshly-claimed run has `heartbeat_at IS
   // NULL` until its first heartbeat interval fires, so treating NULL as instantly
   // stale falsely fails healthy in-flight runs under load (observed in the C1 sweep).
-  const { data: staleRuns } = await supabase
-    .from('agent_runs')
-    .select('id')
-    .in('status', ['claimed', 'running'])
-    .or(`heartbeat_at.lt.${cutoff},and(heartbeat_at.is.null,started_at.lt.${cutoff})`)
+  const staleRuns = db
+    .prepare(
+      `SELECT id FROM agent_runs
+       WHERE status IN ('claimed', 'running')
+         AND (heartbeat_at < ? OR (heartbeat_at IS NULL AND started_at < ?))`,
+    )
+    .all(cutoff, cutoff) as StaleRunRow[]
 
   let recovered = 0
 
-  for (const run of (staleRuns ?? []) as StaleRunRow[]) {
+  for (const run of staleRuns) {
     // Status guard: only fail a run that is STILL claimed/running. Between the
     // SELECT above and this UPDATE the worker may have completed/cancelled it — the
     // guard makes recovery idempotent and prevents clobbering a terminal state
     // (e.g. completed → failed).
-    const { data: updated } = await supabase
-      .from('agent_runs')
-      .update({
-        status: 'failed',
-        error_message: reason,
-        completed_at: recoveredAt.toISOString(),
-      })
-      .eq('id', run.id)
-      .in('status', ['claimed', 'running'])
-      .select('id')
-    if (updated && updated.length > 0) {
+    const updated = db
+      .prepare(
+        `UPDATE agent_runs
+         SET status = 'failed', error_message = ?, completed_at = ?
+         WHERE id = ? AND status IN ('claimed', 'running')
+         RETURNING id`,
+      )
+      .get(reason, recoveredAt.toISOString(), run.id) as StaleRunRow | undefined
+    if (updated) {
       recovered += 1
       logRecovered?.(run.id)
     }

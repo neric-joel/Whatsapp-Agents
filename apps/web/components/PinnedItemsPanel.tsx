@@ -1,7 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
-
-import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+import { useCallback, useEffect, useState } from 'react'
 
 interface PinnedItemRow {
   id: string
@@ -27,74 +25,42 @@ export default function PinnedItemsPanel({ roomId }: Props) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    let mounted = true
-    setLoading(true)
-    setError(null)
-    fetch(`/api/rooms/${roomId}/pins`)
-      .then(async (res) => {
+  const refetch = useCallback(
+    async (mountedRef: { current: boolean }) => {
+      try {
+        const res = await fetch(`/api/rooms/${roomId}/pins`)
         const json = (await res.json()) as {
           ok: boolean
           data?: PinnedItemRow[]
           error?: { message?: string }
         }
         if (!res.ok || !json.ok) throw new Error(json.error?.message ?? 'Failed to load pins')
-        return json
-      })
-      .then((json: { ok: boolean; data?: PinnedItemRow[] }) => {
-        if (mounted && json.ok) setPins(json.data ?? [])
-      })
-      .catch((err) => {
-        if (mounted) setError(err instanceof Error ? err.message : 'Failed to load pins')
-      })
-      .finally(() => {
-        if (mounted) setLoading(false)
-      })
-    return () => {
-      mounted = false
-    }
-  }, [roomId])
+        if (mountedRef.current) {
+          setPins(json.data ?? [])
+          setError(null)
+        }
+      } catch (err) {
+        if (mountedRef.current) setError(err instanceof Error ? err.message : 'Failed to load pins')
+      } finally {
+        if (mountedRef.current) setLoading(false)
+      }
+    },
+    [roomId],
+  )
 
   useEffect(() => {
-    const supabase = createSupabaseBrowserClient()
-    const sub = supabase
-      .channel(`pins:${roomId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'pinned_items',
-          filter: `room_id=eq.${roomId}`,
-        },
-        (payload) => {
-          if (payload.eventType === 'INSERT') {
-            const next = payload.new as PinnedItemRow
-            if (next.is_active)
-              setPins((prev) => [...prev, next].sort((a, b) => a.sort_order - b.sort_order))
-          } else if (payload.eventType === 'UPDATE') {
-            const next = payload.new as PinnedItemRow
-            setPins((prev) => {
-              const merged = next.is_active
-                ? prev.map((pin) => (pin.id === next.id ? next : pin))
-                : prev.filter((pin) => pin.id !== next.id)
-              return (
-                next.is_active && !merged.some((pin) => pin.id === next.id)
-                  ? [...merged, next]
-                  : merged
-              ).sort((a, b) => a.sort_order - b.sort_order)
-            })
-          } else if (payload.eventType === 'DELETE') {
-            const oldPin = payload.old as { id?: string }
-            setPins((prev) => prev.filter((pin) => pin.id !== oldPin.id))
-          }
-        },
-      )
-      .subscribe()
+    const mountedRef = { current: true }
+    setLoading(true)
+    setError(null)
+    void refetch(mountedRef)
+    const interval = setInterval(() => {
+      void refetch(mountedRef)
+    }, 2000)
     return () => {
-      void sub.unsubscribe()
+      mountedRef.current = false
+      clearInterval(interval)
     }
-  }, [roomId])
+  }, [refetch])
 
   async function unpin(pinId: string) {
     await fetch(`/api/pins/${pinId}`, {

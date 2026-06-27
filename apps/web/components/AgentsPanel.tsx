@@ -1,8 +1,6 @@
 'use client'
 import { useCallback, useEffect, useState } from 'react'
 
-import { createSupabaseBrowserClient } from '@/lib/supabase/client'
-
 import CreateAgentForm from './CreateAgentForm'
 
 interface AgentRow {
@@ -13,10 +11,27 @@ interface AgentRow {
     id: string
     name: string
     slug: string
-    capabilities: string | null
+    provider: string | null
+    adapter_type: string | null
     is_active: boolean
-    created_by_user_id: string | null
   } | null
+  last_run_status: string | null
+}
+
+interface MemberRow {
+  agent_id?: string | null
+  member_type?: string | null
+  muted?: boolean | null
+  reply_enabled?: boolean | null
+  agents: {
+    id: string
+    name: string
+    slug: string
+    provider: string | null
+    adapter_type: string | null
+    is_active: boolean
+  } | null
+  last_run_status?: string | null
 }
 
 interface Props {
@@ -33,47 +48,33 @@ export default function AgentsPanel({ roomId }: Props) {
   const [activeByAgent, setActiveByAgent] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [isAdmin, setIsAdmin] = useState(false)
-  const [userId, setUserId] = useState<string | null>(null)
+  // Local single-user app: the current user is always present and is the owner/admin.
+  const [isAdmin] = useState(true)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const supabase = createSupabaseBrowserClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      setUserId(user?.id ?? null)
-      if (user) {
-        const { data: membership } = await supabase
-          .from('room_members')
-          .select('role')
-          .eq('room_id', roomId)
-          .eq('user_id', user.id)
-          .maybeSingle()
-        const role = membership?.role as string | undefined
-        setIsAdmin(role === 'admin' || role === 'owner')
-      }
-      const { data, error: err } = await supabase
-        .from('room_members')
-        .select(
-          'agent_id, muted, reply_enabled, agents!inner(id, name, slug, capabilities, is_active, created_by_user_id)',
-        )
-        .eq('room_id', roomId)
-        .eq('member_type', 'agent')
-      if (err) throw err
-      const rows = ((data ?? []) as unknown as AgentRow[]).filter((r) => r.agents?.is_active)
+      const res = await fetch(`/api/rooms/${roomId}/members`)
+      if (!res.ok) throw new Error('Failed to load agents')
+      const json = await res.json()
+      const members = (json.data ?? []) as MemberRow[]
+      const rows: AgentRow[] = members
+        .filter((m) => m.agents?.is_active)
+        .map((m) => ({
+          agent_id: m.agent_id ?? m.agents!.id,
+          muted: m.muted ?? false,
+          reply_enabled: m.reply_enabled ?? true,
+          agents: m.agents,
+          last_run_status: m.last_run_status ?? null,
+        }))
       setAgents(rows)
 
-      const { data: runs } = await supabase
-        .from('agent_runs')
-        .select('agent_id, status')
-        .eq('room_id', roomId)
-        .in('status', ACTIVE_RUN_STATUSES)
       const counts: Record<string, number> = {}
-      for (const run of (runs ?? []) as Array<{ agent_id: string }>) {
-        counts[run.agent_id] = (counts[run.agent_id] ?? 0) + 1
+      for (const row of rows) {
+        if (row.last_run_status && ACTIVE_RUN_STATUSES.includes(row.last_run_status)) {
+          counts[row.agent_id] = (counts[row.agent_id] ?? 0) + 1
+        }
       }
       setActiveByAgent(counts)
     } catch (err) {
@@ -87,24 +88,16 @@ export default function AgentsPanel({ roomId }: Props) {
     void load()
   }, [load])
 
-  // Refresh on the `/agents` command and on live run-status changes.
+  // Refresh on the `/agents` command and by polling the local API for live run-status changes.
   useEffect(() => {
     function onAgents() {
       void load()
     }
     window.addEventListener(AGENTS_EVENT, onAgents)
-    const supabase = createSupabaseBrowserClient()
-    const sub = supabase
-      .channel(`agents-runs:${roomId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'agent_runs', filter: `room_id=eq.${roomId}` },
-        () => void load(),
-      )
-      .subscribe()
+    const interval = setInterval(() => void load(), 1500)
     return () => {
       window.removeEventListener(AGENTS_EVENT, onAgents)
-      void sub.unsubscribe()
+      clearInterval(interval)
     }
   }, [roomId, load])
 
@@ -133,7 +126,8 @@ export default function AgentsPanel({ roomId }: Props) {
           {agents.map((row) => {
             const a = row.agents!
             const active = activeByAgent[row.agent_id] ?? 0
-            const ownedByMe = a.created_by_user_id != null && a.created_by_user_id === userId
+            // Local single-user app: the current user owns everything.
+            const ownedByMe = true
             return (
               <li
                 key={row.agent_id}
@@ -151,8 +145,10 @@ export default function AgentsPanel({ roomId }: Props) {
                     <span className="text-[10px] text-[var(--muted)]">muted</span>
                   ) : null}
                 </div>
-                {a.capabilities && (
-                  <div className="text-xs leading-5 text-[var(--muted)]">{a.capabilities}</div>
+                {a.provider && (
+                  <div className="text-xs leading-5 text-[var(--muted)]">
+                    {a.adapter_type === 'cli' ? 'connected CLI' : a.provider}
+                  </div>
                 )}
                 {ownedByMe && (
                   <button

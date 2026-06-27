@@ -1,8 +1,6 @@
 'use client'
 import { useCallback, useEffect, useState } from 'react'
 
-import { createSupabaseBrowserClient } from '@/lib/supabase/client'
-
 interface ToolCallRow {
   id: string
   room_id: string
@@ -13,51 +11,33 @@ interface ToolCallRow {
   error: string | null
 }
 
+const POLL_MS = 1500
+
+/**
+ * Tool-call approval requests for a room. Local app: reads the GET API and polls
+ * (replaces the Supabase realtime channel).
+ */
 export function useToolCalls(roomId: string, refreshSignal?: number) {
   const [toolCalls, setToolCalls] = useState<ToolCallRow[]>([])
 
-  const fetchToolCalls = useCallback(() => {
-    const supabase = createSupabaseBrowserClient()
-    supabase
-      .from('tool_calls')
-      .select('*')
-      .eq('room_id', roomId)
-      .in('status', ['waiting_approval', 'approved', 'running', 'succeeded', 'failed', 'denied'])
-      .then(({ data }) => setToolCalls((data as ToolCallRow[]) ?? []))
+  const fetchToolCalls = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/tool-calls`, { cache: 'no-store' })
+      const json = await res.json()
+      if (json.ok) setToolCalls((json.data as ToolCallRow[]) ?? [])
+    } catch {
+      // transient; the next poll will retry
+    }
   }, [roomId])
 
   useEffect(() => {
-    fetchToolCalls()
+    void fetchToolCalls()
   }, [fetchToolCalls, refreshSignal])
 
   useEffect(() => {
-    const supabase = createSupabaseBrowserClient()
-    const sub = supabase
-      .channel(`toolcalls:${roomId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'tool_calls',
-          filter: `room_id=eq.${roomId}`,
-        },
-        (payload) => {
-          if (payload.eventType === 'INSERT')
-            setToolCalls((p) => [...p, payload.new as ToolCallRow])
-          else if (payload.eventType === 'UPDATE')
-            setToolCalls((p) =>
-              p.map((tc) => (tc.id === payload.new.id ? (payload.new as ToolCallRow) : tc)),
-            )
-          else if (payload.eventType === 'DELETE')
-            setToolCalls((p) => p.filter((tc) => tc.id !== payload.old.id))
-        },
-      )
-      .subscribe()
-    return () => {
-      void sub.unsubscribe()
-    }
-  }, [roomId])
+    const t = setInterval(() => void fetchToolCalls(), POLL_MS)
+    return () => clearInterval(t)
+  }, [fetchToolCalls])
 
   return toolCalls
 }

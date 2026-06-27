@@ -1,7 +1,7 @@
 {
   "src": ["src"],
   "all": true,
-  "exclude": ["src/index.ts", "src/workers/**", "src/lib/supabase.ts", "**/*.test.ts"],
+  "exclude": ["src/index.ts", "src/workers/**", "**/*.test.ts"],
   "reporter": ["text-summary", "html"],
   "check-coverage": true,
   "lines": 55,
