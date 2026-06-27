@@ -35,10 +35,18 @@ const nextConfig = {
   // @agentroom/* are ESM/NodeNext and use explicit `.js` import specifiers
   // (e.g. `export * from './redact.js'`). webpack does not rewrite `.js`→`.ts` on
   // its own, so map the extensions like tsx/Node ESM do.
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
     config.resolve.extensionAlias = {
       ...(config.resolve.extensionAlias ?? {}),
       '.js': ['.ts', '.tsx', '.js', '.jsx'],
+    }
+    // better-sqlite3 is a native module reached THROUGH the transpiled @agentroom/db
+    // package, which defeats serverComponentsExternalPackages — so mark it (and its
+    // native-binding loader) external on the server build. They're then required at
+    // runtime from node_modules instead of being webpack-bundled (bundling rewrites
+    // the paths `bindings` relies on, which crashes `new Database()`).
+    if (isServer) {
+      config.externals = [...(config.externals ?? []), 'better-sqlite3', 'bindings']
     }
     return config
   },

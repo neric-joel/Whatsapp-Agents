@@ -136,6 +136,25 @@ interface ProbeOutput {
   spawnError: string | null
 }
 
+/**
+ * Decide how to spawn a resolved binary with `shell:false`. Node refuses to execute a
+ * Windows `.cmd`/`.bat` shim without a shell (EINVAL, post-CVE-2024-27980), so route
+ * those through `cmd.exe /d /s /c` — mirrors the bridge's resolveSpawnTarget. Every arg
+ * here is a static, code-defined constant, so there is no injection surface.
+ */
+export function spawnTarget(
+  bin: string,
+  args: string[],
+  platform: NodeJS.Platform = process.platform,
+  source: NodeJS.ProcessEnv = process.env,
+): { command: string; args: string[] } {
+  if (platform === 'win32' && /\.(cmd|bat)$/i.test(bin)) {
+    const comspec = source['COMSPEC'] || 'cmd.exe'
+    return { command: comspec, args: ['/d', '/s', '/c', bin, ...args] }
+  }
+  return { command: bin, args }
+}
+
 /** Run `<bin> <args>` with a short timeout, capturing output. Never throws. */
 function runProbe(bin: string, args: string[], timeoutMs = 8000): Promise<ProbeOutput> {
   return new Promise((resolve) => {
@@ -147,9 +166,10 @@ function runProbe(bin: string, args: string[], timeoutMs = 8000): Promise<ProbeO
       settled = true
       resolve(o)
     }
+    const target = spawnTarget(bin, args)
     let child: ReturnType<typeof spawn>
     try {
-      child = spawn(bin, args, {
+      child = spawn(target.command, target.args, {
         stdio: ['ignore', 'pipe', 'pipe'],
         shell: false,
         windowsHide: true,

@@ -1,5 +1,11 @@
 export type { CliProbeResult, CliProbeStatus, DetectedCli, KnownCli } from './cli-detect.js'
-export { detectKnownClis, KNOWN_CLIS, probeCommand, whichBinary } from './cli-detect.js'
+export {
+  detectKnownClis,
+  KNOWN_CLIS,
+  probeCommand,
+  spawnTarget,
+  whichBinary,
+} from './cli-detect.js'
 export type { AppConfig, CliKind, CliProfile } from './config.js'
 export {
   deleteProfile,

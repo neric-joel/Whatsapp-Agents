@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { detectKnownClis, KNOWN_CLIS, probeCommand, whichBinary } from '../src/index.js'
+import {
+  detectKnownClis,
+  KNOWN_CLIS,
+  probeCommand,
+  spawnTarget,
+  whichBinary,
+} from '../src/index.js'
 
 // `node` is guaranteed present wherever these tests run (they run under node/tsx),
 // so it's a reliable stand-in for "an installed CLI".
@@ -34,6 +40,27 @@ test('probeCommand reports not_found for a missing binary', async () => {
   const result = await probeCommand('definitely-not-a-real-cli-xyz')
   assert.equal(result.status, 'not_found')
   assert.equal(result.path, null)
+})
+
+test('spawnTarget routes a Windows .cmd/.bat shim through cmd.exe (no EINVAL)', () => {
+  // The real bug Phase 4 hit: codex/gemini resolve to .CMD shims, and Node refuses to
+  // spawn those with shell:false (EINVAL). They must go through cmd.exe /d /s /c.
+  const env = { COMSPEC: 'C:\\Windows\\System32\\cmd.exe' }
+  const cmd = spawnTarget('C:\\tools\\codex.CMD', ['exec', '--json'], 'win32', env)
+  assert.equal(cmd.command, 'C:\\Windows\\System32\\cmd.exe')
+  assert.deepEqual(cmd.args, ['/d', '/s', '/c', 'C:\\tools\\codex.CMD', 'exec', '--json'])
+
+  const bat = spawnTarget('x.bat', ['--version'], 'win32', env)
+  assert.equal(bat.command, 'C:\\Windows\\System32\\cmd.exe')
+})
+
+test('spawnTarget spawns a plain binary directly (exe / POSIX)', () => {
+  const exe = spawnTarget('C:\\tools\\claude.EXE', ['--version'], 'win32', {})
+  assert.equal(exe.command, 'C:\\tools\\claude.EXE')
+  assert.deepEqual(exe.args, ['--version'])
+
+  const posix = spawnTarget('/usr/local/bin/claude', ['--version'], 'linux', {})
+  assert.equal(posix.command, '/usr/local/bin/claude')
 })
 
 test('detectKnownClis returns one probe per known CLI', async () => {
