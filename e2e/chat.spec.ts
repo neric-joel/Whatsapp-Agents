@@ -34,7 +34,9 @@ test.describe('send → reply journey (live)', () => {
     const msg = `e2e ${Date.now()}`
     await page.getByPlaceholder(/Message #/).fill(msg)
     await page.getByRole('button', { name: 'Send' }).click()
-    await expect(page.getByTestId('message-timeline').getByText(msg)).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('message-timeline').getByText(msg)).toBeVisible({
+      timeout: 10_000,
+    })
     // An agent reply appears within the bridge's poll + CLI runtime.
     await expect(page.getByTestId('message-timeline')).toContainText(/\w/, { timeout: 60_000 })
   })
