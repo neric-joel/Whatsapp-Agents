@@ -18,9 +18,17 @@ describe('runCanary — grounding gate', () => {
     expect(runCanary('It uses Firebase for storage.').status).toBe('flagged')
   })
 
-  it('does NOT flag a correct denial of the forbidden backend (negation guard)', () => {
+  it('does NOT flag a correct denial of the forbidden backend (negation near the term)', () => {
     const r = runCanary('This is not stored in Supabase — it is a local SQLite database.')
     expect(r.status).not.toBe('flagged')
+  })
+
+  it('STILL flags when negation is elsewhere in the sentence (no whole-sentence bypass)', () => {
+    // Negation ("not local") is far from the backend ("Supabase") — must still flag.
+    expect(
+      runCanary("It's not local — your data actually lives in Supabase Postgres.").status,
+    ).toBe('flagged')
+    expect(runCanary("Don't worry, it uses Supabase to store everything.").status).toBe('flagged')
   })
 
   it('verifies the correct, grounded answer', () => {

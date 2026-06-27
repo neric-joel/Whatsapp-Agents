@@ -55,6 +55,35 @@ test('a room can be attached to a session via session_id and reads back', () => 
   assert.equal(legacy.session_id, null)
 })
 
+test('a connected CLI is one agent per owner, reusable across rooms (no slug-unique clash)', () => {
+  const db = getDb()
+  // Mirrors the agents-route reuse logic: a CLI agent keyed by (owner, slug) is created
+  // once, then attached to additional rooms via room_members — not re-inserted.
+  const agentId = newId()
+  db.prepare(
+    `INSERT INTO agents (id, name, slug, provider, adapter_type, created_by_user_id) VALUES (?, 'Claude', 'claude', ?, 'cli', ?)`,
+  ).run(agentId, 'profile-123', LOCAL_USER_ID)
+  const r1 = newId()
+  const r2 = newId()
+  for (const rid of [r1, r2]) {
+    db.prepare('INSERT INTO rooms (id, name, created_by_user_id) VALUES (?, ?, ?)').run(
+      rid,
+      'room',
+      LOCAL_USER_ID,
+    )
+    db.prepare(
+      `INSERT INTO room_members (id, room_id, agent_id, member_type) VALUES (?, ?, ?, 'agent')`,
+    ).run(newId(), rid, agentId)
+  }
+  // The same agent is a member of BOTH rooms — no second agent row, no unique clash.
+  const memberships = db
+    .prepare("SELECT count(*) c FROM room_members WHERE agent_id = ? AND member_type='agent'")
+    .get(agentId)
+  assert.equal(memberships.c, 2)
+  const agentCount = db.prepare('SELECT count(*) c FROM agents WHERE slug = ?').get('claude')
+  assert.equal(agentCount.c, 1)
+})
+
 test('sessions sort most-recently-active first', () => {
   const db = getDb()
   db.prepare('DELETE FROM sessions').run()

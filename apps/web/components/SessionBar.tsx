@@ -136,7 +136,8 @@ export default function SessionBar({
               onChange={(e) => setDraftName(e.target.value)}
               onBlur={saveRename}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') saveRename()
+                // Enter blurs → onBlur saves once (avoids an Enter+blur double PATCH).
+                if (e.key === 'Enter') e.currentTarget.blur()
                 if (e.key === 'Escape') setEditingName(false)
               }}
               aria-label="Rename session"

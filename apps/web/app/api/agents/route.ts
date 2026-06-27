@@ -110,6 +110,32 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // A connected CLI is ONE agent per owner, REUSED across rooms. If this user already has
+  // an agent for this CLI profile, attach that existing agent to the room instead of
+  // inserting a duplicate — a second INSERT would hit the (created_by_user_id, slug)
+  // unique index and 409, silently leaving the new room with no agent.
+  if (input.adapter_type === 'cli') {
+    const existing = db
+      .prepare(
+        `SELECT * FROM agents WHERE created_by_user_id = ? AND adapter_type = 'cli' AND provider = ? LIMIT 1`,
+      )
+      .get(user.id, providerToStore) as Record<string, unknown> | undefined
+    if (existing) {
+      try {
+        db.prepare('UPDATE agents SET is_active = 1 WHERE id = ?').run(existing['id'])
+        db.prepare(
+          `INSERT INTO room_members (id, room_id, agent_id, member_type, reply_enabled, muted)
+           VALUES (?, ?, ?, 'agent', ?, ?)`,
+        ).run(newId(), input.room_id, existing['id'], intBool(true), intBool(false))
+      } catch (e) {
+        // Already a member of this room — harmless; anything else is a real error.
+        const msg = e instanceof Error ? e.message : String(e)
+        if (!/UNIQUE constraint failed/i.test(msg)) return internalError('agent attach', e)
+      }
+      return apiSuccess(rowToAgent(existing), 201)
+    }
+  }
+
   let agent: ReturnType<typeof rowToAgent>
   try {
     const row = db

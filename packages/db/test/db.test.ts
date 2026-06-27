@@ -20,7 +20,7 @@ after(() => {
   rmSync(tmp, { recursive: true, force: true })
 })
 
-test('fresh install seeds one room with three agents as members', () => {
+test('fresh install seeds one empty starter room and no forced agents', () => {
   const db = getDb()
   // v2: an empty starter room, NO forced pre-built agents (the user picks from a catalog).
   assert.equal((db.prepare('SELECT count(*) c FROM rooms').get() as { c: number }).c, 1)

@@ -41,9 +41,12 @@ const STORAGE_ASSERTION =
 const NEGATION =
   /\b(no|not|n't|never|without|isn't|aren't|doesn't|don't|instead of|rather than|unlike)\b/i
 
+// Split into clauses (sentence boundaries + commas/semicolons/em–en dashes) so a negation
+// in one clause ("it's NOT local — data lives in Supabase") can't disarm a backend claim in
+// the next. Hyphenated words aren't split (the dash split requires surrounding spaces).
 function splitSentences(content: string): string[] {
   return content
-    .split(/(?<=[.!?\n])\s+/)
+    .split(/(?<=[.!?\n,;])\s+|\s+[—–]\s+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
 }
@@ -55,12 +58,15 @@ export function runCanary(content: string): CanaryResult {
 
   // 1. Grounding check (strongest): a storage/architecture claim naming a forbidden backend.
   for (const s of sentences) {
-    if (!FORBIDDEN_BACKENDS.test(s)) continue
+    const m = s.match(FORBIDDEN_BACKENDS)
+    if (!m || m.index === undefined) continue
     if (!STORAGE_ASSERTION.test(s)) continue
-    if (NEGATION.test(s)) continue // a correct denial ("not Supabase") is fine
-    const backend = s.match(FORBIDDEN_BACKENDS)?.[0] ?? 'a cloud/hosted backend'
+    // Within this clause, a negation BEFORE the backend term is a denial ("not stored in
+    // Supabase"). A negation in a different clause was already split off above, so it can't
+    // disarm the flag — that was the bypass ("it's NOT local — data lives in Supabase").
+    if (NEGATION.test(s.slice(0, m.index))) continue
     reasons.push(
-      `Contradicts the real architecture: claims this app's data lives in "${backend}" — it is local SQLite under ~/.agentroom (no cloud).`,
+      `Contradicts the real architecture: claims this app's data lives in "${m[0]}" — it is local SQLite under ~/.agentroom (no cloud).`,
     )
     break
   }

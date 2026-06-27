@@ -37,6 +37,9 @@ export default function OutputsPanel({ roomId }: { roomId: string }) {
   }, [roomId])
 
   useEffect(() => {
+    // Reset on room switch so the previous room's outputs don't flash before the refetch.
+    setFiles([])
+    setLoading(true)
     void load()
     const t = setInterval(() => void load(), 4000)
     return () => clearInterval(t)
