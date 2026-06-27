@@ -25,6 +25,9 @@ export default tseslint.config(
       '**/.git/**',
       '**/pnpm-lock.yaml',
       '**/.turbo/**',
+      // AppleDouble / dot-underscore artifacts (already in .gitignore as `._*`);
+      // ignore here too so local lint matches CI when such strays exist on disk.
+      '**/._*',
     ],
   },
 
