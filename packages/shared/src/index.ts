@@ -224,8 +224,13 @@ export type ReplyMode = 'everyone' | 'mentioned_only'
 export type MemberType = 'user' | 'agent'
 export type MemberRole = 'owner' | 'admin' | 'member'
 export type SenderType = 'user' | 'agent' | 'system'
-export type AgentProvider = 'claude_code' | 'codex_cli' | 'mock'
-export type AdapterType = 'subprocess' | 'mock'
+// The known built-in providers. For an agent connected via the Connections screen
+// (adapter_type 'cli'), `provider` instead holds the CLI profile id — so the type
+// admits any string. The `(string & {})` keeps autocomplete for the known literals
+// while making the value honestly a string (no unsound cast at the read sites).
+// Consumers that special-case a provider MUST branch on `adapter_type` first.
+export type AgentProvider = 'claude_code' | 'codex_cli' | 'mock' | (string & {})
+export type AdapterType = 'subprocess' | 'mock' | 'cli'
 export type ReplyPolicy = 'always' | 'reply_when_invoked' | 'never'
 export type RunStatus = 'queued' | 'claimed' | 'running' | 'completed' | 'failed' | 'cancelled'
 export type MemoryScope = 'global' | 'room'

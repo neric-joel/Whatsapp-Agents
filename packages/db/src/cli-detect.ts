@@ -139,8 +139,9 @@ interface ProbeOutput {
 /**
  * Decide how to spawn a resolved binary with `shell:false`. Node refuses to execute a
  * Windows `.cmd`/`.bat` shim without a shell (EINVAL, post-CVE-2024-27980), so route
- * those through `cmd.exe /d /s /c` — mirrors the bridge's resolveSpawnTarget. Every arg
- * here is a static, code-defined constant, so there is no injection surface.
+ * those through `cmd.exe /d /s /c` — mirrors the bridge's resolveSpawnTarget. Args here
+ * are the fixed `--version` probe flags; with `shell:false` + Node's default cmd.exe
+ * arg-escaping each is one literal argv token, so there is no injection surface.
  */
 export function spawnTarget(
   bin: string,

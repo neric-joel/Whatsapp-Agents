@@ -146,7 +146,9 @@ export default function AgentsPanel({ roomId }: Props) {
                   ) : null}
                 </div>
                 {a.provider && (
-                  <div className="text-xs leading-5 text-[var(--muted)]">{a.provider}</div>
+                  <div className="text-xs leading-5 text-[var(--muted)]">
+                    {a.adapter_type === 'cli' ? 'connected CLI' : a.provider}
+                  </div>
                 )}
                 {ownedByMe && (
                   <button

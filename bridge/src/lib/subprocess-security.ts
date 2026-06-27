@@ -160,9 +160,11 @@ export function resolveBinaryPath(
  * Decide how to spawn a resolved binary with `shell:false`.
  *
  * Node refuses to execute a Windows `.cmd`/`.bat` shim without a shell (EINVAL,
- * post-CVE-2024-27980). We route those through `cmd.exe /d /s /c` — but every
- * argument is a static, code-defined constant (no agent/user data ever reaches
- * argv, since prompts go via stdin), so there is no injection surface.
+ * post-CVE-2024-27980). We route those through `cmd.exe /d /s /c`. The args may be
+ * user-configured (a connected CLI profile's `args`), but they are NOT attacker-
+ * influenced: no message / system_prompt / packet data ever reaches argv (the prompt
+ * goes via stdin), and with `shell:false` + Node's default cmd.exe arg-escaping (no
+ * `windowsVerbatimArguments`) each arg is one literal argv token — not a new command.
  */
 export function resolveSpawnTarget(
   binPath: string,

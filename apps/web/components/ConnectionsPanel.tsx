@@ -120,8 +120,12 @@ export default function ConnectionsPanel() {
   }
 
   async function connectDetected(cli: DetectedCli) {
+    // Reconnect updates the existing profile in place (reuse its id) rather than
+    // creating a duplicate that shares the slug.
+    const existing = profiles.find((p) => p.slug === cli.slug)
     await saveProfile(
       {
+        ...(existing ? { id: existing.id } : {}),
         name: cli.name,
         slug: cli.slug,
         bin: cli.path ?? cli.command,

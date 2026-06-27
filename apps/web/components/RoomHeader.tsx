@@ -307,7 +307,10 @@ export default function RoomHeader({ roomId }: Props) {
                         {member.agent.name}
                       </div>
                       <div className="truncate text-xs text-gray-500">
-                        @{member.agent.slug} / {member.agent.provider}
+                        @{member.agent.slug} /{' '}
+                        {member.agent.adapter_type === 'cli'
+                          ? 'connected CLI'
+                          : member.agent.provider}
                       </div>
                     </div>
                     <button
