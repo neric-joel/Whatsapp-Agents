@@ -405,6 +405,65 @@ test('R3: a post-completion follow-up failure never clobbers a completed run to 
   assert.equal(snapshotCounters().runs_failed, 0)
 })
 
+test('canary metadata is written to the reply row and flags a hallucinated backend claim (QA1)', async () => {
+  // The canary write->read seam (run-worker stamps metadata.canary; build-context-packet reads it
+  // to label peers [UNVERIFIED]) had no integration coverage. Drive a reply that claims a cloud
+  // backend and assert the FLAGGED status lands in the persisted reply metadata.
+  seedWorld()
+  const adapter = fakeAdapter(async function* (packet) {
+    yield {
+      type: 'final_response',
+      run_id: packet.run_id,
+      response: {
+        schema_version: 1,
+        run_id: packet.run_id,
+        content: 'Your messages are stored in a Supabase Postgres database in the cloud.',
+      },
+    }
+  })
+
+  await processRun('run-1', { getAdapter: () => adapter })
+
+  assert.equal(runRow().status, 'completed')
+  const replies = agentReplies()
+  assert.equal(replies.length, 1)
+  const meta = JSON.parse(replies[0]!.metadata) as {
+    canary?: { status?: string; reasons?: string[] }
+  }
+  assert.equal(
+    meta.canary?.status,
+    'flagged',
+    'a hallucinated backend claim must be canary-flagged in the persisted reply metadata',
+  )
+  assert.ok(
+    Array.isArray(meta.canary?.reasons) && meta.canary.reasons.length > 0,
+    'flagged canary must carry reasons',
+  )
+})
+
+test('a cancel that lands after the adapter finishes does NOT post a reply (A2)', async () => {
+  seedWorld()
+  // The adapter finishes normally, but the run is cancelled in the DB just as it yields its
+  // reply — i.e. the cancel arrives AFTER the watcher's last tick, so the abort signal is never
+  // set (a high cancelPollMs keeps the watcher from aborting during the test, isolating this
+  // post-adapter window). The status-guarded finalize transaction must roll back the reply.
+  const adapter = fakeAdapter(async function* (packet) {
+    h.db.prepare("UPDATE agent_runs SET status = 'cancelled' WHERE id = 'run-1'").run()
+    yield {
+      type: 'final_response',
+      run_id: packet.run_id,
+      response: { schema_version: 1, run_id: packet.run_id, content: 'a late reply' },
+    }
+  })
+
+  await processRun('run-1', { getAdapter: () => adapter, cancelPollMs: 100_000 })
+
+  assert.equal(runRow().status, 'cancelled', 'run stays cancelled')
+  assert.equal(agentReplies().length, 0, 'a cancelled run must not post a visible reply')
+  assert.equal(snapshotCounters().runs_cancelled, 1)
+  assert.equal(snapshotCounters().runs_completed, 0)
+})
+
 test('cancellation mid-run → run marked cancelled, child aborted, not re-thrown', async () => {
   seedWorld()
   // Adapter waits for the abort signal (the cancellation watcher flips the controller).
@@ -417,12 +476,14 @@ test('cancellation mid-run → run marked cancelled, child aborted, not re-throw
     yield { type: 'error', run_id: packet.run_id, message: 'aborted' }
   })
 
-  // Flip the DB status to 'cancelled' so the 1s watcher aborts the controller.
+  // Flip the DB status to 'cancelled'; the watcher (polling every cancelPollMs) aborts the
+  // controller. cancelPollMs is lowered from 1s to 10ms so the test is fast and not coupled
+  // to real wall-clock timing (QA3 de-flake).
   setTimeout(() => {
     h.db.prepare("UPDATE agent_runs SET status = 'cancelled' WHERE id = 'run-1'").run()
-  }, 50)
+  }, 20)
 
-  await processRun('run-1', { getAdapter: () => adapter })
+  await processRun('run-1', { getAdapter: () => adapter, cancelPollMs: 10 })
 
   // The run is cancelled (terminal), not failed; no reply inserted; counted once.
   assert.equal(runRow().status, 'cancelled')
