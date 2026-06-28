@@ -229,7 +229,7 @@ files authoritative. **Never commit real secrets.**
 | `OPENAI_API_KEY` | conditional | — | Required only if image-text extraction is enabled |
 | `OPENAI_VISION_MODEL` | no | `gpt-4.1-mini` | Vision model for extraction |
 | `CREDENTIAL_ENCRYPTION_KEY` | conditional | — | 32-byte key (64-hex or base64) that decrypts user-stored BYO credentials at spawn. Required only for the BYO-credentials feature; must match the web app's value. Never logged |
-| `BRIDGE_CHILD_ENV_ALLOW` | no | — | Comma-separated extra env names forwarded to child CLIs. Secrets (matching `SUPABASE`/`SERVICE_ROLE`/`SECRET`/`PASSWORD`/`PRIVATE_KEY`/`BRIDGE_*`/`*_TOKEN`) are **never** forwarded |
+| `BRIDGE_CHILD_ENV_ALLOW` | no | — | Comma-separated extra env names forwarded to child CLIs. Secrets (matching `SUPABASE`/`SERVICE_ROLE`/`SECRET`/`PASSWORD`/`PRIVATE_KEY`/`BRIDGE_*`/`*_TOKEN`/`TOKEN`) are **never** forwarded |
 | `LOG_LEVEL` | no | `info` | Log level |
 | `SENTRY_DSN` / `ERROR_TRACKING_DSN` | no | — | Opt-in error tracking |
 
