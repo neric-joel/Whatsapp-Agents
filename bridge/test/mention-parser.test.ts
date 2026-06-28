@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { parseMentions } from '../src/lib/mention-parser.js'
+import { parseMentions } from '@agentroom/shared'
 
 const agents = [
   { id: 'codex', slug: 'codex_builder', name: 'Codex Builder' },

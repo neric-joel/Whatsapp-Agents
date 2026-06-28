@@ -1,4 +1,8 @@
-interface ParsedMention {
+// @mention parsing — shared verbatim by the web initial-message routing and the bridge
+// agent-to-agent follow-up routing so the two cannot drift (they previously had divergent
+// copies; the web one silently dropped multi-word `@Agent Name` mentions). Pure, no node deps.
+
+export interface ParsedMention {
   type: 'agent' | 'everyone'
   slug?: string
   agent_id?: string
@@ -17,6 +21,8 @@ export function parseMentions(
     mentions.push(mention)
   }
 
+  // Multi-word display-name mentions first (e.g. `@Codex Builder`), longest name first so a
+  // longer name wins over a prefix. The name is matched whitespace-flexibly.
   const nameAgents = agents
     .filter((agent) => agent.name && /\s/.test(agent.name))
     .sort((a, b) => (b.name?.length ?? 0) - (a.name?.length ?? 0))
@@ -32,6 +38,8 @@ export function parseMentions(
     }
   }
 
+  // Single-token mentions (`@slug`, `@everyone`), matched case- and separator-insensitively
+  // against both slug and (single-word) name.
   const tokens = content.match(/@[\w-]+/g) ?? []
 
   for (const raw of tokens) {
