@@ -38,21 +38,22 @@ CI runs these on every PR; run them locally first:
 pnpm typecheck      # tsc across all workspaces (strict + noUncheckedIndexedAccess)
 pnpm lint           # ESLint flat config — must be 0 errors
 pnpm format:check   # Prettier
-pnpm knip           # dead-code / unused-deps — must be 0 findings
-pnpm test           # web (vitest) + bridge (node:test)
+pnpm exec knip      # dead-code / unused-deps — must be 0 findings
+pnpm test           # web (vitest) + bridge (node:test) + db (node:test)
 pnpm --filter web build
 ```
 
-For end-to-end / DB-policy work:
+For end-to-end / data-layer work:
 
 ```bash
 pnpm e2e            # Playwright (mock adapter; live journeys gated on E2E_LIVE)
-# RLS policy tests run via pgTAP against a local Supabase (see supabase/tests/)
+# DB tests run via the workspace `test` script (packages/db/test/, node:test)
 ```
 
 A change is not ready until typecheck, lint (0 errors), format, knip, and tests are
 green locally **and** the GitHub CI required checks are green on the PR. The `audit`
-job is informational (a known transitive advisory tracked for the next@15 upgrade).
+job is informational (a known transitive advisory tracked for the Next 16 upgrade,
+issues #63/#46).
 
 ## Branching, commits, and PRs
 
@@ -66,8 +67,8 @@ job is informational (a known transitive advisory tracked for the next@15 upgrad
 - Keep a PR to **one concern**. Fill in the PR template (what/why, changes, risk &
   rollback, verification evidence; screenshots for UI). Link the issue with
   `Closes #N`.
-- Don't weaken auth, RLS, the tool-approval flow, subprocess validation, or
-  secret/PII redaction to make a check pass.
+- Don't weaken the Origin/CSRF check, the per-room role check, the tool-approval flow,
+  subprocess validation, or secret/PII redaction to make a check pass.
 
 ## Testing expectations
 
@@ -81,7 +82,7 @@ job is informational (a known transitive advisory tracked for the next@15 upgrad
 
 - Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) first. The hard rule: the browser
   never writes `agent_runs`/`messages` directly — writes go Browser → Next.js route
-  handler → Supabase rows → bridge.
+  handler → local SQLite (`@agentroom/db`) → bridge.
 - `web` and `bridge` share code only through `packages/shared` (types + helpers) and
   the DB contract — no cross-layer imports.
 - Significant decisions are recorded as ADRs in [`docs/adr/`](docs/adr/). Add one when
@@ -91,8 +92,8 @@ job is informational (a known transitive advisory tracked for the next@15 upgrad
 
 Adapters live in `bridge/src/adapters/`. A subprocess adapter extends
 `SubprocessAdapter` and implements `resolveCommand()`, `buildArgs()`, and
-`envVarName()`; it yields the `AgentEvent` union and must **never** write to Supabase
-directly (the run worker owns persistence). Register it in
+`envVarName()`; it yields the `AgentEvent` union and must **never** write to the
+database directly (the run worker owns persistence). Register it in
 `bridge/src/adapters/registry.ts`. Respect the subprocess trust model in
 [`SECURITY.md`](SECURITY.md): no shell strings, no agent input in argv, allowlisted
 binary, minimized env.
