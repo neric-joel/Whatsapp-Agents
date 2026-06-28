@@ -8,6 +8,67 @@ All notable changes to this project are documented here. The format is based on
 
 _Nothing yet._
 
+## [1.4.0] - 2026-06-28
+
+A full-system check → close-issues → major-upgrade → repo-hygiene sweep on top of v1.3.0.
+Five CI-green PRs (#72–#75, #77) plus this release; each landed through an adversarial
+review with zero open Critical/High findings. Issues **#71, #65, #63, and #46 closed**.
+Proven by a fresh clean-clone, new-user walkthrough: `pnpm start` builds and runs the
+Next 16 stack, two real CLIs (Claude Code + Codex) reply to one message as separate
+participants, and the storage-grounding question is answered "local SQLite" with the
+canary badge **verified** (no Supabase/cloud hallucination).
+
+### Changed — dependencies (React 19 + Next 16)
+
+- **React 18 → 19 and Next.js 14 → 16** (#77, closes #63 / #46). Migrated 14 → 15 → 16
+  deliberately: async request APIs (`params` / `searchParams` are now awaited),
+  `serverComponentsExternalPackages` → `serverExternalPackages`, dropped the removed
+  `experimental.instrumentationHook` and `outputFileTracing` flags, and moved to the
+  React 19 types (ref-as-prop). The web build pins `next build --webpack` because
+  Turbopack cannot yet honour the `.js` → `.ts` extension alias this monorepo relies on.
+  The Windows `@vercel/nft` EPERM build failure is resolved by redirecting the file-trace
+  HOME **only during `next build`** (a `next.config` phase-function), leaving the
+  `next start` / `next dev` runtime HOME untouched.
+
+### Security
+
+- **Web server now binds to `127.0.0.1` only** (was `0.0.0.0`). AgentRoom is a
+  single-user local tool that ships without auth precisely *because* it only listens on
+  localhost; binding every interface left the full API — including the endpoint that
+  spawns local agent CLIs — reachable from the LAN. `next start` / `next dev` now pass
+  `-H 127.0.0.1`, matching the already-localhost-bound bridge health server.
+- **`working_dir` re-validated at spawn time** (#74, closes #71). The stored working
+  folder is canonicalised and re-checked against the allow-root *again* at the moment a
+  CLI is spawned — not only when it is saved — closing a time-of-check/time-of-use window
+  if the path changed or a symlink/junction was swapped between save and run. New
+  `resolveSpawnCwd` + `WorkingDirRevalidationError` in `@agentroom/db`.
+- **Run reliability + input hardening** (#73). Run finalisation is now an atomic,
+  status-guarded transaction, so a cancel mid-flight can no longer race a completed reply
+  into the timeline; bridge shutdown aborts all in-flight runs with a bounded drain; the
+  hallucination scan is bounded (`MAX_SCAN_CHARS` / `MAX_SENTENCES`) against pathological
+  input; and the signed-upload route validates the room, asserts path containment, and
+  unlinks the file if the DB insert fails.
+
+### Fixed
+
+- **Multi-word @mentions were silently dropped** (#75). Mention parsing is unified in a
+  single `@agentroom/shared` module shared by the web app and the bridge, fixing agents
+  whose display names span multiple tokens and removing the duplicated parser.
+
+### Maintenance
+
+- **Repo + code cleanup** (#72, closes #65). Removed dead code, aligned docs with the
+  local-only architecture, tightened tests, and addressed the deferred Medium/Low critique
+  follow-ups that had been tracked under #65.
+- Pruned the merged upgrade branch and stale remote-tracking refs.
+
+### Deferred (tracked, not blocking)
+
+- **#76** — keyboard / ARIA polish for the mention & agent dropdowns, tables, and
+  `focus-visible` states (v1.4 accessibility-audit items UX1–8).
+- **#78** — dev-only dependency majors (TypeScript 6, ESLint 10, `@types/node` 25, and a
+  `vite ≥ 8.0.16` advisory reachable only through the test toolchain).
+
 ## [1.3.0] - 2026-06-27
 
 ### Added — production run path
@@ -218,6 +279,9 @@ returned **GO** (0 Critical, 0 confirmed High). Highlights by phase:
   server/service-role path is unaffected. Verified against a live DB (pgTAP +
   role-level SQL + real PostgREST HTTP); migration `20260531000004_agents_column_privs.sql`.
 
-[Unreleased]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.3.0...v1.4.0
+[1.3.0]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/neric-joel/Whatsapp-Agents/releases/tag/v1.0.0
