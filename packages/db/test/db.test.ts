@@ -90,16 +90,23 @@ test('agent_runs status-guarded claim is atomic (only one claimant wins)', () =>
 
 test('updated_at trigger bumps on UPDATE', () => {
   const db = getDb()
-  const roomId = (db.prepare('SELECT id FROM rooms LIMIT 1').get() as { id: string }).id
-  const before = (
-    db.prepare('SELECT updated_at u FROM rooms WHERE id=?').get(roomId) as { u: string }
-  ).u
-  // force a distinct timestamp tick
-  db.prepare("UPDATE rooms SET name='Renamed Room' WHERE id=?").run(roomId)
-  const after = db.prepare('SELECT updated_at u, name n FROM rooms WHERE id=?').get(roomId) as {
+  // Seed a row with a deliberately OLD updated_at. INSERT has no trigger, so the value
+  // sticks; the AFTER UPDATE trigger must then bump it to "now". Asserting strict-greater
+  // against a year-2000 baseline is robust and does NOT depend on the UPDATE landing in a
+  // later clock tick (the old test used >= against a just-now value, which passed vacuously).
+  const id = newId()
+  db.prepare(
+    `INSERT INTO rooms (id, name, created_by_user_id, updated_at)
+     VALUES (?, 'Trigger Test', ?, '2000-01-01T00:00:00.000Z')`,
+  ).run(id, LOCAL_USER_ID)
+  const before = (db.prepare('SELECT updated_at u FROM rooms WHERE id=?').get(id) as { u: string })
+    .u
+  assert.equal(before, '2000-01-01T00:00:00.000Z')
+  db.prepare("UPDATE rooms SET name='Renamed Room' WHERE id=?").run(id)
+  const after = db.prepare('SELECT updated_at u, name n FROM rooms WHERE id=?').get(id) as {
     u: string
     n: string
   }
   assert.equal(after.n, 'Renamed Room')
-  assert.ok(after.u >= before, 'updated_at is monotonic on update')
+  assert.ok(after.u > before, 'updated_at trigger must bump to a strictly later time on UPDATE')
 })
