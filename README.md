@@ -118,6 +118,8 @@ Everything is local and single-user — there are no accounts and no network ser
 browser talks only to the Next.js API; the bridge is the only thing that runs agent CLIs,
 in a locked-down subprocess (no shell, static args, a stripped environment, an output
 cap, and a process-tree kill on timeout/cancel). See
+[`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md) for a plain-English, verified walkthrough of
+where your data lives and how a message becomes a reply, and
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design and trust boundaries.
 
 ## Features
@@ -164,6 +166,9 @@ docs/             CONNECTING_CLIS · ARCHITECTURE · OBSERVABILITY · adr/ (deci
 
 ## Documentation
 
+- [`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md) — plain-English, verified walkthrough:
+  where your data lives (`~/.agentroom`), how a message becomes a reply, and what survives
+  a restart.
 - [`docs/CONNECTING_CLIS.md`](docs/CONNECTING_CLIS.md) — connect, detect, and bring your
   own CLI; the `config.json` format; the auth model.
 - [`docs/WORKSPACE_MODEL.md`](docs/WORKSPACE_MODEL.md) — Cowork-style working folders +
