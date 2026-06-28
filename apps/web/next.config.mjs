@@ -66,9 +66,6 @@ const nextConfig = {
     }
     return config
   },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   typescript: {
     // Types are enforced by the separate `pnpm typecheck` gate (which passes). Next's in-build
     // type-check runs in a worker with a small heap and OOMs on this machine, so skip it here.

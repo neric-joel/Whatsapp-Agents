@@ -1,10 +1,12 @@
 node_modules/
 .next/
+# Next-generated, regenerated on every build — tracked (fresh-clone typecheck needs it) but its
+# generated formatting must not be Prettier-checked, or each build would re-fail format:check.
+next-env.d.ts
 dist/
 build/
 pnpm-lock.yaml
 *.md
-supabase/.temp/
 .worktrees/
 *.diff
 .turbo/
