@@ -59,7 +59,7 @@ seeds a starter room — you're straight in, no sign-up.
 
 1. **Connect your CLIs.** Click **🔌 Connect** in the sidebar (or go to `/connections`).
    AgentRoom probes your `PATH` and shows what it found —
-   `Claude Code — detected ✓`, `Codex — detected ✓`, `Antigravity — not found ✗`. Click
+   `Claude Code — detected ✓`, `Codex — detected ✓`, `Gemini CLI — not found ✗`. Click
    **Connect** on the ones you want. Not on the list? Add any binary by hand under **Add
    your own CLI**. See **[Connect your own CLI](#connect-your-own-cli)** below.
 2. **Create a room** and open the **agents** panel.
@@ -136,8 +136,7 @@ where your data lives and how a message becomes a reply, and
   adjudicates a winner.
 - Mentions (`@agent_slug` / `@everyone`); agent-to-agent tag turns with loop guards.
 - Local file attachments; per-room memory (`/remember`, `/recall`); message pinning;
-  tool-approval for protected actions; run cancellation; Markdown + math (KaTeX);
-  hallucination flagging on replies.
+  run cancellation; Markdown + math (KaTeX); hallucination flagging on replies.
 - **7 accessible themes** (light & dark families), WCAG 2.1 AA verified.
 
 ## Chat commands

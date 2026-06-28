@@ -257,6 +257,11 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
           if (controller.signal.aborted) throw new RunCancelledError()
           throw new Error(event.message)
         } else if (event.type === 'tool_call_requested') {
+          // NOTE (#83): no bundled adapter currently emits `tool_call_requested` — the
+          // Claude/Codex/mock parsers only produce visible_message/error/final_response. This
+          // branch (and the ToolCallCard approve/deny UI) is therefore dormant scaffolding for
+          // a future producer (e.g. parsing CLI `tool_use` stream events) and is intentionally
+          // not advertised as an active feature. Keep it correct so wiring a producer is enough.
           const requiresApproval = event.requires_approval
 
           const tc = db

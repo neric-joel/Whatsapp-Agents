@@ -71,3 +71,26 @@ test('detectKnownClis returns one probe per known CLI', async () => {
     assert.ok(typeof d.authHint === 'string' && d.authHint.length > 0)
   }
 })
+
+// Catalog contract (#80): the auto-detect catalog must only offer CLIs that can hold a
+// conversation — i.e. each one has a non-empty default invocation that passes a prompt.
+// Editor/IDE launchers (e.g. `antigravity`, whose default args were [] and which only
+// opens files) must NOT be in the catalog, or the Connections screen would auto-detect a
+// "ready" participant that can never reply.
+test('KNOWN_CLIS only contains conversational CLIs (no editor/launcher entries)', () => {
+  const CONVERSATIONAL_SLUGS = new Set(['claude', 'codex', 'gemini'])
+  for (const cli of KNOWN_CLIS) {
+    assert.ok(
+      CONVERSATIONAL_SLUGS.has(cli.slug),
+      `unexpected catalog entry '${cli.slug}' — only conversational CLIs belong in KNOWN_CLIS`,
+    )
+    assert.ok(
+      cli.defaultArgs.length > 0,
+      `'${cli.slug}' has empty defaultArgs — a conversational CLI must pass the prompt (e.g. via '-' on stdin)`,
+    )
+  }
+  assert.ok(
+    !KNOWN_CLIS.some((c) => c.slug === 'antigravity' || c.key === 'antigravity'),
+    'antigravity is an editor CLI, not a conversational agent — it must not be in the catalog (#80)',
+  )
+})

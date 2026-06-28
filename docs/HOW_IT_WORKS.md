@@ -100,9 +100,12 @@ The bridge is the *only* component that runs an agent CLI, and it does so defens
 - **Minimized environment.** The child's environment is **allowlist-default-deny** — it
   receives only base + explicitly-allowed provider variables; everything else (including
   secret-looking variables) is dropped.
-- **Working directory is re-validated at spawn time.** A session's working folder must be
-  an absolute path inside an allow-root; `..` traversal, UNC/device paths, and symlink
-  escapes are rejected — both when saved *and* again at the moment the CLI is spawned.
+- **Working-folder validation.** A session's working folder must be an absolute path inside
+  an allow-root; `..` traversal, UNC/device paths, and symlink escapes are rejected when it
+  is saved. The folder is the session's *outputs root*; **wiring it as each CLI's spawn
+  `cwd` is a tracked follow-up** (see [WORKSPACE_MODEL.md](WORKSPACE_MODEL.md) D-W5), so
+  agents currently run in the bridge's own working directory. The spawn-time re-validation
+  (`resolveSpawnCwd`) is in place as defense-in-depth for when a per-run `cwd` is wired.
 - **Bounded output and a hard timeout**, with a process-tree kill on timeout or cancel.
 - **Prompt-injection in stored memory is treated as data.** A `/remember` note containing
   an injection attempt is flagged and stored as inert data — verified: a planted

@@ -63,16 +63,12 @@ export const KNOWN_CLIS: KnownCli[] = [
     authHint:
       'Uses your existing Gemini CLI login (run `gemini` once to authenticate, or set GEMINI_API_KEY).',
   },
-  {
-    key: 'antigravity',
-    name: 'Antigravity',
-    slug: 'antigravity',
-    command: 'antigravity',
-    defaultArgs: [],
-    kind: 'generic',
-    authHint: 'Uses whatever auth the Antigravity CLI stores itself; AgentRoom asks for no keys.',
-  },
 ]
+
+// NOTE: only CLIs that hold a conversation on stdin/stdout belong here. Editor/IDE
+// launchers (e.g. Google's `antigravity`, which only does --diff/--merge/--goto/
+// --new-window and never answers a prompt) are intentionally excluded — auto-detecting
+// them as "ready" would let a user add a participant that can never reply. See #80.
 
 /** Status of a single CLI probe. */
 export type CliProbeStatus = 'ready' | 'error' | 'not_found'

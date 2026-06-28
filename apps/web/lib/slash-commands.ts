@@ -7,7 +7,7 @@
 //
 // Pure parsing only — RBAC is decided by the caller (it needs the user's room
 // role) and ALWAYS re-enforced server-side (e.g. the `/reset` route requires
-// admin). The parser never bypasses RLS or the tool-approval flow.
+// admin). The parser never bypasses the server-side role checks.
 
 import { extractCommand, getCommandSpec } from '@agentroom/shared'
 

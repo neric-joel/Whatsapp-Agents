@@ -37,8 +37,10 @@ see one row per known CLI:
 | **not found ✗** | grey | Not on your `PATH`. Install it, or add it manually (below) with a full path. |
 
 Each row also shows a short note on how that CLI authenticates — a reminder, not a
-prompt. Known CLIs in the catalog today: **Claude Code**, **Codex**, **Gemini CLI**,
-**Antigravity**.
+prompt. Known CLIs in the catalog today: **Claude Code**, **Codex**, and **Gemini CLI**.
+(Editor/IDE launchers such as Google's `antigravity` are intentionally **not** in the
+auto-detect catalog — they don't answer a prompt — but you can still register any binary
+that does under **Add your own CLI**.)
 
 Clicking **Connect** saves a profile using the detected path and that CLI's default
 arguments.

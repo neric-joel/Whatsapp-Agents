@@ -8,6 +8,39 @@ All notable changes to this project are documented here. The format is based on
 
 _Nothing yet._
 
+## [1.4.1] - 2026-06-28
+
+Pre-launch honesty pass: make the advertised feature list match what a new user can
+actually do with the bundled CLIs. No feature was removed that worked — only claims that
+didn't, plus one real UI bug fix.
+
+### Fixed
+
+- **Room "Agents" panel never listed agents** (#84). `AgentsPanel` read `member.agents`
+  (plural) but the members API returns `member.agent` (singular), so its active-agent
+  filter dropped every member and the panel always showed "No agents in this room yet" —
+  even with agents actively replying. Fixed the field, extracted the mapping to
+  `lib/agents-panel.ts` with a regression test, and added a **mute / unmute** toggle (the
+  members API already enforced `muted`, but there was no way to reach it from the UI).
+
+### Changed — claims now match reality
+
+- **Removed `antigravity` from the auto-detect CLI catalog** (#80). It is an editor/IDE
+  launcher (`--diff` / `--merge` / `--goto` / `--new-window`), not a conversational agent,
+  so it could never reply in a room; auto-detecting it as "ready" was misleading. A catalog
+  test now asserts only conversational CLIs (Claude Code, Codex, Gemini) are offered.
+- **Retracted the "tool-approval for protected actions" feature claim** (#83). The approval
+  machinery (`tool_calls`, `ToolCallCard`, approve/deny routes, run-worker wait branch)
+  exists as scaffolding, but **no bundled adapter emits the `tool_call_requested` event**
+  that fires it, so the gate never triggers in the shipped product. Removed the README
+  bullet; `docs/ARCHITECTURE.md` now marks the gate "not yet wired"; the code keeps the
+  scaffolding for a future producer.
+- **Corrected the working-folder description** (#86). A session's working folder is the
+  outputs root and is validated when saved, but it is **not yet wired as each agent CLI's
+  spawn `cwd`** (agents run in the bridge's working directory). `docs/HOW_IT_WORKS.md` and
+  the session UI copy no longer imply agents "work in" that folder; the spawn-time
+  re-validation (`resolveSpawnCwd`, #71) remains as defense-in-depth for when `cwd` is wired.
+
 ## [1.4.0] - 2026-06-28
 
 A full-system check → close-issues → major-upgrade → repo-hygiene sweep on top of v1.3.0.
@@ -279,7 +312,8 @@ returned **GO** (0 Critical, 0 confirmed High). Highlights by phase:
   server/service-role path is unaffected. Verified against a live DB (pgTAP +
   role-level SQL + real PostgREST HTTP); migration `20260531000004_agents_column_privs.sql`.
 
-[Unreleased]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.1.0...v1.2.0
