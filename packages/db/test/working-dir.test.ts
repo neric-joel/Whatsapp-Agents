@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join, parse } from 'node:path'
 import { after, before, test } from 'node:test'
 
-import { validateWorkingDir, workspaceRoot } from '../src/working-dir.js'
+import {
+  resolveSpawnCwd,
+  validateWorkingDir,
+  WorkingDirRevalidationError,
+  workspaceRoot,
+} from '../src/working-dir.js'
 
 // A realistic layout: an allow-root with a legit project folder inside it, and a sibling
 // folder OUTSIDE the root that traversal/symlink attempts will try to reach.
@@ -134,4 +139,46 @@ test('workspaceRoot honors AGENTROOM_WORKSPACE_ROOT, else defaults to home', () 
     if (prev === undefined) delete process.env['AGENTROOM_WORKSPACE_ROOT']
     else process.env['AGENTROOM_WORKSPACE_ROOT'] = prev
   }
+})
+
+// --- resolveSpawnCwd: spawn-time re-validation (TOCTOU defense-in-depth, issue #71) ---
+
+test('resolveSpawnCwd returns undefined for an absent working_dir (child inherits the bridge cwd)', () => {
+  assert.equal(resolveSpawnCwd(null, { root }), undefined)
+  assert.equal(resolveSpawnCwd(undefined, { root }), undefined)
+  assert.equal(resolveSpawnCwd('   ', { root }), undefined)
+})
+
+test('resolveSpawnCwd returns the canonical path for a valid working_dir', () => {
+  assert.equal(resolveSpawnCwd(inside, { root }), realpathSync(inside))
+})
+
+test('resolveSpawnCwd throws when a previously-valid working_dir was deleted (re-validation)', () => {
+  const gone = join(root, 'gone-cwd')
+  mkdirSync(gone, { recursive: true })
+  assert.equal(resolveSpawnCwd(gone, { root }), realpathSync(gone)) // valid at check time
+  rmSync(gone, { recursive: true, force: true })
+  assert.throws(() => resolveSpawnCwd(gone, { root }), WorkingDirRevalidationError)
+})
+
+test('resolveSpawnCwd rejects a path swapped to a symlink escape between check and use (TOCTOU)', () => {
+  // Valid at check time...
+  const swap = join(root, 'swap-cwd')
+  mkdirSync(swap, { recursive: true })
+  assert.equal(resolveSpawnCwd(swap, { root }), realpathSync(swap))
+
+  // ...then the SAME path is swapped for a junction pointing OUTSIDE the root (the TOCTOU move).
+  rmSync(swap, { recursive: true, force: true })
+  try {
+    symlinkSync(outside, swap, 'junction')
+  } catch {
+    return // environment can't create links — the deleted-path test already covers re-validation
+  }
+  // Spawn-time re-validation must catch the swap and refuse to hand the escaped path to cwd.
+  assert.throws(
+    () => resolveSpawnCwd(swap, { root }),
+    WorkingDirRevalidationError,
+    'a path that now resolves outside the root must be rejected at spawn time',
+  )
+  // No per-test cleanup of the junction — the after() hook removes the whole base dir.
 })
