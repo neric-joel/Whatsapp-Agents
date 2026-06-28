@@ -5,6 +5,7 @@ import { getDb, nowIso } from '@agentroom/db'
 import { loadBridgeEnv } from './lib/env.js'
 import { errorTrackingEnabled } from './lib/error-tracking.js'
 import { createHealthServer } from './lib/health-server.js'
+import { writeHeartbeats } from './lib/heartbeat.js'
 import { log } from './lib/logger.js'
 import { recoverStaleRuns } from './lib/stale-runs.js'
 import { processRun } from './workers/run-worker.js'
@@ -19,7 +20,8 @@ const STALE_SWEEP_MS = Math.max(HEARTBEAT_MS, Math.min(STALE_MS, 30000))
 const HEALTH_PORT = env.BRIDGE_HEALTH_PORT
 const HEALTH_HOST = env.BRIDGE_HEALTH_HOST
 
-const activeRuns = new Set<string>()
+// runId -> its AbortController, so shutdown can abort in-flight runs (kill child CLIs).
+const activeRuns = new Map<string, AbortController>()
 const startedAt = Date.now()
 let lastPollAt: string | null = null
 
@@ -39,8 +41,9 @@ async function pollOnce() {
   for (const run of runs) {
     const id = run.id as string
     if (activeRuns.has(id)) continue
-    activeRuns.add(id)
-    processRun(id)
+    const controller = new AbortController()
+    activeRuns.set(id, controller)
+    processRun(id, { signal: controller.signal })
       .catch((err) =>
         log('error', 'run.process.error', {
           run_id: id,
@@ -63,12 +66,8 @@ async function recoverStaleRunsOnce(reason: string) {
 }
 
 async function sendHeartbeat() {
-  if (activeRuns.size === 0) return
-  const runIds = [...activeRuns]
-  const db = getDb()
-  db.prepare(
-    `UPDATE agent_runs SET heartbeat_at = ? WHERE id IN (${runIds.map(() => '?').join(',')})`,
-  ).run(nowIso(), ...runIds)
+  const runIds = [...activeRuns.keys()]
+  if (writeHeartbeats(getDb(), runIds, nowIso()) === 0) return
   for (const runId of runIds) {
     log('debug', 'heartbeat.sent', { run_id: runId })
   }
@@ -132,19 +131,24 @@ async function main() {
     )
   }, STALE_SWEEP_MS)
 
-  // Graceful shutdown on Ctrl-C (SIGINT) / SIGTERM: stop the loops so no new runs are
-  // claimed, then exit. An in-flight run is NOT drained today — on the next startup
-  // stale-run recovery marks it `failed` (it is not auto-retried), so the user can re-send.
+  // Graceful shutdown on Ctrl-C (SIGINT) / SIGTERM: stop the loops so no new runs are claimed,
+  // then abort in-flight runs — each adapter kills its child CLI (SIGTERM, then a forced kill-tree
+  // after a 2s grace) and the run finalizes `cancelled` rather than being left `running` for the
+  // next startup's stale sweep. The exit timer is a .unref'd CEILING: a CLI that exits on SIGTERM
+  // lets the process exit immediately, while a SIGTERM-ignoring CLI gets the full kill timeline
+  // (~3s) before a forced exit, so a child tree is not orphaned on shutdown.
   let shuttingDown = false
   const shutdown = (signal: NodeJS.Signals) => {
     if (shuttingDown) return
     shuttingDown = true
-    log('info', 'bridge.shutdown', { signal, active_runs: activeRuns.size })
+    const inFlight = activeRuns.size
+    log('info', 'bridge.shutdown', { signal, active_runs: inFlight })
     clearInterval(pollTimer)
     clearInterval(heartbeatTimer)
     clearInterval(staleTimer)
     healthServer?.close()
-    setTimeout(() => process.exit(0), 100).unref()
+    for (const controller of activeRuns.values()) controller.abort()
+    setTimeout(() => process.exit(0), inFlight > 0 ? 3000 : 100).unref()
   }
   process.on('SIGTERM', () => shutdown('SIGTERM'))
   process.on('SIGINT', () => shutdown('SIGINT'))

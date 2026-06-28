@@ -30,6 +30,10 @@ import { persistMemoryOp } from '../memory/persist-memory-op.js'
 /** Injectable dependencies — defaults are the real adapter registry. */
 interface ProcessRunDeps {
   getAdapter?: typeof defaultGetAdapter
+  /** External abort (e.g. bridge shutdown) — linked to this run's cancellation controller. */
+  signal?: AbortSignal
+  /** Cancellation-watcher poll interval (ms). Lowered in tests to avoid real-time coupling. */
+  cancelPollMs?: number
 }
 
 type DiscussionMode = 'independent' | 'tag_turns'
@@ -227,7 +231,17 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
       ownerUserId: agentInfo.created_by_user_id,
     })
     const controller = new AbortController()
-    const stopCancellationWatcher = watchRunCancellation(runId, controller)
+    // Link an external abort (e.g. bridge shutdown) to this run's controller so the adapter's
+    // kill-tree fires and the run finalizes cancelled rather than being left 'running' (A3).
+    if (deps.signal) {
+      if (deps.signal.aborted) controller.abort()
+      else deps.signal.addEventListener('abort', () => controller.abort(), { once: true })
+    }
+    const stopCancellationWatcher = watchRunCancellation(
+      runId,
+      controller,
+      deps.cancelPollMs ?? CANCEL_POLL_MS,
+    )
     let finalContent = ''
     const handoffEvents: HandoffRequestedEvent[] = []
 
@@ -407,35 +421,53 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
           }
         : {}),
     }
-    const insertedMessage = db
-      .prepare(
-        "INSERT INTO messages (id, room_id, sender_type, sender_agent_id, content, content_type, round_index, metadata) VALUES (?, ?, 'agent', ?, ?, 'text', ?, ?) RETURNING id",
-      )
-      .get(
-        newId(),
-        runRow.room_id,
-        runRow.agent_id,
-        replyContent,
-        runRow.round_index,
-        jsonText(metadata),
-      ) as { id: string } | undefined
-
-    if (!insertedMessage) {
-      throw new Error('Failed to insert agent reply')
-    }
-
-    // i. Mark run completed — STATUS-GUARDED so a concurrent cancellation (the user
-    // cancels while the adapter is finishing) is never clobbered completed→... If the
-    // run is no longer claimed/running it was finalized elsewhere (e.g. cancelled),
-    // so skip the success follow-ups and leave the terminal state intact (R3/F6).
-    const completedRows = db
-      .prepare(
-        "UPDATE agent_runs SET status = 'completed', completed_at = ? WHERE id = ? AND status IN ('claimed', 'running') RETURNING id",
-      )
-      .all(nowIso(), runId) as { id: string }[]
-    if (!completedRows || completedRows.length === 0) {
-      log('warn', 'run.complete_skipped_terminal', { run_id: runId })
-      return
+    // h+i. Insert the reply AND mark the run completed ATOMICALLY, status-guarded. A user
+    // cancel that lands after the adapter finished but before this point flips the run to
+    // 'cancelled' in the DB; the guard then matches 0 rows, so the whole transaction (reply +
+    // completion) rolls back and a cancelled run never posts a visible reply (A2). Throwing
+    // RunCancelledError routes to the cancelled branch below. Property: reply + completion are
+    // atomic — both land or neither (a non-cancel failure inside the txn fails the run, no orphan
+    // reply). R3 holds separately: follow-ups run AFTER the txn under their own catch and the outer
+    // 'failed' update is status-guarded, so neither path can flip an already-completed run.
+    const finalize = db.transaction((): string => {
+      const completedRows = db
+        .prepare(
+          "UPDATE agent_runs SET status = 'completed', completed_at = ? WHERE id = ? AND status IN ('claimed', 'running') RETURNING id",
+        )
+        .all(nowIso(), runId) as { id: string }[]
+      if (completedRows.length === 0) throw new RunCancelledError()
+      const inserted = db
+        .prepare(
+          "INSERT INTO messages (id, room_id, sender_type, sender_agent_id, content, content_type, round_index, metadata) VALUES (?, ?, 'agent', ?, ?, 'text', ?, ?) RETURNING id",
+        )
+        .get(
+          newId(),
+          runRow.room_id,
+          runRow.agent_id,
+          replyContent,
+          runRow.round_index,
+          jsonText(metadata),
+        ) as { id: string } | undefined
+      if (!inserted) throw new Error('Failed to insert agent reply')
+      return inserted.id
+    })
+    let insertedMessageId: string
+    try {
+      insertedMessageId = finalize()
+    } catch (finalizeErr) {
+      // Cross-process race: the web cancel route and this finalize transaction are separate
+      // SQLite writers on the same file. busy_timeout (5s) normally absorbs contention, but if
+      // this transaction still loses the write lock it throws SQLITE_BUSY (not RunCancelledError).
+      // Re-read the authoritative status — a run the user just cancelled must finalize 'cancelled',
+      // not 'failed'. (Reasoned, not unit-tested: the all-in-process suite can't stage two writers.)
+      const code = (finalizeErr as { code?: string } | null)?.code
+      if (code === 'SQLITE_BUSY' || code === 'SQLITE_BUSY_SNAPSHOT') {
+        const cur = db.prepare('SELECT status FROM agent_runs WHERE id = ?').get(runId) as
+          | { status?: string }
+          | undefined
+        if (cur?.status === 'cancelled') throw new RunCancelledError()
+      }
+      throw finalizeErr
     }
     // Post-completion orchestration (hand-offs/mentions/discussion) is BEST-EFFORT:
     // an error here must NEVER flip this already-completed run to 'failed' (R3). It is
@@ -464,7 +496,7 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
           await handleHandoffRequest(handoff, {
             roomId: runRow.room_id,
             sourceAgentId: runRow.agent_id,
-            sourceMessageId: insertedMessage.id,
+            sourceMessageId: insertedMessageId,
             currentRun: {
               id: runRow.id,
               round_index: runRow.round_index,
@@ -483,7 +515,7 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
           },
           roomId: runRow.room_id,
           sourceAgentId: runRow.agent_id,
-          sourceMessageId: insertedMessage.id,
+          sourceMessageId: insertedMessageId,
           replyContent,
           roundIndex: runRow.round_index,
         })
@@ -526,7 +558,11 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
   }
 }
 
-function watchRunCancellation(runId: string, controller: AbortController): () => void {
+function watchRunCancellation(
+  runId: string,
+  controller: AbortController,
+  pollMs: number = CANCEL_POLL_MS,
+): () => void {
   const db = getDb()
   const interval = setInterval(() => {
     if (controller.signal.aborted) return
@@ -541,7 +577,7 @@ function watchRunCancellation(runId: string, controller: AbortController): () =>
     } catch {
       // Best-effort cancellation watcher; the main run path owns error handling.
     }
-  }, CANCEL_POLL_MS)
+  }, pollMs)
 
   return () => clearInterval(interval)
 }
