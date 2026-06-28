@@ -34,9 +34,9 @@ test.describe('Connections screen', () => {
   })
 
   test('renders a single sidebar (no double-shell regression)', async ({ page }) => {
-    // Regression guard: wrapping the page in AuthGuard while the root layout already
-    // wraps it rendered TWO sidebars and pushed the panel (and its Connect buttons)
-    // off-screen — the "broken Connect button". The shell must appear exactly once.
+    // Regression guard: wrapping the page in its own shell while the root layout's
+    // AppShell already wraps it rendered TWO sidebars and pushed the panel (and its
+    // Connect buttons) off-screen — the "broken Connect button". Shell appears once.
     await page.goto('/connections')
     await expect(page.getByRole('heading', { level: 1, name: 'Connections' })).toBeVisible()
     await expect(page.getByRole('link', { name: /Connections/i })).toHaveCount(1)

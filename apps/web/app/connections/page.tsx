@@ -3,9 +3,9 @@ import Link from 'next/link'
 
 import ConnectionsPanel from '@/components/ConnectionsPanel'
 
-// The root layout's AuthGuard already provides the sidebar + app shell, so this page
-// renders ONLY its content pane (wrapping it in AuthGuard again double-rendered the
-// sidebar and pushed this panel off-screen — the "broken Connect button").
+// The root layout's AppShell already provides the sidebar + app shell, so this page
+// renders ONLY its content pane (a nested shell would double-render the sidebar and
+// push this panel off-screen — the historical "broken Connect button").
 export default function ConnectionsPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[var(--surface)]">
