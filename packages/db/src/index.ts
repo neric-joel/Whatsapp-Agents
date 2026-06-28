@@ -35,4 +35,9 @@ export {
 } from './rows.js'
 export { SCHEMA_SQL } from './schema.js'
 export type { WorkingDirResult } from './working-dir.js'
-export { validateWorkingDir, workspaceRoot } from './working-dir.js'
+export {
+  resolveSpawnCwd,
+  validateWorkingDir,
+  WorkingDirRevalidationError,
+  workspaceRoot,
+} from './working-dir.js'

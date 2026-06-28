@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
 
+import { resolveSpawnCwd } from '@agentroom/db'
 import type {
   AgentAdapter,
   AgentEvent,
@@ -42,6 +43,16 @@ export abstract class SubprocessAdapter implements AgentAdapter {
    */
   protected extraChildEnv(): Record<string, string> {
     return {}
+  }
+
+  /**
+   * The session working_dir to use as the spawn cwd, or null to inherit the bridge cwd. The base
+   * adapter returns null — working_dir is not yet wired to a spawn cwd (the deferred Cowork Phase-D
+   * feature). A subclass that wires it returns the raw STORED path; resolveSpawnCwd re-validates it
+   * at spawn time (issue #71) so a raw path can never reach `cwd`.
+   */
+  protected getWorkingDir(): string | null {
+    return null
   }
 
   protected parseStdoutLine(line: string): AgentEvent | null {
@@ -146,12 +157,16 @@ export abstract class SubprocessAdapter implements AgentAdapter {
     // adapters use the empty base extraChildEnv().
     for (const [k, v] of Object.entries(this.extraChildEnv())) childEnv[k] = v
 
-    // SECURITY (issue #67): no user-controlled `cwd` is set — the child inherits the
-    // bridge's working directory. A session's `working_dir` is NOT wired here yet; if it
-    // ever is, it MUST first pass `validateWorkingDir` from @agentroom/db (realpath +
-    // allow-root, rejects UNC/traversal/symlink-escape) and ONLY the returned canonical
-    // path may be used as `cwd`. Never pass a raw stored/user path to spawn().
+    // SECURITY (issues #67 + #71): the spawn cwd is resolved ONLY through resolveSpawnCwd, which
+    // RE-VALIDATES the stored working_dir at this moment (realpath + allow-root; rejects UNC/
+    // traversal/symlink-escape) and returns the canonical path — closing the TOCTOU window where a
+    // path component could be swapped for a symlink/junction after the write-time check. getWorkingDir()
+    // returns null today (working_dir is not yet wired to a cwd), so cwd is undefined and the child
+    // inherits the bridge cwd. A raw stored/user path can never reach spawn({ cwd }) by construction;
+    // a now-invalid stored path makes resolveSpawnCwd throw, aborting the spawn instead of using it.
+    const cwd = resolveSpawnCwd(this.getWorkingDir())
     const child = spawn(target.command, target.args, {
+      cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: false, // never spawn through a shell — no command-injection surface
       env: childEnv, // allowlisted env — process.env secrets stripped; only the resolved BYO var injected

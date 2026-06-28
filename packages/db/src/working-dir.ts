@@ -175,3 +175,36 @@ export function validateWorkingDir(input: unknown, opts?: { root?: string }): Wo
 
   return { ok: true, path: realChild }
 }
+
+/** Thrown by `resolveSpawnCwd` when a stored working_dir no longer validates at spawn time. */
+export class WorkingDirRevalidationError extends Error {
+  constructor(public readonly reason: string) {
+    super(`working_dir failed spawn-time re-validation: ${reason}`)
+    this.name = 'WorkingDirRevalidationError'
+  }
+}
+
+/**
+ * Resolve the cwd for a spawned agent CLI from a stored session working_dir, RE-VALIDATING at the
+ * moment of use (TOCTOU defense-in-depth, issue #71). A working_dir is validated when it is written,
+ * but an intermediate path component could be swapped for a symlink/junction (or the directory
+ * deleted) afterwards — so the stored value is run through `validateWorkingDir` AGAIN here, and ONLY
+ * the freshly-returned canonical path is handed to `spawn({ cwd })`. This is the single supported way
+ * to turn a working_dir into a spawn cwd; a raw stored/user string must never reach `cwd` directly.
+ *
+ * - returns `undefined` for an absent working_dir (the child inherits the bridge cwd — today's behavior);
+ * - returns the canonical, realpath-resolved directory when re-validation passes;
+ * - throws `WorkingDirRevalidationError` when a previously-stored path no longer validates (swapped,
+ *   deleted, or now escaping the allow-root) so the caller aborts the spawn instead of using a stale path.
+ */
+export function resolveSpawnCwd(
+  storedPath: string | null | undefined,
+  opts?: { root?: string },
+): string | undefined {
+  if (typeof storedPath !== 'string' || storedPath.trim() === '') return undefined
+  const result = validateWorkingDir(storedPath, opts)
+  if (!result.ok || !result.path) {
+    throw new WorkingDirRevalidationError(result.reason ?? 'working_dir is no longer valid')
+  }
+  return result.path
+}
