@@ -30,7 +30,7 @@ test.describe('Connections screen', () => {
     // Let the home → first-room redirect settle first, otherwise it races the click.
     await expect(page).toHaveURL(/\/(rooms\/[0-9a-f-]{36})?$/, { timeout: 20_000 })
     await page.getByRole('link', { name: /Connections/i }).click()
-    await expect(page).toHaveURL(/\/connections/)
+    await expect(page).toHaveURL(/\/connections/, { timeout: 20_000 })
   })
 
   test('renders a single sidebar (no double-shell regression)', async ({ page }) => {

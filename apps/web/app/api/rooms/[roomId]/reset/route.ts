@@ -8,7 +8,7 @@ import { logger } from '@/lib/logger'
 import { requireRoomAdmin } from '@/lib/permissions'
 
 interface RouteParams {
-  params: { roomId: string }
+  params: Promise<{ roomId: string }>
 }
 
 /**
@@ -18,7 +18,8 @@ interface RouteParams {
  * intact and the action is reversible. RBAC is enforced here, server-side, so a
  * plain `member` cannot reset even if the command were not hidden in the UI.
  */
-export async function POST(req: NextRequest, { params }: RouteParams) {
+export async function POST(req: NextRequest, props: RouteParams) {
+  const params = await props.params
   const { roomId } = params
 
   const csrf = assertSameOrigin(req)

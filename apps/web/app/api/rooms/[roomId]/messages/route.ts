@@ -19,7 +19,7 @@ import { requireRoomMember, requireRoomOwner } from '@/lib/permissions'
 import { clearRoomChat } from '@/lib/room-chat-management'
 
 interface RouteParams {
-  params: { roomId: string }
+  params: Promise<{ roomId: string }>
 }
 
 type AgentJoin = {
@@ -36,7 +36,8 @@ type AgentMemberRow = {
   agents: AgentJoin
 }
 
-export async function POST(req: NextRequest, { params }: RouteParams) {
+export async function POST(req: NextRequest, props: RouteParams) {
+  const params = await props.params
   const { roomId } = params
 
   // 0. CSRF defense for cookie-authed mutations.
@@ -354,7 +355,8 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   return apiSuccess({ message, agent_runs: agentRuns }, 201)
 }
 
-export async function GET(req: NextRequest, { params }: RouteParams) {
+export async function GET(req: NextRequest, props: RouteParams) {
+  const params = await props.params
   const { roomId } = params
 
   const {
@@ -405,7 +407,8 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: RouteParams) {
+export async function DELETE(req: NextRequest, props: RouteParams) {
+  const params = await props.params
   const { roomId } = params
   const {
     data: { user },

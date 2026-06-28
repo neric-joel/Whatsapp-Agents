@@ -6,14 +6,15 @@ import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomMember } from '@/lib/permissions'
 
 interface RouteParams {
-  params: { roomId: string }
+  params: Promise<{ roomId: string }>
 }
 
 /**
  * Lists a room's uploaded files (metadata only) so the timeline can render
  * attachment cards. Read-only.
  */
-export async function GET(req: Request, { params }: RouteParams) {
+export async function GET(req: Request, props: RouteParams) {
+  const params = await props.params
   const {
     data: { user },
     error: authErr,

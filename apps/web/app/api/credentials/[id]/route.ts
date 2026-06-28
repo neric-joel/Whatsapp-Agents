@@ -6,7 +6,7 @@ import { assertSameOrigin, enforceRateLimit, internalError } from '@/lib/api-sec
 import { getAuthenticatedUser } from '@/lib/auth'
 
 interface RouteParams {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }
 
 // SECURITY: only metadata is ever read back — secret_ciphertext/secret_nonce stay server-side.
@@ -40,7 +40,8 @@ function toMetadata(row: CredentialMetadataRow) {
  * another's credential. Preserves the single-default-per-(user, provider) invariant: when
  * a credential is made the default, any sibling default for the same provider is cleared.
  */
-export async function PATCH(req: NextRequest, { params }: RouteParams) {
+export async function PATCH(req: NextRequest, props: RouteParams) {
+  const params = await props.params
   const csrf = assertSameOrigin(req)
   if (csrf) return csrf
 
@@ -96,7 +97,8 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
  * credential. Agents referencing it have `credential_id` set to NULL (FK ON DELETE SET
  * NULL) and fall back to host-login.
  */
-export async function DELETE(req: NextRequest, { params }: RouteParams) {
+export async function DELETE(req: NextRequest, props: RouteParams) {
+  const params = await props.params
   const csrf = assertSameOrigin(req)
   if (csrf) return csrf
 

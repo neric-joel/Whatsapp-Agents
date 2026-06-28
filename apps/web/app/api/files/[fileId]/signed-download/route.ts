@@ -9,10 +9,11 @@ import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomMember } from '@/lib/permissions'
 
 interface RouteParams {
-  params: { fileId: string }
+  params: Promise<{ fileId: string }>
 }
 
-export async function GET(req: Request, { params }: RouteParams) {
+export async function GET(req: Request, props: RouteParams) {
+  const params = await props.params
   const {
     data: { user },
     error: authErr,

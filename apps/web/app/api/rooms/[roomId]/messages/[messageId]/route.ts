@@ -10,7 +10,7 @@ import { stripServerOwnedMetadata } from '@/lib/message-metadata'
 import { requireRoomMember } from '@/lib/permissions'
 
 interface RouteParams {
-  params: { roomId: string; messageId: string }
+  params: Promise<{ roomId: string; messageId: string }>
 }
 
 // PATCH body: edit a message's content and/or metadata. At least one field required.
@@ -21,7 +21,8 @@ const updateMessageSchema = z
   })
   .refine((d) => Object.keys(d).length > 0, 'At least one field required')
 
-export async function PATCH(req: NextRequest, { params }: RouteParams) {
+export async function PATCH(req: NextRequest, props: RouteParams) {
+  const params = await props.params
   const { roomId, messageId } = params
 
   // 0. CSRF defense for cookie-authed mutations.
@@ -89,7 +90,8 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: RouteParams) {
+export async function DELETE(req: NextRequest, props: RouteParams) {
+  const params = await props.params
   const { roomId, messageId } = params
   const {
     data: { user },

@@ -8,10 +8,11 @@ import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomMember } from '@/lib/permissions'
 
 interface RouteParams {
-  params: { roomId: string }
+  params: Promise<{ roomId: string }>
 }
 
-export async function POST(req: NextRequest, { params }: RouteParams) {
+export async function POST(req: NextRequest, props: RouteParams) {
+  const params = await props.params
   const { roomId } = params
   const csrf = assertSameOrigin(req)
   if (csrf) return csrf

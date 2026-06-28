@@ -7,7 +7,7 @@ import { updateAgentSchema } from '@/lib/api-validation'
 import { getAuthenticatedUser } from '@/lib/auth'
 
 interface RouteParams {
-  params: { agentId: string }
+  params: Promise<{ agentId: string }>
 }
 
 /**
@@ -38,7 +38,8 @@ async function requireAgentCreator(req: NextRequest, agentId: string) {
   return { db, userId: user.id }
 }
 
-export async function PATCH(req: NextRequest, { params }: RouteParams) {
+export async function PATCH(req: NextRequest, props: RouteParams) {
+  const params = await props.params
   const csrf = assertSameOrigin(req)
   if (csrf) return csrf
 
@@ -83,7 +84,8 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
  * from rosters and run targeting while leaving its history intact. Reversible via
  * PATCH `{ is_active: true }`.
  */
-export async function DELETE(req: NextRequest, { params }: RouteParams) {
+export async function DELETE(req: NextRequest, props: RouteParams) {
+  const params = await props.params
   const csrf = assertSameOrigin(req)
   if (csrf) return csrf
 
