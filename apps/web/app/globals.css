@@ -82,8 +82,10 @@ pre {
   --sidebar-hover: #e4e4e7;
   --sidebar-active: #d4d4d8;
   --text: #18181b;
-  /* #71717a was 4.39:1 on --app-bg (just below WCAG AA 4.5:1); darkened. */
-  --muted: #5d5d66;
+  /* Muted secondary text. Must clear WCAG AA 4.5:1 on the DARKEST surface it lands on, which is the
+     active sidebar item / borders (--sidebar-active #d4d4d8), not just --app-bg: #5d5d66 was 4.4:1
+     there (axe-flagged). #55555e is ~5.0:1 on #d4d4d8 and ~6.7:1 on --app-bg. */
+  --muted: #55555e;
   --border: #d4d4d8;
   --accent: #52525b;
   --accent-strong: #3f3f46;
