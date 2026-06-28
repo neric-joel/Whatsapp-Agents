@@ -9,7 +9,7 @@ import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomMember } from '@/lib/permissions'
 
 interface RouteParams {
-  params: { roomId: string }
+  params: Promise<{ roomId: string }>
 }
 
 const RECALL_LIMIT = 50
@@ -36,7 +36,8 @@ async function requireAuthenticatedRoomMember(req: NextRequest, roomId: string) 
  * Memory panel. Returns room-shared notes, every agent's room memory, and the
  * caller's personal global notes (membership/ownership enforced in SQL).
  */
-export async function GET(req: NextRequest, { params }: RouteParams) {
+export async function GET(req: NextRequest, props: RouteParams) {
+  const params = await props.params
   const auth = await requireAuthenticatedRoomMember(req, params.roomId)
   if ('error' in auth) return auth.error
 
@@ -109,7 +110,8 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
  * The browser never writes the table directly — this server route writes the local
  * data layer after an authn + membership check.
  */
-export async function POST(req: NextRequest, { params }: RouteParams) {
+export async function POST(req: NextRequest, props: RouteParams) {
+  const params = await props.params
   const csrf = assertSameOrigin(req)
   if (csrf) return csrf
 

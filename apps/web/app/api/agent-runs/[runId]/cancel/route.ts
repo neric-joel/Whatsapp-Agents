@@ -12,7 +12,7 @@ import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomMember } from '@/lib/permissions'
 
 interface RouteParams {
-  params: { runId: string }
+  params: Promise<{ runId: string }>
 }
 
 interface AgentRunRow {
@@ -21,7 +21,8 @@ interface AgentRunRow {
   status: AgentRunStatus
 }
 
-export async function POST(req: NextRequest, { params }: RouteParams) {
+export async function POST(req: NextRequest, props: RouteParams) {
+  const params = await props.params
   const {
     data: { user },
     error: authErr,

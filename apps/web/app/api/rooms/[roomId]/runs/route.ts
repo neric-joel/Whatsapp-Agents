@@ -7,7 +7,7 @@ import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomMember } from '@/lib/permissions'
 
 interface RouteParams {
-  params: { roomId: string }
+  params: Promise<{ roomId: string }>
 }
 
 async function requireAuthenticatedRoomMember(req: NextRequest | Request, roomId: string) {
@@ -30,7 +30,8 @@ async function requireAuthenticatedRoomMember(req: NextRequest | Request, roomId
  * Lists the most recent agent runs for a room (the work queue history) so the UI
  * can show run status/activity. Read-only; capped at 200, newest first.
  */
-export async function GET(req: Request, { params }: RouteParams) {
+export async function GET(req: Request, props: RouteParams) {
+  const params = await props.params
   const auth = await requireAuthenticatedRoomMember(req, params.roomId)
   if ('error' in auth) return auth.error
 

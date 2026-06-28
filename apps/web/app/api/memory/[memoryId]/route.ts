@@ -8,7 +8,7 @@ import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomMember } from '@/lib/permissions'
 
 interface RouteParams {
-  params: { memoryId: string }
+  params: Promise<{ memoryId: string }>
 }
 
 /**
@@ -17,7 +17,8 @@ interface RouteParams {
  * single-user: the authz gate always passes for a room-scoped note, and personal
  * notes are owned by the one local user.
  */
-export async function PATCH(req: NextRequest, { params }: RouteParams) {
+export async function PATCH(req: NextRequest, props: RouteParams) {
+  const params = await props.params
   const csrf = assertSameOrigin(req)
   if (csrf) return csrf
 

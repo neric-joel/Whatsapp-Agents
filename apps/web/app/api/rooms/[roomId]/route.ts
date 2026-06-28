@@ -8,7 +8,7 @@ import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomOwner } from '@/lib/permissions'
 
 interface RouteParams {
-  params: { roomId: string }
+  params: Promise<{ roomId: string }>
 }
 
 async function requireAuthenticatedRoomOwner(req: NextRequest, roomId: string) {
@@ -27,7 +27,8 @@ async function requireAuthenticatedRoomOwner(req: NextRequest, roomId: string) {
   return { user }
 }
 
-export async function PATCH(req: NextRequest, { params }: RouteParams) {
+export async function PATCH(req: NextRequest, props: RouteParams) {
+  const params = await props.params
   const auth = await requireAuthenticatedRoomOwner(req, params.roomId)
   if ('error' in auth) return auth.error
 
@@ -64,7 +65,8 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   return apiSuccess(rowToRoom(data))
 }
 
-export async function DELETE(req: NextRequest, { params }: RouteParams) {
+export async function DELETE(req: NextRequest, props: RouteParams) {
+  const params = await props.params
   const auth = await requireAuthenticatedRoomOwner(req, params.roomId)
   if ('error' in auth) return auth.error
 

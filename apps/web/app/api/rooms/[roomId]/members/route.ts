@@ -8,7 +8,7 @@ import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomMember } from '@/lib/permissions'
 
 interface RouteParams {
-  params: { roomId: string }
+  params: Promise<{ roomId: string }>
 }
 
 type AgentRow = {
@@ -139,7 +139,8 @@ async function requireAuthenticatedRoomMember(req: NextRequest, roomId: string) 
   return { user }
 }
 
-export async function GET(req: NextRequest, { params }: RouteParams) {
+export async function GET(req: NextRequest, props: RouteParams) {
+  const params = await props.params
   const auth = await requireAuthenticatedRoomMember(req, params.roomId)
   if ('error' in auth) return auth.error
 
@@ -160,7 +161,8 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   }
 }
 
-export async function POST(req: NextRequest, { params }: RouteParams) {
+export async function POST(req: NextRequest, props: RouteParams) {
+  const params = await props.params
   const auth = await requireAuthenticatedRoomMember(req, params.roomId)
   if ('error' in auth) return auth.error
 

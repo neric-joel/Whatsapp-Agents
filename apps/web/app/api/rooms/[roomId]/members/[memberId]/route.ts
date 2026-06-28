@@ -8,7 +8,7 @@ import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomMember } from '@/lib/permissions'
 
 interface RouteParams {
-  params: { roomId: string; memberId: string }
+  params: Promise<{ roomId: string; memberId: string }>
 }
 
 async function requireAuthenticatedRoomMember(req: NextRequest, roomId: string) {
@@ -68,7 +68,8 @@ function loadAgentMember(roomId: string, memberId: string) {
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: RouteParams) {
+export async function DELETE(req: NextRequest, props: RouteParams) {
+  const params = await props.params
   const auth = await requireAuthenticatedRoomMember(req, params.roomId)
   if ('error' in auth) return auth.error
 
@@ -84,7 +85,8 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
   return apiSuccess({ deleted: true })
 }
 
-export async function PATCH(req: NextRequest, { params }: RouteParams) {
+export async function PATCH(req: NextRequest, props: RouteParams) {
+  const params = await props.params
   const auth = await requireAuthenticatedRoomMember(req, params.roomId)
   if ('error' in auth) return auth.error
 

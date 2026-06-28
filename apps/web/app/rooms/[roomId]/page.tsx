@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useEffect, useState } from 'react'
+import { use, useCallback, useEffect, useState } from 'react'
 
 import AgentsPanel from '@/components/AgentsPanel'
 import ComposeBox from '@/components/ComposeBox'
@@ -11,7 +11,8 @@ import PinnedItemsPanel from '@/components/PinnedItemsPanel'
 import RoomHeader from '@/components/RoomHeader'
 import { subscribeToChatCleared } from '@/lib/chat-events'
 
-export default function RoomPage({ params }: { params: { roomId: string } }) {
+export default function RoomPage(props: { params: Promise<{ roomId: string }> }) {
+  const params = use(props.params)
   const { roomId } = params
   const [refreshSignal, setRefreshSignal] = useState(0)
   const [optimistic, setOptimistic] = useState<OptimisticMessage[]>([])

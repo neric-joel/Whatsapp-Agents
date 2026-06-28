@@ -36,11 +36,15 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  // Run e2e against the PRODUCTION build (`next build` + `next start`), not `next dev`. This tests
+  // the actual artifact users run via `pnpm start`, and avoids Next 15's on-demand dev compilation
+  // (the first client-side navigation to an uncompiled route can take >10s under `next dev`, which
+  // made the sidebar-navigation spec flaky — a dev-only timing issue, never seen in production).
   webServer: {
-    command: 'pnpm --filter web dev',
+    command: 'pnpm --filter web build && pnpm --filter web start',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    timeout: 240_000,
     env: {
       AGENTROOM_HOME: E2E_HOME,
       NEXT_PUBLIC_APP_URL: 'http://localhost:3000',

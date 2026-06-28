@@ -8,7 +8,7 @@ import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomMember } from '@/lib/permissions'
 
 interface RouteParams {
-  params: { messageId: string }
+  params: Promise<{ messageId: string }>
 }
 
 const bodySchema = z.object({
@@ -31,7 +31,8 @@ function parseMetadata(value: unknown): Record<string, unknown> {
   return isRecord(value) ? value : {}
 }
 
-export async function PATCH(req: NextRequest, { params }: RouteParams) {
+export async function PATCH(req: NextRequest, props: RouteParams) {
+  const params = await props.params
   const { messageId } = params
 
   const {
