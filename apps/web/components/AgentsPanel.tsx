@@ -1,38 +1,8 @@
 'use client'
 import { useCallback, useEffect, useState } from 'react'
 
+import { type AgentRow, mapMembersToAgentRows, type MemberRow } from '../lib/agents-panel'
 import CreateAgentForm from './CreateAgentForm'
-
-interface AgentRow {
-  agent_id: string
-  muted: boolean
-  reply_enabled: boolean
-  agents: {
-    id: string
-    name: string
-    slug: string
-    provider: string | null
-    adapter_type: string | null
-    is_active: boolean
-  } | null
-  last_run_status: string | null
-}
-
-interface MemberRow {
-  agent_id?: string | null
-  member_type?: string | null
-  muted?: boolean | null
-  reply_enabled?: boolean | null
-  agents: {
-    id: string
-    name: string
-    slug: string
-    provider: string | null
-    adapter_type: string | null
-    is_active: boolean
-  } | null
-  last_run_status?: string | null
-}
 
 interface Props {
   roomId: string
@@ -48,6 +18,7 @@ export default function AgentsPanel({ roomId }: Props) {
   const [activeByAgent, setActiveByAgent] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [busyMember, setBusyMember] = useState<string | null>(null)
   // Local single-user app: the current user is always present and is the owner/admin.
   const [isAdmin] = useState(true)
 
@@ -59,15 +30,7 @@ export default function AgentsPanel({ roomId }: Props) {
       if (!res.ok) throw new Error('Failed to load agents')
       const json = await res.json()
       const members = (json.data ?? []) as MemberRow[]
-      const rows: AgentRow[] = members
-        .filter((m) => m.agents?.is_active)
-        .map((m) => ({
-          agent_id: m.agent_id ?? m.agents!.id,
-          muted: m.muted ?? false,
-          reply_enabled: m.reply_enabled ?? true,
-          agents: m.agents,
-          last_run_status: m.last_run_status ?? null,
-        }))
+      const rows: AgentRow[] = mapMembersToAgentRows(members)
       setAgents(rows)
 
       const counts: Record<string, number> = {}
@@ -106,6 +69,24 @@ export default function AgentsPanel({ roomId }: Props) {
     if (res.ok) void load()
   }
 
+  // Mute/unmute toggles whether this agent replies to new messages (server-enforced: the
+  // fan-out query and the discussion orchestrator both skip muted members). Unmuting lets it
+  // participate again without removing it from the room (unlike Disable).
+  async function toggleMute(memberId: string, muted: boolean) {
+    if (!memberId) return
+    setBusyMember(memberId)
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/members/${memberId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ muted: !muted }),
+      })
+      if (res.ok) await load()
+    } finally {
+      setBusyMember(null)
+    }
+  }
+
   return (
     <div>
       {isAdmin && <CreateAgentForm roomId={roomId} onCreated={load} />}
@@ -124,7 +105,7 @@ export default function AgentsPanel({ roomId }: Props) {
       ) : (
         <ul className="space-y-2 px-3 py-2">
           {agents.map((row) => {
-            const a = row.agents!
+            const a = row.agent!
             const active = activeByAgent[row.agent_id] ?? 0
             // Local single-user app: the current user owns everything.
             const ownedByMe = true
@@ -151,13 +132,24 @@ export default function AgentsPanel({ roomId }: Props) {
                   </div>
                 )}
                 {ownedByMe && (
-                  <button
-                    type="button"
-                    onClick={() => void disableAgent(a.id)}
-                    className="mt-1 text-[10px] text-[var(--muted)] underline transition-colors hover:text-red-600"
-                  >
-                    Disable
-                  </button>
+                  <div className="mt-1 flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => void toggleMute(row.member_id, row.muted)}
+                      disabled={busyMember === row.member_id || !row.member_id}
+                      aria-pressed={row.muted}
+                      className="text-[10px] text-[var(--muted)] underline transition-colors hover:text-[var(--text)] disabled:opacity-50"
+                    >
+                      {row.muted ? 'Unmute' : 'Mute'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void disableAgent(a.id)}
+                      className="text-[10px] text-[var(--muted)] underline transition-colors hover:text-red-600"
+                    >
+                      Disable
+                    </button>
+                  </div>
                 )}
               </li>
             )

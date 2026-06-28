@@ -14,7 +14,8 @@ interface Props {
 /**
  * The Cowork-style session header: shows the active working context (name + folder),
  * lets you switch/rename, and — on first run with no sessions — prompts you to pick a
- * working folder. A session is "the folder you're working in" plus the rooms inside it.
+ * working folder. A session is a named working folder (the outputs root for its rooms)
+ * plus the rooms inside it.
  */
 export default function SessionBar({
   sessions,
@@ -90,7 +91,7 @@ export default function SessionBar({
       {showForm ? (
         <form onSubmit={submitCreate} className="space-y-2" aria-label="Start a session">
           <p className="text-[11px] leading-4 text-[var(--muted)]">
-            Pick a working folder to start — the place your agents work in.
+            Pick a working folder to start — where this session&apos;s files and outputs live.
           </p>
           <input
             value={dir}

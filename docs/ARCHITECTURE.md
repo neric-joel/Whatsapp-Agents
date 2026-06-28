@@ -146,9 +146,8 @@ ranks them; `allowedCommands`/`formatHelp` drive `/help`, which lists **exactly*
 caller's permitted commands. Member-level commands need only room membership;
 admin-only commands (currently `/reset`) are enforced **server-side** — the
 `/reset` route calls `requireRoomAdmin`, so a `member` is rejected with 403 even if the
-UI did not hide the command. The parser never bypasses the role check or the
-tool-approval flow; unknown/over-privileged commands get a friendly rejection rather
-than being sent.
+UI did not hide the command. The parser never bypasses the role check; unknown or
+over-privileged commands get a friendly rejection rather than being sent.
 
 **`/reset`** clears a room's *rolling agent context* without deleting data: it stamps
 `rooms.context_reset_at`, and the bridge context builder only includes messages created
@@ -168,8 +167,15 @@ attacker-controlled. It is persisted as data and reaches a CLI **only via stdin,
 argv** — `buildArgs` is static and `buildStdin` carries the persona (see
 `subprocess-security.test.ts`). `adapter_type` is allowlisted to implemented adapters
 (an unknown type cannot reach the run worker), and `tool_permissions` is forced empty:
-a user-created agent gets **no** tool auto-approvals — every tool still flows through
-the approval gate.
+a user-created agent gets **no** tool auto-approvals.
+
+> **Status — tool-approval gate (not yet wired).** The approval machinery — `tool_calls`
+> rows, the `ToolCallCard` approve/deny UI, the approve/deny routes, and the run-worker wait
+> branch — exists as scaffolding but **does not fire in the shipped product**: no bundled
+> adapter (Claude Code, Codex, mock) emits the `tool_call_requested` event that triggers it.
+> It is intentionally **not advertised as an active feature** until an adapter produces real
+> tool-call requests (tracked in #83). The `tool_permissions`-forced-empty invariant above
+> still stands as a defense for when the gate is wired.
 
 ## Trust boundaries
 
