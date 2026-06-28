@@ -425,8 +425,10 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
     // cancel that lands after the adapter finished but before this point flips the run to
     // 'cancelled' in the DB; the guard then matches 0 rows, so the whole transaction (reply +
     // completion) rolls back and a cancelled run never posts a visible reply (A2). Throwing
-    // RunCancelledError routes to the cancelled branch below. Completing + replying atomically
-    // also preserves R3 (a later follow-up error can never flip completed→failed).
+    // RunCancelledError routes to the cancelled branch below. Property: reply + completion are
+    // atomic — both land or neither (a non-cancel failure inside the txn fails the run, no orphan
+    // reply). R3 holds separately: follow-ups run AFTER the txn under their own catch and the outer
+    // 'failed' update is status-guarded, so neither path can flip an already-completed run.
     const finalize = db.transaction((): string => {
       const completedRows = db
         .prepare(
@@ -449,7 +451,24 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
       if (!inserted) throw new Error('Failed to insert agent reply')
       return inserted.id
     })
-    const insertedMessageId = finalize()
+    let insertedMessageId: string
+    try {
+      insertedMessageId = finalize()
+    } catch (finalizeErr) {
+      // Cross-process race: the web cancel route and this finalize transaction are separate
+      // SQLite writers on the same file. busy_timeout (5s) normally absorbs contention, but if
+      // this transaction still loses the write lock it throws SQLITE_BUSY (not RunCancelledError).
+      // Re-read the authoritative status — a run the user just cancelled must finalize 'cancelled',
+      // not 'failed'. (Reasoned, not unit-tested: the all-in-process suite can't stage two writers.)
+      const code = (finalizeErr as { code?: string } | null)?.code
+      if (code === 'SQLITE_BUSY' || code === 'SQLITE_BUSY_SNAPSHOT') {
+        const cur = db.prepare('SELECT status FROM agent_runs WHERE id = ?').get(runId) as
+          | { status?: string }
+          | undefined
+        if (cur?.status === 'cancelled') throw new RunCancelledError()
+      }
+      throw finalizeErr
+    }
     // Post-completion orchestration (hand-offs/mentions/discussion) is BEST-EFFORT:
     // an error here must NEVER flip this already-completed run to 'failed' (R3). It is
     // wrapped in its own log-and-continue try/catch, like memory_op, so follow-up

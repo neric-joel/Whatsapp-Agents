@@ -132,9 +132,11 @@ async function main() {
   }, STALE_SWEEP_MS)
 
   // Graceful shutdown on Ctrl-C (SIGINT) / SIGTERM: stop the loops so no new runs are claimed,
-  // then abort in-flight runs — each adapter's kill-tree tears down its child CLI (no orphaned
-  // claude/codex processes) and the run finalizes `cancelled` instead of being left `running`
-  // for the next startup's stale sweep. Give the aborts a brief moment to land before exit.
+  // then abort in-flight runs — each adapter kills its child CLI (SIGTERM, then a forced kill-tree
+  // after a 2s grace) and the run finalizes `cancelled` rather than being left `running` for the
+  // next startup's stale sweep. The exit timer is a .unref'd CEILING: a CLI that exits on SIGTERM
+  // lets the process exit immediately, while a SIGTERM-ignoring CLI gets the full kill timeline
+  // (~3s) before a forced exit, so a child tree is not orphaned on shutdown.
   let shuttingDown = false
   const shutdown = (signal: NodeJS.Signals) => {
     if (shuttingDown) return
@@ -146,7 +148,7 @@ async function main() {
     clearInterval(staleTimer)
     healthServer?.close()
     for (const controller of activeRuns.values()) controller.abort()
-    setTimeout(() => process.exit(0), inFlight > 0 ? 1500 : 100).unref()
+    setTimeout(() => process.exit(0), inFlight > 0 ? 3000 : 100).unref()
   }
   process.on('SIGTERM', () => shutdown('SIGTERM'))
   process.on('SIGINT', () => shutdown('SIGINT'))
