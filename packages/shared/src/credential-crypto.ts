@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from 'node:crypto'
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
 
 /**
  * App-layer AES-256-GCM envelope for BYO provider secrets (ADR-0010 / WS2).
@@ -69,12 +69,4 @@ export function decryptSecret(secret: EncryptedSecret, key: Buffer): string {
   const decipher = createDecipheriv(ALGO, key, iv)
   decipher.setAuthTag(tag)
   return Buffer.concat([decipher.update(enc), decipher.final()]).toString('utf8')
-}
-
-/** Constant-time compare for any auth-token-style equality checks (defense-in-depth). */
-export function secretEquals(a: string, b: string): boolean {
-  const ab = Buffer.from(a, 'utf8')
-  const bb = Buffer.from(b, 'utf8')
-  if (ab.length !== bb.length) return false
-  return timingSafeEqual(ab, bb)
 }

@@ -1,5 +1,3 @@
-import { getBearerToken } from './api-auth'
-
 // ---------------------------------------------------------------------------
 // Edge-safe origin / CSRF helpers.
 //
@@ -39,10 +37,10 @@ export function allowedOrigins(): string[] {
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
 /**
- * CSRF defense for cookie-authenticated mutations. A browser cannot set a custom
- * Authorization header cross-site, so Bearer-authenticated requests are exempt.
- * For cookie auth we require the Origin to match the request host or an allowlisted
- * origin. Returns true when the request should be rejected as cross-origin.
+ * CSRF defense for state-changing requests. This is a local single-user app with no
+ * cross-site auth, so we require the Origin of any mutating request to match the
+ * request host or an allowlisted origin. Returns true when the request should be
+ * rejected as cross-origin.
  */
 export function isForbiddenCrossOrigin(req: {
   method: string
@@ -51,9 +49,6 @@ export function isForbiddenCrossOrigin(req: {
   url?: string
 }): boolean {
   if (!MUTATING_METHODS.has(req.method.toUpperCase())) return false
-
-  // Bearer-authed (programmatic) clients are not subject to CSRF.
-  if (getBearerToken(req)) return false
 
   const origin = req.headers.get('origin')
   // No Origin on a state-changing cookie request → treat as suspicious.

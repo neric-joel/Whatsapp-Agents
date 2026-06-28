@@ -13,7 +13,6 @@ import { SCHEMA_SQL } from './schema.js'
  * sender_user_id, pinned_by, ...) just hold this string.
  */
 export const LOCAL_USER_ID = '00000000-0000-0000-0000-0000000000a1'
-export const LOCAL_USER = { id: LOCAL_USER_ID, name: 'You' } as const
 
 let _db: Database.Database | null = null
 

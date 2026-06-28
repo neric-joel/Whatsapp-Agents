@@ -63,7 +63,10 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       0,
     )
   } catch (e) {
-    logger.error('room.reset.notice_failed', { room_id: roomId })
+    logger.error('room.reset.notice_failed', {
+      room_id: roomId,
+      error: e instanceof Error ? e.message : String(e),
+    })
   }
 
   return apiSuccess({ context_reset_at: now })

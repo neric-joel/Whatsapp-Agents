@@ -89,14 +89,14 @@ export async function buildContextPacket({
   // (self-echo) so it doesn't re-read its own draft as if it were a peer's.
   const discussion = readDiscussionMetadata(triggerMsg.metadata)
   // Defense-in-depth: original_message_id must be a server-generated UUID. The web route already
-  // strips client-supplied discussion metadata, but if a non-UUID ever reached here it would be
-  // interpolated into the PostgREST .or() filter below — so hard-validate before trusting it.
+  // strips client-supplied discussion metadata; hard-validate here before using it in the thread
+  // query below (the query is parameterized, but a strict UUID gate is cheap belt-and-suspenders).
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
   const useDiscussionScope = Boolean(discussion && UUID_RE.test(discussion.original_message_id))
   let recentMessages: RecentMsg[]
 
   if (discussion && useDiscussionScope) {
-    const discId = discussion.original_message_id // validated UUID — safe in a PostgREST filter
+    const discId = discussion.original_message_id // validated UUID
     let threadSql =
       "SELECT id, content, sender_type, sender_agent_id, created_at, metadata FROM messages WHERE room_id = ? AND (json_extract(metadata, '$.discussion.original_message_id') = ? OR id = ?)"
     const threadParams: unknown[] = [run.room_id, discId, discId]

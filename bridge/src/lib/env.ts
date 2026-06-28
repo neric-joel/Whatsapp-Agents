@@ -4,8 +4,8 @@ import { z } from 'zod'
  * Boot-time environment validation for the Bridge Daemon.
  *
  * Fails fast with a single, readable message that NAMES every missing/invalid
- * variable, instead of letting `undefined` flow into the Supabase client or
- * `NaN` into the poll loop. Keep this in sync with `bridge/.env.example`.
+ * variable, instead of letting `NaN` flow into the poll loop. Keep this in sync
+ * with `bridge/.env.example`.
  */
 
 const intFromEnv = (def: number, min = 1) =>
@@ -33,6 +33,9 @@ const bridgeEnvSchema = z.object({
   BRIDGE_STALE_RUN_TIMEOUT_MS: intFromEnv(60000, 1000),
   // Liveness/metrics HTTP server port. 0 disables it (default 9090).
   BRIDGE_HEALTH_PORT: portFromEnv(9090),
+  // Host the liveness/metrics server binds to. Defaults to loopback (the endpoints are
+  // unauthenticated); set to 0.0.0.0 only behind your own network controls.
+  BRIDGE_HEALTH_HOST: z.string().min(1).default('127.0.0.1'),
 })
 
 type BridgeEnv = z.infer<typeof bridgeEnvSchema>

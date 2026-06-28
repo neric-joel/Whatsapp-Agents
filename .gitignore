@@ -5,7 +5,6 @@ node_modules/
 dist/
 .turbo/
 *.log
-supabase/.temp/
 agentroom_graph_*.html
 *.tsbuildinfo
 *.lnk
