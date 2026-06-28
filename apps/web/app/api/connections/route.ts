@@ -16,6 +16,11 @@ export const runtime = 'nodejs'
  * the CLI's own job (see docs/CONNECTING_CLIS.md).
  */
 export async function GET() {
+  // Each call spawns `--version` probes (detection + one per saved profile). They're bounded
+  // by the subprocess time/output caps, but throttle anyway so a hot-looping client can't
+  // amplify process spawns (#65). Same-origin single-user, so a generous window is fine.
+  const limited = enforceRateLimit('connections-list', 30, 60_000)
+  if (limited) return limited
   try {
     const [detected, savedProfiles] = await Promise.all([
       detectKnownClis(),

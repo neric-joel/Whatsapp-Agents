@@ -44,7 +44,10 @@ export interface AppConfig {
   clis: CliProfile[]
 }
 
-const EMPTY_CONFIG: AppConfig = { version: 1, clis: [] }
+/** The on-disk config schema version. Centralized so every write uses one source. */
+const CONFIG_VERSION = 1 as const
+
+const EMPTY_CONFIG: AppConfig = { version: CONFIG_VERSION, clis: [] }
 
 function isCliKind(v: unknown): v is CliKind {
   return v === 'claude-code' || v === 'codex-cli' || v === 'generic'
@@ -77,7 +80,7 @@ function normalize(raw: unknown): AppConfig {
       updated_at: typeof p.updated_at === 'string' ? p.updated_at : new Date(0).toISOString(),
     })
   }
-  return { version: 1, clis: out }
+  return { version: CONFIG_VERSION, clis: out }
 }
 
 /** Read config.json. Returns an empty config if the file is missing or corrupt. */
@@ -95,7 +98,11 @@ export function writeConfig(config: AppConfig): void {
   const path = configPath()
   mkdirSync(dirname(path), { recursive: true })
   const tmp = join(dirname(path), `.config.${newId()}.tmp`)
-  writeFileSync(tmp, JSON.stringify({ version: 1, clis: config.clis }, null, 2), 'utf8')
+  writeFileSync(
+    tmp,
+    JSON.stringify({ version: CONFIG_VERSION, clis: config.clis }, null, 2),
+    'utf8',
+  )
   renameSync(tmp, path)
 }
 
@@ -159,6 +166,6 @@ export function deleteProfile(id: string): boolean {
   const config = readConfig()
   const next = config.clis.filter((p) => p.id !== id)
   if (next.length === config.clis.length) return false
-  writeConfig({ version: 1, clis: next })
+  writeConfig({ version: CONFIG_VERSION, clis: next })
   return true
 }

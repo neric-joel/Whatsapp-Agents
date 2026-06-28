@@ -138,8 +138,12 @@ export abstract class SubprocessAdapter implements AgentAdapter {
     if (runtime?.baseUrl && runtime.baseUrlEnvName) {
       childEnv[runtime.baseUrlEnvName] = runtime.baseUrl
     }
-    // Per-profile env the user explicitly configured (BYO CLI). Applied last so it
-    // wins over the base allowlist for exactly the vars the user opted into.
+    // Per-profile env the user explicitly configured (BYO CLI). Applied last so it wins
+    // over the base allowlist for exactly the vars the user opted into. This is also last
+    // vs the BYO-credential inject above (#65): a same-named per-profile var would override
+    // the injected credential — intentional, and harmless today because CLI-profile agents
+    // (the only source of extraChildEnv) carry no injected credential, while credential-backed
+    // adapters use the empty base extraChildEnv().
     for (const [k, v] of Object.entries(this.extraChildEnv())) childEnv[k] = v
 
     // SECURITY (issue #67): no user-controlled `cwd` is set — the child inherits the
