@@ -40,6 +40,25 @@ test('dedupes repeated reasons and does not inflate confidence (regression: dup-
   assert.equal(result.confidence, 'low')
 })
 
+test('bounds work on a huge adversarial reply (DoS guard) and still flags within the prefix', () => {
+  // A malicious or compromised CLI could emit a multi-MB reply of many short clauses to drive
+  // the O(sentences^2) self-contradiction scan. The MAX_SCAN_CHARS / MAX_SENTENCES caps must keep
+  // this bounded; a contradiction inside the scanned prefix is still detected. Without the cap the
+  // ~50k-sentence input below would be ~10^9 comparisons (seconds-to-minutes); capped, it is instant.
+  const contradiction = 'the deployment is safe. the deployment is not safe. '
+  const huge = contradiction + 'x is y. '.repeat(50_000)
+  const start = Date.now()
+  const result = detectHallucination(huge)
+  const ms = Date.now() - start
+
+  assert.equal(result.flagged, true)
+  assert.ok(
+    result.reasons.includes('Potential self-contradiction detected'),
+    'contradiction in the scanned prefix is still detected',
+  )
+  assert.ok(ms < 1000, `detectHallucination must stay bounded on huge input (took ${ms}ms)`)
+})
+
 test('does not flag clean content', () => {
   const result = detectHallucination(
     'The next step is to inspect the worker and add metadata to the inserted reply.',

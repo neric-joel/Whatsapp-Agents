@@ -32,6 +32,16 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     return e as Response
   }
 
+  // roomId is the only attacker-influenced path segment below (filename is separator-checked;
+  // id is server-generated). requireRoomMember is a no-op in the local app, so require a real
+  // UUID that maps to an existing room BEFORE touching disk — this is the actual guard.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  if (!UUID_RE.test(roomId)) return apiError('VALIDATION_ERROR', 'Invalid room id', 400)
+  const db = getDb()
+  if (!db.prepare('SELECT 1 FROM rooms WHERE id = ?').get(roomId)) {
+    return apiError('NOT_FOUND', 'Room not found', 404)
+  }
+
   // Read the multipart body and validate the file before touching disk/db.
   const form = await req.formData().catch(() => null)
   const file = form?.get('file')
@@ -75,23 +85,31 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   const id = newId()
   const rel = `rooms/${roomId}/${id}/${filename}`
 
+  const { join, resolve, sep } = await import('node:path')
+  const { mkdir, writeFile, unlink } = await import('node:fs/promises')
+  const baseDir = resolve(filesDir())
+  const abs = resolve(join(filesDir(), rel))
+  // Defense-in-depth: the resolved path must stay inside the files root, even if a segment were
+  // ever crafted (roomId is UUID-validated above; this guards against any future regression).
+  if (abs !== baseDir && !abs.startsWith(baseDir + sep)) {
+    return apiError('VALIDATION_ERROR', 'Invalid file path', 400)
+  }
+
   try {
-    const { join } = await import('node:path')
-    const { mkdir, writeFile } = await import('node:fs/promises')
-    const abs = join(filesDir(), rel)
     await mkdir(join(abs, '..'), { recursive: true })
     await writeFile(abs, buf)
   } catch (e) {
     return internalError('signed-upload write file to disk', e)
   }
 
-  const db = getDb()
   try {
     db.prepare(
       `INSERT INTO files (id, room_id, uploader_user_id, filename, mime_type, size_bytes, storage_path, storage_bucket)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(id, roomId, user.id, filename, mimeType, buf.length, rel, 'local')
   } catch (e) {
+    // The bytes are already on disk; remove them so a failed insert leaves no orphan file.
+    await unlink(abs).catch(() => {})
     return internalError('signed-upload insert file row', e)
   }
 
