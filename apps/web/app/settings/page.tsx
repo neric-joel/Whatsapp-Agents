@@ -3,8 +3,8 @@ import Link from 'next/link'
 
 import ProvidersPanel from '@/components/ProvidersPanel'
 
-// The root layout's AuthGuard already provides the sidebar + app shell; this page
-// renders only its content pane (a nested AuthGuard double-rendered the sidebar).
+// The root layout's AppShell already provides the sidebar + app shell; this page
+// renders only its content pane (a nested shell would double-render the sidebar).
 export default function SettingsPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[var(--surface)]">

@@ -1,6 +1,11 @@
 import { getDb, intBool, jsonText, newId, nowIso } from '@agentroom/db'
 import type { AgentEvent } from '@agentroom/shared'
-import { detectChallenge, readDiscussionMetadata, runCanary } from '@agentroom/shared'
+import {
+  detectChallenge,
+  isDeniedCommand,
+  readDiscussionMetadata,
+  runCanary,
+} from '@agentroom/shared'
 
 import { getAdapter as defaultGetAdapter } from '../adapters/registry.js'
 import { handleHandoffRequest } from '../agents/handoff.js'
@@ -8,7 +13,6 @@ import { buildContextPacket } from '../context/build-context-packet.js'
 import { maybeScheduleAgentMentionFollowUps } from '../lib/agent-follow-up.js'
 import { sanitizeAgentOutput } from '../lib/agent-output.js'
 import { conclusionDetected } from '../lib/conclusion.js'
-import { isDeniedCommand } from '../lib/denylist.js'
 import { maybeScheduleDiscussionContinuation } from '../lib/discussion-orchestrator.js'
 import { captureError } from '../lib/error-tracking.js'
 import { detectHallucination } from '../lib/hallucination.js'

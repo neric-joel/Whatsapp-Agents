@@ -11,8 +11,9 @@ import { delimiter, isAbsolute, join } from 'node:path'
  *      by cmd.exe / sh, so there is no command-injection surface.
  *   2. The binary is resolved to an absolute path from a trusted source (an
  *      explicit *_BIN env var, or a PATH lookup) — never from agent data.
- *   3. The child environment is allowlisted — secrets (the Supabase service-role
- *      key, bridge config) are never forwarded to a child process.
+ *   3. The child environment is allowlisted — secrets (anything matching
+ *      SECRET_ENV_PATTERN below: *_SECRET / *_TOKEN / SERVICE_ROLE / SUPABASE /
+ *      PRIVATE_KEY / bridge config) are never forwarded to a child process.
  */
 
 export class BinaryNotFoundError extends Error {

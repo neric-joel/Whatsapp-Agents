@@ -41,12 +41,14 @@ describe('isForbiddenCrossOrigin', () => {
     expect(isForbiddenCrossOrigin(req('DELETE', {}))).toBe(true)
   })
 
-  it('exempts Bearer-authenticated requests (not CSRF-prone)', () => {
+  it('no longer exempts Bearer requests — a cross-origin Bearer POST is still rejected', () => {
+    // The Bearer escape hatch was removed in v1.4 (auth is a no-op constant; nothing sends an
+    // inbound Bearer). The same-origin check now applies uniformly to every mutating request.
     expect(
       isForbiddenCrossOrigin(
         req('POST', { authorization: 'Bearer abc.def', origin: 'https://evil.example.com' }),
       ),
-    ).toBe(false)
+    ).toBe(true)
   })
 
   it('honors EXTRA_ALLOWED_ORIGINS', () => {

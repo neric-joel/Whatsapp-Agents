@@ -3,7 +3,7 @@ import 'katex/dist/katex.min.css'
 
 import { DM_Sans, JetBrains_Mono } from 'next/font/google'
 
-import AuthGuard from '@/components/AuthGuard'
+import AppShell from '@/components/AppShell'
 import { ToastProvider } from '@/contexts/ToastContext'
 
 // Self-hosted via next/font (downloaded at build, served from /_next). This removes the
@@ -28,7 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <body className="flex h-screen flex-row overflow-hidden bg-[var(--app-bg)] font-sans text-[var(--text)]">
         <ToastProvider>
-          <AuthGuard>{children}</AuthGuard>
+          <AppShell>{children}</AppShell>
         </ToastProvider>
       </body>
     </html>

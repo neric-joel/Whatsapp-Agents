@@ -81,7 +81,9 @@ class TimeoutSubprocessAdapter extends TestSubprocessAdapter {
   }
 
   protected getTimeoutMs(): number {
-    return 25
+    // 200ms (not 25ms) so OS scheduler jitter on a loaded CI box can't let the child's
+    // first output beat the timeout — the child (setInterval) never exits on its own.
+    return 200
   }
 }
 
@@ -142,7 +144,7 @@ test('subprocess adapter returns a timeout error instead of hanging', async () =
   assert.deepEqual(events[0], {
     type: 'error',
     run_id: 'run-1',
-    message: "Adapter 'test' timed out after 25ms.",
+    message: "Adapter 'test' timed out after 200ms.",
   })
 })
 

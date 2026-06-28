@@ -8,12 +8,18 @@ import type { AgentEvent, ContextPacketV1 } from '@agentroom/shared'
 
 // Isolate config.json in a throwaway home BEFORE importing the modules that read it.
 const tmp = mkdtempSync(join(tmpdir(), 'agentroom-cliprofile-'))
+const prevHome = process.env['AGENTROOM_HOME']
 process.env['AGENTROOM_HOME'] = tmp
 
 const { upsertProfile } = await import('@agentroom/db')
 const { CliProfileAdapter } = await import('../src/adapters/cli-profile-adapter.js')
 
-after(() => rmSync(tmp, { recursive: true, force: true }))
+after(() => {
+  rmSync(tmp, { recursive: true, force: true })
+  // Restore AGENTROOM_HOME so a future parallel runner can't see this deleted temp dir.
+  if (prevHome === undefined) delete process.env['AGENTROOM_HOME']
+  else process.env['AGENTROOM_HOME'] = prevHome
+})
 
 // A generic CLI that reads the prompt from stdin and prints a reply, echoing FOO so
 // per-profile env injection can be asserted.

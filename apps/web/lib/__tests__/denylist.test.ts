@@ -1,6 +1,5 @@
+import { isDeniedCommand } from '@agentroom/shared'
 import { describe, expect, it } from 'vitest'
-
-import { isDeniedCommand } from '../../../../bridge/src/lib/denylist'
 
 describe('isDeniedCommand', () => {
   it('blocks rm -rf', () => {

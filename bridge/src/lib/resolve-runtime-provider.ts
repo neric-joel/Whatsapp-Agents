@@ -42,8 +42,8 @@ export async function resolveRuntimeProvider({
   if (!credentialId || !ownerUserId) return null // no bound credential → host login
   if (!hasCredentialKey(env)) return null // feature disabled (no decryption key)
 
-  // Owner-scoped load: the credential must belong to the agent's creator. Service-role
-  // read; RLS would also deny cross-user, this is defense-in-depth at the query.
+  // Owner-scoped load: the credential must belong to the agent's creator — the WHERE clause
+  // enforces it (the local app has no RLS, so this query is the authorization boundary).
   const db = getDb()
   const data = db
     .prepare(

@@ -17,6 +17,7 @@ const HEARTBEAT_MS = env.BRIDGE_HEARTBEAT_INTERVAL_MS
 const STALE_MS = env.BRIDGE_STALE_RUN_TIMEOUT_MS
 const STALE_SWEEP_MS = Math.max(HEARTBEAT_MS, Math.min(STALE_MS, 30000))
 const HEALTH_PORT = env.BRIDGE_HEALTH_PORT
+const HEALTH_HOST = env.BRIDGE_HEALTH_HOST
 
 const activeRuns = new Set<string>()
 const startedAt = Date.now()
@@ -107,7 +108,9 @@ async function main() {
     healthServer.on('error', (err: NodeJS.ErrnoException) =>
       log('error', 'health.listen.error', { port: HEALTH_PORT, error: err.message }),
     )
-    healthServer.listen(HEALTH_PORT, () => log('info', 'health.listening', { port: HEALTH_PORT }))
+    healthServer.listen(HEALTH_PORT, HEALTH_HOST, () =>
+      log('info', 'health.listening', { host: HEALTH_HOST, port: HEALTH_PORT }),
+    )
   }
 
   await recoverStaleRunsOnce('stale: recovered on startup')
@@ -129,10 +132,9 @@ async function main() {
     )
   }, STALE_SWEEP_MS)
 
-  // Graceful shutdown for `docker stop` (SIGTERM) / Ctrl-C (SIGINT): stop the loops
-  // so no new runs are claimed, then exit. An in-flight run is NOT drained — on the
-  // next startup stale-run recovery marks it `failed` (it is not auto-retried), so a
-  // user can re-send. A multi-worker deploy keeps serving during one worker's restart.
+  // Graceful shutdown on Ctrl-C (SIGINT) / SIGTERM: stop the loops so no new runs are
+  // claimed, then exit. An in-flight run is NOT drained today — on the next startup
+  // stale-run recovery marks it `failed` (it is not auto-retried), so the user can re-send.
   let shuttingDown = false
   const shutdown = (signal: NodeJS.Signals) => {
     if (shuttingDown) return

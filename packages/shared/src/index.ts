@@ -2,6 +2,7 @@ export const AGENTROOM_VERSION = '0.1.0'
 
 export * from './canary.js'
 export * from './commands.js'
+export * from './denylist.js'
 // NOTE: credential-crypto is intentionally NOT re-exported here — it imports
 // `node:crypto`, which would poison the browser bundle (the barrel is imported by
 // client code via slash-commands). Server code imports it from the subpath

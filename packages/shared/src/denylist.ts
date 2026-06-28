@@ -1,3 +1,7 @@
+// Destructive-command denylist for the tool-approval path (used by the bridge's tool-exec
+// guard). Pure string/regex matching with no Node imports, so it lives in @agentroom/shared
+// and can be imported by either workspace without reaching across a package boundary.
+
 const DENIED_SUBSTRINGS = [
   'rm -rf',
   'rm -r /',

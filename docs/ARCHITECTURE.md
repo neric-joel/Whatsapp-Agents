@@ -1,11 +1,10 @@
 # Architecture
 
-> **Heads up — local-only update.** AgentRoom is now a **local, single-user** app: state
-> lives in a local SQLite database + files folder (`@agentroom/db`, under `~/.agentroom`),
-> there is **no Supabase, no Docker, and no login**, and realtime is short-interval
-> polling of the Next.js API. The component shapes (chat UI → API → `agent_runs` queue →
-> bridge → CLIs) are unchanged; sections below that mention Supabase/Postgres/Auth/Realtime
-> describe the prior hosted design and are kept as history. For connecting CLIs see
+> **Heads up — local-only.** AgentRoom is a **local, single-user** app: state lives in a
+> local SQLite database + files folder (`@agentroom/db`, under `~/.agentroom`), there is
+> **no Supabase, no Docker, and no login**, and "realtime" is short-interval polling of
+> the Next.js API. The component shapes (chat UI → API → `agent_runs` queue → bridge →
+> CLIs) are unchanged. For connecting CLIs see
 > [CONNECTING_CLIS.md](CONNECTING_CLIS.md); for the quickstart see the [README](../README.md).
 
 AgentRoom is a WhatsApp/Slack-style group chat where LLM command-line tools are
@@ -22,41 +21,34 @@ For operations see [OBSERVABILITY.md](OBSERVABILITY.md); for setup see
 | Component | Tech | Responsibility |
 |---|---|---|
 | **Web** (`apps/web`) | Next.js App Router, TypeScript, Tailwind | Chat UI + API route handlers; the only writer of `messages`/`agent_runs` |
-| **Supabase** | Postgres + Auth + Realtime + Storage | Data, auth, row-level security, realtime broadcast, file storage; **the work queue is the `agent_runs` table** |
+| **DB** (`packages/db`) | local SQLite (better-sqlite3) | Data + file metadata + the `config.json` of connected CLIs, all under `~/.agentroom`; **the work queue is the `agent_runs` table** |
 | **Bridge** (`bridge`) | Node.js + TypeScript (run via tsx) | Polls the queue, builds the context packet, runs agent CLIs as subprocesses, writes replies back |
 | **Shared** (`packages/shared`) | TypeScript (ESM) | Types + helpers shared by web + bridge (`ContextPacketV1`, `AgentEvent`, logger, redaction, error tracking) |
-| **Agent CLIs** | external binaries | Claude Code, Codex CLI, and a mock adapter |
+| **Agent CLIs** | external binaries | Claude Code, Codex CLI, any bring-your-own CLI, and a mock adapter |
 
 ## Data-flow
 
 ```mermaid
 flowchart TD
-  Browser["Browser (chat UI)"]
-  subgraph Supabase
-    PG[("Postgres: rooms, agents, room_members,\nmessages, agent_runs, tool_calls,\nfiles, pinned_items")]
-    RT["Realtime"]
-    AU["Auth"]
-    ST["Storage"]
-  end
+  Browser["Local browser (chat UI)"]
+  DB[("Local SQLite (@agentroom/db): rooms, agents,\nroom_members, messages, agent_runs, tool_calls,\nfiles, pinned_items — under ~/.agentroom")]
   RH["Next.js route handlers\n(apps/web/app/api/*)"]
   Bridge["Bridge daemon\n(polls agent_runs)"]
-  CLIs["Agent CLIs\n(claude / codex / mock)"]
+  CLIs["Agent CLIs\n(claude / codex / byo / mock)"]
 
-  Browser -- "auth + realtime subscribe" --> Supabase
+  Browser -- "fetch + short-interval poll for new rows" --> RH
   Browser -- "POST message" --> RH
-  RH -- "insert message + one agent_runs row\nper active unmuted agent (status=queued)" --> PG
-  PG -- "queued runs" --> Bridge
-  Bridge -- "claim → running → completed/failed/cancelled\n+ insert agent reply into messages" --> PG
+  RH -- "read/write rows; insert message +\none agent_runs row per active unmuted\nagent (status=queued)" --> DB
+  DB -- "queued runs" --> Bridge
+  Bridge -- "claim → running → completed/failed/cancelled\n+ insert agent reply into messages" --> DB
   Bridge -- "ContextPacketV1 via stdin / control" --> CLIs
   CLIs -- "AgentEvent stream via stdout" --> Bridge
-  PG -- "broadcast new rows" --> RT
-  RT -- "live updates" --> Browser
 ```
 
-**Write-path rule (invariant):** Browser → Next.js route handler → Supabase rows →
-Bridge. **The browser never writes `agent_runs` or `messages` directly** — RLS
-enforces this. The browser only reads (subject to membership) and calls authenticated
-route handlers for mutations.
+**Write-path rule (invariant):** Browser → Next.js route handler → local SQLite
+(`@agentroom/db`) → Bridge. **The browser never writes `agent_runs` or `messages`
+directly** — it has no database access at all and only talks to the route handlers,
+which own every write.
 
 ## The `agent_runs` queue contract
 
@@ -68,9 +60,9 @@ queued → claimed → running → (completed | failed | cancelled)
 
 - A user message POST inserts one `agent_runs` row (`status='queued'`) per active,
   unmuted, reply-enabled agent (or only mentioned agents for `@mentions`).
-- The bridge **atomically claims** a run with a conditional update
-  (`update(status='claimed').eq('status','queued')`) so only one worker wins — no
-  double-processing.
+- The bridge **atomically claims** a run with a conditional SQL update
+  (`UPDATE agent_runs SET status='claimed' … WHERE id=? AND status='queued'`) so only
+  one worker wins — no double-processing.
 - It then moves `claimed → running`, builds the context packet, runs the adapter,
   and on success inserts the agent reply into `messages` and marks the run
   `completed`. Any error → `failed` (with a redacted `error_message`); a user cancel →
@@ -89,7 +81,7 @@ Adapters live in `bridge/src/adapters/` and are selected by `adapter_type` in
 `registry.ts`. Each implements `AgentAdapter.run(packet, signal)` and **yields the
 `AgentEvent` union** (`final_response`, `visible_message`, `error`,
 `tool_call_requested`, `partial_content`, `memory_op` (Phase 9), and
-`handoff_requested` (Phase 10)). Adapters **never write to Supabase
+`handoff_requested` (Phase 10)). Adapters **never write to the database
 directly** — the run worker (`workers/run-worker.ts`) owns all persistence.
 
 `SubprocessAdapter` is the base for CLI-backed agents: it resolves an allowlisted
@@ -154,8 +146,9 @@ ranks them; `allowedCommands`/`formatHelp` drive `/help`, which lists **exactly*
 caller's permitted commands. Member-level commands need only room membership;
 admin-only commands (currently `/reset`) are enforced **server-side** — the
 `/reset` route calls `requireRoomAdmin`, so a `member` is rejected with 403 even if the
-UI did not hide the command. The parser never bypasses RLS or the tool-approval flow;
-unknown/over-privileged commands get a friendly rejection rather than being sent.
+UI did not hide the command. The parser never bypasses the role check or the
+tool-approval flow; unknown/over-privileged commands get a friendly rejection rather
+than being sent.
 
 **`/reset`** clears a room's *rolling agent context* without deleting data: it stamps
 `rooms.context_reset_at`, and the bridge context builder only includes messages created
@@ -166,7 +159,7 @@ at/after that watermark. The transcript stays intact and the action is reversibl
 Beyond adding seeded agents to a room, admins can author new agents:
 `POST /api/agents` (create + attach to a room), `PATCH/DELETE /api/agents/[agentId]`
 (edit / disable). **RBAC:** create requires `requireRoomAdmin` on the target room;
-edit/disable require being the agent's creator (`created_by_user_id = auth.uid()`).
+edit/disable require being the agent's creator (`created_by_user_id` = the local user).
 Seeded agents (`created_by_user_id IS NULL`) are not editable. `DELETE` disables
 (`is_active = false`) rather than hard-deleting, so it is reversible.
 
@@ -180,32 +173,42 @@ the approval gate.
 
 ## Trust boundaries
 
-- **Browser ↔ web**: untrusted client. Auth (Supabase) + RLS + per-route
-  authorization + Origin/CSRF checks + rate limiting + input validation (zod).
-- **Web/bridge ↔ Supabase**: the `SUPABASE_SERVICE_ROLE_KEY` is **server-only** and
-  never reaches the browser bundle. The browser uses the publishable key + RLS.
+AgentRoom is single-user and local: there are no accounts, no login, and no
+network-facing service. A fixed `LOCAL_USER_ID` (`@agentroom/db`) is "the user" and
+owns everything, so there is no auth/RLS layer to defend — the boundaries that remain
+are about what reaches the local CLIs.
+
+- **Browser ↔ web**: the browser only calls the route handlers (it has no database
+  access). Mutations still go through Origin/CSRF checks, rate limiting, and input
+  validation (zod). The per-room `MemberRole` check gates admin-only commands
+  server-side.
+- **Web/bridge ↔ data**: both processes read/write the same local SQLite DB + files
+  folder under `~/.agentroom`; nothing leaves `localhost`.
 - **Bridge ↔ agent CLIs**: the bridge runs CLIs **on its host**. This is the sharpest
-  boundary — see [SECURITY.md](../SECURITY.md) for the subprocess sandbox and the
-  "run only where you trust the participants" rule. The default Docker bridge image
-  ships the mock adapter only.
+  boundary — see [SECURITY.md](../SECURITY.md) for the subprocess sandbox (no shell,
+  static argv, an allowlisted/secret-stripped child environment, an output cap, and
+  process-tree kill on timeout/abort) and the "run only where you trust the
+  participants" rule.
 - **Bridge ↔ third parties**: optional OpenAI image-text egress, off by default.
 
 ## Environment variables
 
-The **core connection variables** (Supabase URL + keys) are validated at boot with
-zod — a missing/invalid value fails fast and names itself. The remaining variables are
-read with safe in-code defaults (shown below). Keep `.env.example` files
-authoritative. **Never commit real secrets.**
+**All env is optional.** A local single-user app has no required keys — no Supabase, no
+auth, no accounts. Both processes run with safe in-code defaults and store everything
+locally via `@agentroom/db`. The boot validators only sanity-check the few values they
+read: the web validator (`apps/web/lib/env.ts`) validates `NEXT_PUBLIC_APP_URL` and
+`AGENTROOM_HOME` (both optional), and the bridge validator (`bridge/src/lib/env.ts`)
+checks the `BRIDGE_*` values parse, naming any invalid one. Keep the `.env.example`
+files authoritative. **Never commit real secrets.**
 
 ### Web (`apps/web/.env.local`)
 
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | yes | — | Supabase URL (baked into the browser bundle at build time; must be browser-reachable) |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | yes | — | Publishable/anon key for the browser client. **Never use the deprecated `…_ANON_KEY` name** |
-| `SUPABASE_SERVICE_ROLE_KEY` | yes | — | **Server-only** service-role key (route handlers). Never exposed to the browser |
-| `NEXT_PUBLIC_APP_URL` | no | — (no runtime fallback) | App origin added to the CSRF/Origin allowlist. Unset ⇒ the app origin is simply not in the allowlist, so set it outside local dev. (The Docker build sets it as a build arg.) |
-| `EXTRA_ALLOWED_ORIGINS` | no | — | Comma-separated extra origins allowed for mutating requests (reverse proxies) |
+| `AGENTROOM_HOME` | no | `%APPDATA%\AgentRoom` (Windows) / `~/.agentroom` | Where local app-data lives (SQLite DB + uploaded files + `config.json`). Set to relocate it; must match the bridge |
+| `NEXT_PUBLIC_APP_URL` | no | — | App origin added to the CSRF/Origin allowlist and used for absolute URLs (set it behind a reverse proxy) |
+| `EXTRA_ALLOWED_ORIGINS` | no | — | Comma-separated extra origins allowed for mutating requests (reverse proxies). The app's own origin is always allowed |
+| `CREDENTIAL_ENCRYPTION_KEY` | conditional | — | **Server-only** 32-byte key (64-hex or base64) that encrypts BYO provider credentials before storage. **Required only to enable the BYO-credentials feature**; must match the bridge's value |
 | `LOG_LEVEL` | no | `info` | `debug` \| `info` \| `warn` \| `error` |
 | `SENTRY_DSN` / `ERROR_TRACKING_DSN` | no | — | Opt-in error tracking; no-op (and no egress) when unset |
 
@@ -213,24 +216,25 @@ authoritative. **Never commit real secrets.**
 
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
-| `SUPABASE_URL` | yes | — | Supabase URL the bridge connects to |
-| `SUPABASE_SERVICE_ROLE_KEY` | yes | — | Server-only service-role key (the bridge writes runs/messages) |
+| `AGENTROOM_HOME` | no | `%APPDATA%\AgentRoom` (Windows) / `~/.agentroom` | Where local app-data lives. Must match the web app |
 | `BRIDGE_WORKER_ID` | no | `bridge-local-1` | Identifies this worker in logs/claims |
 | `BRIDGE_POLL_INTERVAL_MS` | no | `2000` | Queue poll interval |
 | `BRIDGE_MAX_CONCURRENT_RUNS` | no | `3` | Max runs processed at once |
 | `BRIDGE_HEARTBEAT_INTERVAL_MS` | no | `5000` | Heartbeat write interval for active runs |
 | `BRIDGE_STALE_RUN_TIMEOUT_MS` | no | `60000` | A run with an older/`null` heartbeat is recovered as `failed` |
-| `BRIDGE_HEALTH_PORT` | no | `9090` | Liveness/metrics HTTP port (`/healthz`, `/metrics`); `0` disables. Bind internal-only |
-| `LOG_LEVEL` | no | `info` | Log level |
-| `SENTRY_DSN` / `ERROR_TRACKING_DSN` | no | — | Opt-in error tracking |
-| `CLAUDE_BIN` / `CODEX_BIN` | no | command name on `PATH` | Path/command for the agent CLIs the bridge spawns |
+| `BRIDGE_HEALTH_PORT` | no | `9090` | Liveness/metrics HTTP port (`/healthz`, `/metrics`); `0` disables |
+| `BRIDGE_HEALTH_HOST` | no | `127.0.0.1` | Host the liveness/metrics server binds to. Loopback by default (the endpoints are unauthenticated) |
+| `CLAUDE_BIN` / `CODEX_BIN` | no | command name on `PATH` | Path/command for the agent CLIs the bridge spawns (`*_BIN` overrides) |
 | `ENABLE_IMAGE_TEXT_EXTRACTION` | no | `false` | Enable OpenAI image-text egress (**off by default**) |
 | `OPENAI_API_KEY` | conditional | — | Required only if image-text extraction is enabled |
 | `OPENAI_VISION_MODEL` | no | `gpt-4.1-mini` | Vision model for extraction |
-| `BRIDGE_CHILD_ENV_ALLOW` | no | — | Comma-separated extra env names forwarded to child CLIs. Secrets (`SUPABASE_*`, `*_TOKEN`, `*_SECRET`, `BRIDGE_*`) are **never** forwarded |
+| `CREDENTIAL_ENCRYPTION_KEY` | conditional | — | 32-byte key (64-hex or base64) that decrypts user-stored BYO credentials at spawn. Required only for the BYO-credentials feature; must match the web app's value. Never logged |
+| `BRIDGE_CHILD_ENV_ALLOW` | no | — | Comma-separated extra env names forwarded to child CLIs. Secrets (matching `SUPABASE`/`SERVICE_ROLE`/`SECRET`/`PASSWORD`/`PRIVATE_KEY`/`BRIDGE_*`/`*_TOKEN`/`TOKEN`) are **never** forwarded |
+| `LOG_LEVEL` | no | `info` | Log level |
+| `SENTRY_DSN` / `ERROR_TRACKING_DSN` | no | — | Opt-in error tracking |
 
 ## Further reading
 
 - [OBSERVABILITY.md](OBSERVABILITY.md) — logging, health, metrics, reliability.
-- [SELF_HOSTING.md](SELF_HOSTING.md) — local Docker default + self-hosted Supabase.
+- [SELF_HOSTING.md](SELF_HOSTING.md) — running it locally (there is nothing to host).
 - [adr/](adr/) — architecture decision records.

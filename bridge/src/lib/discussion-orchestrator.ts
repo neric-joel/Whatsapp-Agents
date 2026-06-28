@@ -8,7 +8,6 @@ import {
   type CrossReviewPair,
   type DiscussCommand,
   DISCUSSION_MAX_PHASES,
-  type DiscussionPhase,
   discussionStageNumber,
   formatBlackboard,
   nextDiscussionStage,
@@ -186,7 +185,9 @@ export async function maybeScheduleDiscussionContinuation({
   if (nextRoundIndex >= ABS_MAX_DISCUSSION_ROUNDS) return
   if (nextStageNumber > DISCUSSION_MAX_PHASES) return
 
-  // 5. Idempotency pre-check (the partial unique index is the hard backstop).
+  // 5. Idempotency pre-check. The single local bridge runs better-sqlite3 synchronously, so this
+  //    SELECT-then-INSERT executes atomically within one run's turn — it is the sole guard against
+  //    a duplicate next-phase fan-out (there is no multi-worker topology in the local app).
   const existing = db
     .prepare(
       `SELECT id FROM messages
@@ -318,7 +319,8 @@ export async function maybeScheduleDiscussionContinuation({
         jsonText(nextMetadata),
       ) as { id: string } | undefined
   } catch (nextMessageError) {
-    if ((nextMessageError as { code?: string })?.code === 'SQLITE_CONSTRAINT_UNIQUE') return // lost the idempotency race — fine
+    // Belt-and-suspenders: only fires if a UNIQUE index is ever added on the discussion key.
+    if ((nextMessageError as { code?: string })?.code === 'SQLITE_CONSTRAINT_UNIQUE') return
     throw nextMessageError
   }
   if (!nextMessage) return
