@@ -464,6 +464,24 @@ test('a cancel that lands after the adapter finishes does NOT post a reply (A2)'
   assert.equal(snapshotCounters().runs_completed, 0)
 })
 
+test('an external abort (bridge shutdown) cancels the run without posting a reply (A3)', async () => {
+  seedWorld()
+  const adapter = fakeAdapter(async function* (packet) {
+    yield {
+      type: 'final_response',
+      run_id: packet.run_id,
+      response: { schema_version: 1, run_id: packet.run_id, content: 'reply' },
+    }
+  })
+  const external = new AbortController()
+  external.abort() // simulate the daemon aborting this run on shutdown before it finalizes
+  await processRun('run-1', { getAdapter: () => adapter, signal: external.signal })
+
+  assert.equal(runRow().status, 'cancelled', 'an externally-aborted run finalizes cancelled')
+  assert.equal(agentReplies().length, 0, 'no reply is posted for an aborted run')
+  assert.equal(snapshotCounters().runs_cancelled, 1)
+})
+
 test('cancellation mid-run → run marked cancelled, child aborted, not re-thrown', async () => {
   seedWorld()
   // Adapter waits for the abort signal (the cancellation watcher flips the controller).
