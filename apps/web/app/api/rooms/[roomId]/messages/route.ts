@@ -3,6 +3,7 @@ import {
   buildDiscussionStagePrompt,
   type DiscussionMode,
   parseDiscussionRequest,
+  parseMentions,
   selectCoordinatorIndex,
 } from '@agentroom/shared'
 import { NextRequest } from 'next/server'
@@ -13,7 +14,6 @@ import { apiError, apiSuccess } from '@/lib/api-error'
 import { assertSameOrigin, enforceRateLimit, internalError } from '@/lib/api-security'
 import { sendMessageSchema } from '@/lib/api-validation'
 import { getAuthenticatedUser } from '@/lib/auth'
-import { parseMentions } from '@/lib/mention-parser'
 import { stripServerOwnedMetadata } from '@/lib/message-metadata'
 import { requireRoomMember, requireRoomOwner } from '@/lib/permissions'
 import { clearRoomChat } from '@/lib/room-chat-management'

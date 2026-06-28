@@ -1,8 +1,8 @@
 import { getDb, jsonText, newId } from '@agentroom/db'
+import { normalizeSlug } from '@agentroom/shared'
 import { z } from 'zod'
 
 import { log } from '../lib/logger.js'
-import { normalizeSlug } from '../lib/mention-parser.js'
 
 type DiscussionMode = 'independent' | 'tag_turns'
 

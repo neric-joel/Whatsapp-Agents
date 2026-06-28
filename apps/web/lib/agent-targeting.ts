@@ -1,4 +1,4 @@
-import type { ParsedMention } from './mention-parser'
+import type { ParsedMention } from '@agentroom/shared'
 
 interface TargetableAgent {
   agent_id: string

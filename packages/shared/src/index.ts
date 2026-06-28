@@ -10,6 +10,7 @@ export * from './denylist.js'
 export * from './error-tracking.js'
 export * from './logger.js'
 export * from './memory-scan.js'
+export * from './mention-parser.js'
 export * from './redact.js'
 // ADR-0011 team-collaboration /discuss + adversarial /debate phase machine. Owns DiscussionPhase.
 export * from './discussion.js'

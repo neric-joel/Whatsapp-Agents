@@ -1,6 +1,5 @@
+import { parseMentions } from '@agentroom/shared'
 import { describe, expect, it } from 'vitest'
-
-import { parseMentions } from '../mention-parser'
 
 const agents = [
   { id: 'a1', slug: 'claude_thinker' },

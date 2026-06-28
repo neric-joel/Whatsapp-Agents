@@ -1,6 +1,5 @@
 import { getDb, newId } from '@agentroom/db'
-
-import { parseMentions } from './mention-parser.js'
+import { parseMentions } from '@agentroom/shared'
 
 type DiscussionMode = 'independent' | 'tag_turns'
 
