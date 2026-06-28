@@ -3,19 +3,6 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-// @vercel/nft statically evaluates os.homedir() during the build trace and scandir's the result.
-// On Windows that hits the ACL-protected `Application Data` junction in the real user profile and
-// fails the build with EPERM (CI = Linux never sees it). Point THIS build process's home env at an
-// empty throwaway dir so the trace scans a safe folder instead. next.config.mjs is loaded only by
-// `next build` (this process); `next start` runs in a separate process, so the app's runtime
-// home/app-data resolution (~/.agentroom) is unchanged. This replaces the Next-14-era
-// `outputFileTracing: false` workaround and is version-agnostic — it survives the removal of that
-// option in Next 16 and works whether or not the trace runs.
-const buildTraceHome = path.join(os.tmpdir(), 'agentroom-build-trace-home')
-fs.mkdirSync(buildTraceHome, { recursive: true })
-process.env.HOME = buildTraceHome
-process.env.USERPROFILE = buildTraceHome
-
 // Pragmatic CSP for a LOCAL single-user app. Everything is same-origin now (no
 // Supabase REST/realtime/storage), so connect-src is just 'self'. script/style
 // allow 'unsafe-inline' because the App Router emits inline bootstrap without
@@ -76,4 +63,23 @@ const nextConfig = {
   },
 }
 
-export default nextConfig
+// Exported as a phase function so the @vercel/nft Windows-EPERM workaround runs ONLY during the
+// production build, never at runtime. @vercel/nft statically evaluates os.homedir() while tracing
+// and scandir's it; on Windows that hits the ACL-protected `Application Data` junction and fails
+// the build with EPERM (CI = Linux never sees it). Pointing the BUILD process's home env at an
+// empty throwaway dir makes the trace scan a safe folder instead. This is gated on the production-
+// build phase: `next start` and `next dev` load this same config module, so an unconditional
+// top-level mutation would (wrongly) redirect os.homedir() at RUNTIME — breaking ~/.agentroom data
+// resolution (POSIX) and the working_dir allow-root (Windows). Replaces the Next-14-era
+// `outputFileTracing: false`, which is removed in Next 16.
+export default function nextConfigFn(phase) {
+  // 'phase-production-build' === PHASE_PRODUCTION_BUILD (from 'next/constants'); compared as a
+  // literal to avoid importing a CJS module into this ESM config.
+  if (phase === 'phase-production-build') {
+    const buildTraceHome = path.join(os.tmpdir(), 'agentroom-build-trace-home')
+    fs.mkdirSync(buildTraceHome, { recursive: true })
+    process.env.HOME = buildTraceHome
+    process.env.USERPROFILE = buildTraceHome
+  }
+  return nextConfig
+}
