@@ -112,6 +112,52 @@ test('deleteProfile removes by id and reports whether anything was removed', () 
   assert.equal(deleteProfile('nope'), false)
 })
 
+test('legacy gemini profiles get their stray `--prompt -` args repaired on read', () => {
+  writeFileSync(
+    configPath(),
+    JSON.stringify({
+      version: 1,
+      clis: [
+        // Exact pre-v1.4.2 catalog snapshot → must be repaired.
+        {
+          id: 'g1',
+          name: 'Gemini CLI',
+          slug: 'gemini',
+          bin: 'gemini',
+          args: ['--prompt', '-'],
+          kind: 'generic',
+        },
+        // Same args under a different slug → deliberate custom config, untouched.
+        {
+          id: 'c1',
+          name: 'Custom',
+          slug: 'mycli',
+          bin: 'mycli',
+          args: ['--prompt', '-'],
+          kind: 'generic',
+        },
+        // Gemini with user-customized args → untouched.
+        {
+          id: 'g2',
+          name: 'Gemini tuned',
+          slug: 'gemini',
+          bin: 'gemini',
+          args: ['--prompt', 'Be terse.'],
+          kind: 'generic',
+        },
+      ],
+    }),
+    'utf8',
+  )
+  const clis = readConfig().clis
+  assert.deepEqual(clis.find((c) => c.id === 'g1')?.args, [
+    '--prompt',
+    'Reply to the conversation above.',
+  ])
+  assert.deepEqual(clis.find((c) => c.id === 'c1')?.args, ['--prompt', '-'])
+  assert.deepEqual(clis.find((c) => c.id === 'g2')?.args, ['--prompt', 'Be terse.'])
+})
+
 test('readConfig tolerates a corrupt file and drops malformed entries', () => {
   writeFileSync(configPath(), '{ this is not json', 'utf8')
   assert.deepEqual(readConfig().clis, [])

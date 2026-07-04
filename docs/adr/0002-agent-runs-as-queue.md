@@ -1,6 +1,9 @@
 # 0002 — `agent_runs` table is the work queue (no Redis)
 
-- **Status:** Accepted
+- **Status:** Accepted — amended 2026-07-03: the decision survives the v1.2.0
+  local-only rewrite ([ADR-0013](0013-local-only-rewrite.md)). `agent_runs` is now a
+  **SQLite** table; the atomic claim is a raw conditional `UPDATE … WHERE
+  status='queued'`; run cards update via client polling, not Realtime.
 - **Date:** 2026-05-08
 
 ## Context

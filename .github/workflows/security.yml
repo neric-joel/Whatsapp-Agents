@@ -25,7 +25,8 @@ jobs:
 
   audit:
     runs-on: ubuntu-latest
-    # Informational until the next@15 upgrade lands (see PROGRESS.md decision D3).
+    # Informational (decision D3, docs/adr/0009-v1.0.1-deferred-gates.md): the remaining
+    # advisory is in the dev-only test toolchain (vite via vitest), tracked as issue #78.
     continue-on-error: true
     steps:
       - uses: actions/checkout@v7

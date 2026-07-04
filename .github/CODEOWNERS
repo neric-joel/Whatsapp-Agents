@@ -5,9 +5,9 @@
 # Default owner for everything in the repo.
 *                       @neric-joel
 
-# Security-sensitive areas (subprocess execution, auth/RLS, CI/security).
+# Security-sensitive areas (subprocess execution, working-dir validation, CI/security).
 /bridge/src/adapters/   @neric-joel
 /bridge/src/lib/        @neric-joel
-/supabase/              @neric-joel
+/packages/db/           @neric-joel
 /apps/web/lib/          @neric-joel
 /.github/               @neric-joel

@@ -53,6 +53,22 @@ function isCliKind(v: unknown): v is CliKind {
   return v === 'claude-code' || v === 'codex-cli' || v === 'generic'
 }
 
+/**
+ * One-time arg repair for gemini profiles created from the pre-v1.4.2 catalog.
+ * The old defaultArgs `['--prompt', '-']` sent a stray literal `-` to the model on
+ * every reply (gemini appends the --prompt value to the stdin input). Profiles
+ * snapshot catalog args at connect time, so stored configs keep the bug forever
+ * without this rewrite. Applied on every read (idempotent, in-memory); matches
+ * ONLY the exact old catalog snapshot so a deliberate custom `-` arg on a
+ * differently-named profile is untouched.
+ */
+function repairLegacyGeminiArgs(slug: string, args: string[]): string[] {
+  if (slug === 'gemini' && args.length === 2 && args[0] === '--prompt' && args[1] === '-') {
+    return ['--prompt', 'Reply to the conversation above.']
+  }
+  return args
+}
+
 /** Coerce an unknown parsed object into a valid AppConfig, dropping junk entries. */
 function normalize(raw: unknown): AppConfig {
   if (!raw || typeof raw !== 'object') return { ...EMPTY_CONFIG }
@@ -65,12 +81,16 @@ function normalize(raw: unknown): AppConfig {
     if (typeof p.id !== 'string' || typeof p.name !== 'string' || typeof p.bin !== 'string') {
       continue
     }
+    const slug = typeof p.slug === 'string' ? p.slug : p.id
+    const args = Array.isArray(p.args)
+      ? p.args.filter((a): a is string => typeof a === 'string')
+      : []
     out.push({
       id: p.id,
       name: p.name,
-      slug: typeof p.slug === 'string' ? p.slug : p.id,
+      slug,
       bin: p.bin,
-      args: Array.isArray(p.args) ? p.args.filter((a): a is string => typeof a === 'string') : [],
+      args: repairLegacyGeminiArgs(slug, args),
       ...(p.env && typeof p.env === 'object' && !Array.isArray(p.env)
         ? { env: p.env as Record<string, string> }
         : {}),

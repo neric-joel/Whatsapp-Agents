@@ -58,7 +58,11 @@ export const KNOWN_CLIS: KnownCli[] = [
     name: 'Gemini CLI',
     slug: 'gemini',
     command: 'gemini',
-    defaultArgs: ['--prompt', '-'],
+    // `--prompt <text>` runs gemini headless, and per `gemini --help` the text is
+    // "appended to input on stdin (if any)" — the room context arrives on stdin, so
+    // the flag's value must be a meaningful trailing instruction, not a placeholder
+    // (a bare '-' would be appended to the prompt as a literal stray token).
+    defaultArgs: ['--prompt', 'Reply to the conversation above.'],
     kind: 'generic',
     authHint:
       'Uses your existing Gemini CLI login (run `gemini` once to authenticate, or set GEMINI_API_KEY).',

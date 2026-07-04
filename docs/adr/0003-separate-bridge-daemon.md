@@ -1,6 +1,9 @@
 # 0003 — A separate bridge daemon runs agent CLIs
 
-- **Status:** Accepted
+- **Status:** Accepted — amended 2026-07-03: still the architecture after the v1.2.0
+  local-only rewrite ([ADR-0013](0013-local-only-rewrite.md)). Web and bridge now
+  communicate through the shared **local SQLite** DB; there is no auth/RLS tier, no
+  service-role key, and no Docker deployment.
 - **Date:** 2026-05-08
 
 ## Context

@@ -6,10 +6,9 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       // Scope coverage to unit-testable business logic. API routes are exercised
-      // by Playwright e2e (Phase 3), and thin Supabase client factories / barrel
-      // files have no logic worth unit-covering.
+      // by Playwright e2e; barrel files have no logic worth unit-covering.
       include: ['lib/**/*.ts'],
-      exclude: ['lib/**/__tests__/**', 'lib/supabase/**', 'lib/**/*.d.ts'],
+      exclude: ['lib/**/__tests__/**', 'lib/**/*.d.ts'],
       reporter: ['text-summary', 'html'],
       // Realistic floor on the risk-area logic (baseline ~85% lines). Ratchet up
       // as coverage grows; CI fails if it regresses below these.

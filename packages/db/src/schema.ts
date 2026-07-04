@@ -1,7 +1,7 @@
 /**
  * SQLite schema — a local port of the former Supabase/Postgres schema.
  *
- * Porting rules (see PROGRESS decision D3):
+ * Porting rules (local-only rewrite — see docs/adr/0013-local-only-rewrite.md):
  *   - UUIDs are TEXT, generated in JS (crypto.randomUUID).
  *   - Timestamps are ISO-8601 TEXT (default via strftime), lexicographically sortable.
  *   - jsonb  -> TEXT holding JSON (default '{}' / '[]').

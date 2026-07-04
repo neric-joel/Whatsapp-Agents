@@ -29,7 +29,7 @@ secret-redacted by default — double-check before pasting).
 
 - [ ] Web app (`apps/web`)
 - [ ] Bridge daemon (`bridge`)
-- [ ] Database / migrations (`supabase`)
+- [ ] Database (`packages/db`)
 - [ ] CI / tooling
 - [ ] Docs
 

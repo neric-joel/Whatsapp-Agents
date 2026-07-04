@@ -20,8 +20,9 @@ Other approaches you thought about and why you set them aside.
 
 ## Scope / impact
 
-- Component(s) affected (web / bridge / shared / supabase / docs):
-- Does it touch a security-sensitive area (auth, RLS, subprocess execution)?
+- Component(s) affected (web / bridge / shared / db / docs):
+- Does it touch a security-sensitive area (subprocess execution, working-folder
+  validation, secret redaction)?
 - Does it need an ADR (`docs/adr/`)?
 
 ## Additional context
