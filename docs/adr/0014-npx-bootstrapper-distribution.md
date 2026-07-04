@@ -46,16 +46,31 @@ a versioning framework would add machinery without a consumer.
 ## Consequences
 
 - `npx agentroom` becomes the entire quickstart — no git required. The artifact is
-  a few KB, auditable in one sitting, and provenance-signed.
+  a few KB, auditable in one sitting, and published with provenance once the
+  OIDC publish job actually runs.
 - First run does honest, visible work (download + install + build, a few minutes),
   the same work the git quickstart always did. The bin says so up front.
-- The published package and the GitHub tag can never drift: the bin targets its own
-  version's tag, and CI refuses to publish a tag/version mismatch.
+- CI refuses to publish a tag/version mismatch, so the published bin always targets
+  the tag it was cut from. **The tag's content is the trust root**, not the npm
+  artifact: npm provenance attests only the 4-file bootstrapper, and a force-moved
+  tag would change what users build and run. Release prerequisite: a GitHub
+  **ruleset protecting `v*` tags** (block update/delete), so tags are immutable
+  once released.
 - The libraries (`@agentroom/shared`, `@agentroom/db`) stay private — publishing
   them would require inventing a build/exports layer for consumers who don't exist
   yet (revisit on demand).
-- Requires network + system `tar` on first run; both failure modes print the
-  git-clone fallback.
+- Requires network + system `tar` on first run; download, missing-`tar`, and
+  extraction failures each print the git-quickstart fallback. Extraction happens in
+  a scratch dir on the destination filesystem (renames can't cross devices — `/tmp`
+  is a separate tmpfs on much of Linux), and Windows uses the bundled System32
+  bsdtar (Git Bash's GNU tar mis-parses drive-letter paths).
+- The bin attempts `corepack enable` automatically when pnpm is missing (corepack is
+  bundled with Node 16–24); on newer Node the attempt fails quietly and the manual
+  instructions print instead.
+- Post-first-publish hardening (owner): use a granular npm automation token scoped
+  to `agentroom` (or switch to npm Trusted Publishing/OIDC and delete the token),
+  and enable 2FA — a long-lived classic token could publish provenance-less
+  versions from anywhere.
 
 ## Alternatives considered
 

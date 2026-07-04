@@ -11,7 +11,10 @@ name: Release
 # To cut a release (human):
 #   git tag v1.5.0 && git push origin v1.5.0
 # To publish npm after adding NPM_TOKEN later: re-run the publish-npm job on the
-# tag's workflow run (gh run rerun <run-id> --job publish-npm), or re-push the tag.
+# tag's existing workflow run (Actions UI → the run → Re-run job; via CLI,
+# `gh run rerun <run-id> --failed` or rerun by the numeric job id). NEVER delete
+# and re-push a released tag — the bin published from it targets that tag's
+# content; cut a new patch version instead.
 
 on:
   push:
@@ -19,7 +22,7 @@ on:
       - 'v*.*.*'
 
 permissions:
-  contents: read # least privilege; only the `release` job escalates to write
+  contents: read # least privilege; `release` escalates to contents:write and `publish-npm` to id-token:write
 
 concurrency:
   group: release-${{ github.ref }}
@@ -74,7 +77,9 @@ jobs:
   # a green `verify`. Skips (visibly, without failing the release) when NPM_TOKEN is
   # not configured.
   publish-npm:
-    needs: [verify]
+    # Needs `release` too: if the GitHub Release fails, npm must not publish a
+    # version whose release page doesn't exist (or describes different content).
+    needs: [verify, release]
     runs-on: ubuntu-latest
     permissions:
       contents: read
