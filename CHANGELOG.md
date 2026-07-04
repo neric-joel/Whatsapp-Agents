@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- **`npx agentroom`** — AgentRoom is now publishable to npm as a tiny bootstrapper
+  (ADR-0014). It downloads the source for its own exact release tag into
+  `~/.agentroom/app/<version>/`, checks Node and pnpm (attempting `corepack enable`
+  automatically if pnpm is missing), and runs the existing `scripts/launch.mjs` — so
+  `npx agentroom` does exactly what the git quickstart does, minus the clone. The
+  npm artifact contains **no app code** (bin + README + LICENSE only); the GitHub
+  tag stays the single source of truth. `release.yml` gains a tag-gated
+  `publish-npm` job that publishes with npm provenance (OIDC) whenever `NPM_TOKEN`
+  is configured, and skips with a visible notice otherwise so the GitHub Release is
+  never blocked.
+
 ### Fixed
 
 - **Gemini connections no longer send a stray `-` token with every prompt.** The

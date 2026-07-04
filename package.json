@@ -1,8 +1,36 @@
 {
   "name": "agentroom",
   "version": "1.4.1",
-  "private": true,
+  "description": "A local, single-user chat room that puts the agent CLIs you already have installed (Claude Code, Codex, or your own) into one conversation as named participants. `npx agentroom` downloads the matching release source, builds it locally, and runs it — nothing leaves your machine.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/neric-joel/Whatsapp-Agents.git"
+  },
+  "homepage": "https://github.com/neric-joel/Whatsapp-Agents#readme",
+  "bugs": {
+    "url": "https://github.com/neric-joel/Whatsapp-Agents/issues"
+  },
+  "keywords": [
+    "agents",
+    "multi-agent",
+    "claude-code",
+    "codex",
+    "cli",
+    "chat",
+    "local-first",
+    "sqlite"
+  ],
+  "bin": {
+    "agentroom": "scripts/npx-bootstrap.mjs"
+  },
+  "files": [
+    "scripts/npx-bootstrap.mjs"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "packageManager": "pnpm@11.0.8",
   "engines": {
     "node": ">=22.13.0",
@@ -10,6 +38,7 @@
   },
   "scripts": {
     "start": "node scripts/launch.mjs",
+    "prepublishOnly": "node --check scripts/npx-bootstrap.mjs",
     "build": "pnpm --filter web build",
     "dev": "pnpm -r --parallel dev",
     "dev:web": "pnpm --filter web dev",
