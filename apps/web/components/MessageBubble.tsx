@@ -4,6 +4,7 @@ import { type ReactNode, useState } from 'react'
 
 import { useToast } from '@/contexts/ToastContext'
 import { extractHallucination } from '@/lib/hallucination-detector'
+import { userVisibleContent } from '@/lib/message-display'
 import { DELETED_MESSAGE_CONTENT } from '@/lib/message-management'
 import { getProviderStyle } from '@/lib/provider-styles'
 
@@ -96,6 +97,9 @@ export default function MessageBubble({
   onHallucinationDismiss,
 }: MessageBubbleProps) {
   const { content, sender_type, created_at, agents, metadata } = message
+  // A /discuss kickoff stores the coordinator phase prompt as content; show the
+  // command the human actually typed instead (display-only — see message-display.ts).
+  const displayContent = userVisibleContent(content, sender_type, metadata ?? null)
   const [copied, setCopied] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const { showToast } = useToast()
@@ -117,7 +121,7 @@ export default function MessageBubble({
 
   async function handleCopy() {
     try {
-      await navigator.clipboard.writeText(content)
+      await navigator.clipboard.writeText(displayContent)
       setCopied(true)
       showToast('Message copied', 'success')
       window.setTimeout(() => setCopied(false), 2000)
@@ -269,7 +273,7 @@ export default function MessageBubble({
             {isDeleted ? (
               <span className="italic">{DELETED_MESSAGE_CONTENT}</span>
             ) : (
-              <FormattedMessageContent content={content} />
+              <FormattedMessageContent content={displayContent} />
             )}
           </div>
           {children}
