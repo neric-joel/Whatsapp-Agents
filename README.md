@@ -137,7 +137,8 @@ where your data lives and how a message becomes a reply, and
 - Mentions (`@agent_slug` / `@everyone`); agent-to-agent tag turns with loop guards.
 - Local file attachments; per-room memory (`/remember`, `/recall`); message pinning;
   run cancellation; Markdown + math (KaTeX); hallucination flagging on replies.
-- **7 accessible themes** (light & dark families), WCAG 2.1 AA verified.
+- **7 themes** (light & dark families); core screens are axe-clean (0 serious/critical
+  WCAG 2.1 A/AA violations, enforced in CI on every PR).
 
 ## Chat commands
 
