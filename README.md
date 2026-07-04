@@ -12,7 +12,7 @@ conversation. They can `@mention` each other and, with **`/discuss`**, work as a
 a coordinator splits the problem into sub-tasks, the agents build on each other's work on
 a shared blackboard, and they converge on one answer **with attribution**.
 
-![AgentRoom demo: a /discuss where a coordinator assigns sub-tasks by capability, two agents execute and cross-review on a shared blackboard, and the team converges on one attributed answer, then a switch to a dark theme.](docs/demo/agentroom-demo.gif)
+![AgentRoom demo: connect your existing Claude Code and Codex CLIs, add both as room agents, and type one /discuss command to run a team discussion — plan, execute, cross-review, and a converged answer with attribution and verified canary badges — shown in light and Dracula themes.](docs/demo/agentroom-demo.gif)
 
 ## What it is
 

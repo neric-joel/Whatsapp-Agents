@@ -95,6 +95,8 @@ from four adversarial review panels along the way.
   database backend. **#96** — collapse the gray phase-prompt blocks in `/discuss`
   timelines. **#97** — Dracula bubble contrast. **#98** — edited messages show no
   indicator (a content-PATCH on a `/discuss` kickoff is invisible in the bubble).
+  **#99** — the timeline auto-scrolls to the bottom on every poll, fighting a
+  manual scroll-up while agents are running.
 
 ## [1.4.1] - 2026-06-28
 
