@@ -1,14 +1,17 @@
 name: Release
 
-# Fires ONLY when a human pushes a semver tag (e.g. `v1.0.0`). It never tags or
+# Fires ONLY when a human pushes a semver tag (e.g. `v1.5.0`). It never tags or
 # releases on its own — pushing the tag is the explicit, human gate. On a tag it
-# re-runs the full quality gate and publishes a GitHub Release with auto-generated
-# notes. No registry push, no external secrets (only the auto-provisioned
-# GITHUB_TOKEN, scoped to this repo's releases). AgentRoom is a local-only app —
-# there are no container images to build.
+# re-runs the full quality gate, publishes a GitHub Release with auto-generated
+# notes, and publishes the `agentroom` npx bootstrapper to npm **with provenance**
+# (ADR-0014). The npm job needs the `NPM_TOKEN` repo secret; when it is absent the
+# job skips with a visible notice instead of failing, so the GitHub Release is
+# never blocked. AgentRoom is a local-only app — there are no container images.
 #
-# To cut a release (human, after the v1.0 decision):
-#   git tag v1.0.0 && git push origin v1.0.0
+# To cut a release (human):
+#   git tag v1.5.0 && git push origin v1.5.0
+# To publish npm after adding NPM_TOKEN later: re-run the publish-npm job on the
+# tag's workflow run (gh run rerun <run-id> --job publish-npm), or re-push the tag.
 
 on:
   push:
@@ -65,3 +68,46 @@ jobs:
             --title "${GITHUB_REF_NAME}" \
             --generate-notes \
             --verify-tag
+
+  # Publishes the tiny `agentroom` npx bootstrapper (bin + README + LICENSE — no app
+  # code; see ADR-0014) with npm provenance. Gated on the same human-pushed tag and
+  # a green `verify`. Skips (visibly, without failing the release) when NPM_TOKEN is
+  # not configured.
+  publish-npm:
+    needs: [verify]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # OIDC for npm --provenance
+    steps:
+      - name: Check NPM_TOKEN presence
+        id: token
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NPM_TOKEN" ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=npm publish skipped::NPM_TOKEN secret is not set. The GitHub Release is unaffected. Add the secret, then re-run this job on this tag (gh run rerun --job publish-npm) to publish."
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v7
+        if: steps.token.outputs.present == 'true'
+      - uses: actions/setup-node@v6
+        if: steps.token.outputs.present == 'true'
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Verify tag matches package.json version
+        if: steps.token.outputs.present == 'true'
+        run: |
+          PKG_V="$(node -p "require('./package.json').version")"
+          if [ "v${PKG_V}" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::package.json version ${PKG_V} does not match tag ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+      - name: Publish to npm (provenance)
+        if: steps.token.outputs.present == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public

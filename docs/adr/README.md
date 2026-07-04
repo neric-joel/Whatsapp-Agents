@@ -20,3 +20,4 @@ are marked, not deleted. Format is [MADR](https://adr.github.io/madr/)-lite — 
 | [0011](0011-team-collaboration-discuss.md) | Team-collaboration `/discuss` (plan → execute → integrate → converge) + adversarial `/debate` | Accepted |
 | [0012](0012-remove-unused-ruflo-myclaude-adapters.md) | Remove the unused `ruflo` and `myclaude` adapters | Accepted |
 | [0013](0013-local-only-rewrite.md) | Local-only rewrite: SQLite + filesystem replace Supabase, Docker, and auth (v1.2.0) | Accepted |
+| [0014](0014-npx-bootstrapper-distribution.md) | Distribution: `npx agentroom` as a tiny source bootstrapper, published with npm provenance | Accepted |
