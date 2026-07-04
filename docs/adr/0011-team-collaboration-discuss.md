@@ -1,6 +1,10 @@
 # ADR-0011: Redesign `/discuss` into a real human-style team (plan → execute → integrate → converge), `/debate` as the adversarial sibling
 
-Status: Accepted (autonomous campaign — decide/ADR, no human gate)
+Status: Accepted (autonomous campaign — decide/ADR, no human gate) — amended
+2026-07-03: the `/discuss`/`/debate` design survives the v1.2.0 local-only rewrite
+([ADR-0013](0013-local-only-rewrite.md)); the implementation-plan rows below that
+name `supabase/migrations/*`, `supabase db reset`, or RLS describe the pre-rewrite
+stack — the index and orchestration live in `packages/db` + `bridge` today.
 Date: 2026-06-01
 Supersedes: the 3-phase `individual → critique → consensus` discussion flow (ADR-supersede of the
 behavior, not a prior ADR file)

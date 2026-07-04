@@ -32,9 +32,9 @@ Both processes emit **one JSON line per event** through a shared logger
 
 ### Web — `GET /api/health`
 
-Always returns **HTTP 200** with the standard envelope (so container/orchestrator
-liveness probes and the CI image smoke test stay green even when the DB is down).
-Readiness is reported in the body, not the status code:
+Always returns **HTTP 200** with the standard envelope (so external liveness checks
+stay green even when the DB is down). Readiness is reported in the body, not the
+status code:
 
 ```json
 { "ok": true, "data": {
@@ -100,8 +100,9 @@ touching call sites. Capture points: bridge `run.failed` and web `internalError(
 
 States: `queued → claimed → running → (completed | failed | cancelled)`. Guarantees:
 
-- **Atomic claim.** A run moves `queued→claimed` via a conditional update
-  (`.eq('status','queued')`); only one worker wins, so no double-processing.
+- **Atomic claim.** A run moves `queued→claimed` via a conditional SQL update
+  (`UPDATE agent_runs SET status='claimed' … WHERE id = ? AND status='queued'`);
+  only one worker wins, so no double-processing.
 - **Every path terminates.** Any error in `processRun` writes `status='failed'`
   with a redacted `error_message`; a user cancel writes `status='cancelled'`. There
   is no code path that leaves a run stuck in `claimed`/`running` on this worker.
@@ -112,7 +113,7 @@ States: `queued → claimed → running → (completed | failed | cancelled)`. G
   `cancelled` it aborts the `AbortController`, which kills the child and ends the run.
 - **Bad agent output** (no `final_response`, invalid JSON) → the run fails cleanly
   with an actionable message rather than hanging.
-- **DB / Supabase errors** during the run (e.g. reply insert fails) → caught →
+- **DB (SQLite) errors** during the run (e.g. reply insert fails) → caught →
   `failed`, never a half-written success.
 
 ### Stale-run recovery

@@ -40,6 +40,8 @@ Spawn through a hardened path (`bridge/src/lib/subprocess-security.ts` +
 
 ## Alternatives considered
 
-- OS-level sandboxing (containers/seccomp per run) — heavier; deferred. The default
-  Docker bridge image ships the mock adapter only, which sidesteps it for the safe
-  default.
+- OS-level sandboxing (containers/seccomp per run) — heavier; deferred. *(At the time,
+  the default Docker bridge image shipped the mock adapter only as the safe default;
+  the Docker images were removed in the v1.2.0 local-only rewrite —
+  [ADR-0013](0013-local-only-rewrite.md). The safe default is now that no real CLI
+  runs until you explicitly connect one.)*

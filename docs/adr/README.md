@@ -7,10 +7,10 @@ are marked, not deleted. Format is [MADR](https://adr.github.io/madr/)-lite — 
 
 | ADR | Title | Status |
 |---|---|---|
-| [0001](0001-locked-stack.md) | Locked stack: Next.js + Supabase + bridge daemon + pnpm monorepo | Accepted |
+| [0001](0001-locked-stack.md) | Locked stack: Next.js + Supabase + bridge daemon + pnpm monorepo | Superseded by 0013 |
 | [0002](0002-agent-runs-as-queue.md) | `agent_runs` table is the work queue (no Redis) | Accepted |
 | [0003](0003-separate-bridge-daemon.md) | A separate bridge daemon runs agent CLIs | Accepted |
-| [0004](0004-local-supabase-default.md) | Local Supabase via Docker is the default (no paid plan) | Accepted |
+| [0004](0004-local-supabase-default.md) | Local Supabase via Docker is the default (no paid plan) | Superseded by 0013 |
 | [0005](0005-subprocess-sandbox.md) | Subprocess sandbox for agent CLIs | Accepted |
 | [0006](0006-opt-in-third-party-egress.md) | Third-party image egress is opt-in, off by default | Accepted |
 | [0007](0007-observability-surfaces.md) | Observability: structured logs, health/metrics endpoints, opt-in error tracking | Accepted |
@@ -19,3 +19,4 @@ are marked, not deleted. Format is [MADR](https://adr.github.io/madr/)-lite — 
 | [0010](0010-byo-credentials.md) | Bring-your-own CLI/API-key credentials (per-user keychain, AES-GCM) | Accepted |
 | [0011](0011-team-collaboration-discuss.md) | Team-collaboration `/discuss` (plan → execute → integrate → converge) + adversarial `/debate` | Accepted |
 | [0012](0012-remove-unused-ruflo-myclaude-adapters.md) | Remove the unused `ruflo` and `myclaude` adapters | Accepted |
+| [0013](0013-local-only-rewrite.md) | Local-only rewrite: SQLite + filesystem replace Supabase, Docker, and auth (v1.2.0) | Accepted |

@@ -1,6 +1,7 @@
 # 0001 — Locked stack: Next.js + Supabase + bridge daemon + pnpm monorepo
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-0013](0013-local-only-rewrite.md) (the v1.2.0
+  local-only rewrite removed Supabase entirely)
 - **Date:** 2026-05-08
 
 ## Context

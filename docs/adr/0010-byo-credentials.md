@@ -1,7 +1,11 @@
 # 0010 — Bring-your-own CLI / API-key credentials (per-user keychain)
 
 - **Status:** Accepted (autonomous decision — owner pre-approved the design in the WS2
-  campaign brief)
+  campaign brief) — amended 2026-07-03: survives the v1.2.0 local-only rewrite
+  ([ADR-0013](0013-local-only-rewrite.md)) in local form. `user_credentials` is a
+  SQLite table for the single local user; the RLS/`auth.uid()`/service-role framing
+  below no longer applies. AES-256-GCM at rest, secrets never returned to the browser,
+  and the single-var child-env injection seam are unchanged.
 - **Date:** 2026-06-01
 
 ## Context

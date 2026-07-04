@@ -1,6 +1,7 @@
 # 0004 — Local Supabase via Docker is the default (no paid plan)
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-0013](0013-local-only-rewrite.md) (the v1.2.0
+  local-only rewrite removed Supabase and Docker entirely)
 - **Date:** 2026-05-30
 
 ## Context

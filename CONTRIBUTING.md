@@ -26,9 +26,9 @@ pnpm dev                 # web (:3000) + bridge in parallel, watch mode
 The first run creates `~/.agentroom/` (SQLite DB + a `files/` folder) and seeds a starter
 room — no env files needed for local use (the `.env.example` files document optional vars).
 
-Env vars are documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#environment-variables);
-the **core connection vars** are validated at boot (zod) — a missing/invalid one fails
-fast and names itself — and the rest have safe in-code defaults.
+Env vars are documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#environment-variables).
+**Nothing is required for local use** — every var is an optional override, validated at
+boot (zod) with an error that names the offending var if one is set but invalid.
 
 ## Quality gates (run before every PR)
 
@@ -52,8 +52,8 @@ pnpm e2e            # Playwright (mock adapter; live journeys gated on E2E_LIVE)
 
 A change is not ready until typecheck, lint (0 errors), format, knip, and tests are
 green locally **and** the GitHub CI required checks are green on the PR. The `audit`
-job is informational (a known transitive advisory tracked for the Next 16 upgrade,
-issues #63/#46).
+job is informational (decision D3, [ADR-0009](docs/adr/0009-v1.0.1-deferred-gates.md));
+the remaining advisory is in the dev-only test toolchain, tracked as issue #78.
 
 ## Branching, commits, and PRs
 
@@ -67,8 +67,10 @@ issues #63/#46).
 - Keep a PR to **one concern**. Fill in the PR template (what/why, changes, risk &
   rollback, verification evidence; screenshots for UI). Link the issue with
   `Closes #N`.
-- Don't weaken the Origin/CSRF check, the per-room role check, the tool-approval flow,
-  subprocess validation, or secret/PII redaction to make a check pass.
+- Don't weaken the Origin/CSRF check, the per-room role check, subprocess validation,
+  the canary fail-safe, memory injection scanning, or secret/PII redaction to make a
+  check pass. (The tool-approval flow is dormant scaffolding — no bundled adapter
+  emits `tool_call_requested`, see #83 — but don't weaken it either.)
 
 ## Testing expectations
 
