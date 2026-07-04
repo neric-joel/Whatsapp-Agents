@@ -29,6 +29,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -70,16 +71,20 @@ function checkNode() {
  * automatically (corepack is bundled with Node 16–24; on newer Node the attempt
  * fails quietly and we fall through to the manual instructions); else instruct.
  */
-function ensurePnpm() {
+function ensurePnpm(trustedCwd) {
   // Fixed command strings; the only interpolated value is the pnpm version from this
-  // package's OWN published manifest, validated to a version-safe charset.
-  const probe = () => spawnSync('pnpm --version', { shell: true, encoding: 'utf8' })
+  // package's OWN published manifest, validated to a version-safe charset. cwd is
+  // pinned to the app cache because cmd.exe resolves bare names from the CURRENT
+  // directory before PATH — `npx agentroom` inside an untrusted folder must never
+  // execute a planted pnpm.cmd/corepack.cmd from that folder.
+  const opts = { shell: true, cwd: trustedCwd }
+  const probe = () => spawnSync('pnpm --version', { ...opts, encoding: 'utf8' })
   if (probe().status === 0) return
   const raw = pkg.packageManager?.split('@')[1]
   const pnpmVersion = raw && /^[0-9A-Za-z.+-]+$/.test(raw) ? raw : 'latest'
   log('pnpm not found — attempting `corepack enable` automatically (bundled with Node 16–24)…')
-  spawnSync('corepack enable', { shell: true, stdio: 'ignore' })
-  spawnSync(`corepack prepare pnpm@${pnpmVersion} --activate`, { shell: true, stdio: 'ignore' })
+  spawnSync('corepack enable', { ...opts, stdio: 'ignore' })
+  spawnSync(`corepack prepare pnpm@${pnpmVersion} --activate`, { ...opts, stdio: 'ignore' })
   if (probe().status === 0) return
   fail(
     'pnpm is required. Enable it with `corepack enable` or install it with ' +
@@ -134,15 +139,16 @@ function findTar() {
  * paths from the tarball's own directory so no absolute Windows path reaches it.
  */
 async function extract(tarball, appDir) {
+  const parent = dirname(appDir)
+  mkdirSync(parent, { recursive: true })
   const tarBin = findTar()
-  if (spawnSync(tarBin, ['--version'], { encoding: 'utf8' }).status !== 0) {
+  // cwd pinned: Windows resolves bare names from the current directory before PATH.
+  if (spawnSync(tarBin, ['--version'], { encoding: 'utf8', cwd: parent }).status !== 0) {
     fail(
       '`tar` was not found (it ships with Windows 10+, macOS, and Linux). Install tar, ' +
         `or use the git quickstart instead: ${QUICKSTART}`,
     )
   }
-  const parent = dirname(appDir)
-  mkdirSync(parent, { recursive: true })
   const scratch = mkdtempSync(join(parent, '.extract-'))
   try {
     // Keep tar's args relative wherever possible (cwd = the scratch's parent, and the
@@ -165,17 +171,47 @@ async function extract(tarball, appDir) {
           `Git quickstart fallback: ${QUICKSTART}`,
       )
     }
-    rmSync(appDir, { recursive: true, force: true })
+    try {
+      rmSync(appDir, { recursive: true, force: true })
+    } catch (err) {
+      // Windows throws EBUSY/EPERM when a previous AgentRoom instance still runs
+      // from this cache — deleting it out from under a live app helps no one.
+      if (err?.code === 'EBUSY' || err?.code === 'EPERM') {
+        fail(
+          `The cached app at ${appDir} is in use (is AgentRoom already running?). ` +
+            'Stop it, then re-run `npx agentroom`.',
+        )
+      }
+      throw err
+    }
     renameSync(top, appDir) // same filesystem as scratch → atomic, no EXDEV
   } finally {
     rmSync(scratch, { recursive: true, force: true })
   }
 }
 
+/** Best-effort sweep of leftovers from hard-killed runs (`.extract-*` scratch dirs
+ *  and `*.part` partial downloads use random/pid names, so the OS never reclaims
+ *  them and a later run never reuses them). */
+function sweepOrphans(cacheRoot) {
+  try {
+    for (const name of readdirSync(cacheRoot)) {
+      if (name.startsWith('.extract-') || name.endsWith('.part')) {
+        rmSync(join(cacheRoot, name), { recursive: true, force: true })
+      }
+    }
+  } catch {
+    /* cache root may not exist yet — nothing to sweep */
+  }
+}
+
 async function main() {
   checkNode()
-  const cacheRoot = process.env.AGENTROOM_APP_CACHE ?? join(homedir(), '.agentroom', 'app')
+  // `?.trim() ||` (not `??`): an empty-but-set AGENTROOM_APP_CACHE must fall back to
+  // the default, not root the cache (and its rmSync targets) in the invocation cwd.
+  const cacheRoot = process.env.AGENTROOM_APP_CACHE?.trim() || join(homedir(), '.agentroom', 'app')
   const appDir = join(cacheRoot, VERSION)
+  sweepOrphans(cacheRoot)
   const cached = existsSync(join(appDir, 'scripts', 'launch.mjs'))
 
   if (!cached || process.env.AGENTROOM_FORCE_FETCH === '1') {
@@ -202,7 +238,7 @@ async function main() {
     log(`Using cached AgentRoom v${VERSION} at ${appDir}`)
   }
 
-  ensurePnpm()
+  ensurePnpm(appDir)
 
   // Hand over to the repo's own launcher; it owns install/build/run/teardown.
   const child = spawn(process.execPath, [join(appDir, 'scripts', 'launch.mjs')], {

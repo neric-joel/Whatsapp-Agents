@@ -20,7 +20,8 @@
   "scripts": {
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test test/**/*.test.ts"
+    "test": "tsx --test test/**/*.test.ts",
+    "test:coverage": "tsx --test test/**/*.test.ts"
   },
   "devDependencies": {
     "tsx": "^4.7.0",

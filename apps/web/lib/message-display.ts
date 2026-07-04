@@ -17,9 +17,22 @@ export function userVisibleContent(
   if (senderType !== 'user' || !metadata) return content
   const d = metadata['discussion']
   if (!d || typeof d !== 'object' || Array.isArray(d)) return content
-  const disc = d as { enabled?: unknown; command?: unknown; original_prompt?: unknown }
+  const disc = d as {
+    enabled?: unknown
+    command?: unknown
+    original_prompt?: unknown
+    original_input?: unknown
+  }
+  if (disc.enabled !== true) return content
+  // Preferred: the literal typed text (stored server-side since v1.5.0) — exact for
+  // both `/discuss …` and `@everyone …?` kickoffs.
+  if (typeof disc.original_input === 'string' && disc.original_input.length > 0) {
+    return disc.original_input
+  }
+  // Legacy kickoffs (pre-original_input): rebuild the slash form. For an old
+  // `@everyone …?` kickoff this shows `/discuss <question>` — imperfect, but closer
+  // to what was typed than the internal coordinator prompt.
   if (
-    disc.enabled === true &&
     typeof disc.command === 'string' &&
     disc.command.length > 0 &&
     typeof disc.original_prompt === 'string' &&

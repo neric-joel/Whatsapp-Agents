@@ -70,6 +70,6 @@ Single-user, by design — the API has no auth because nothing off-host can reac
 npx agentroom
 ```
 
-First run downloads the release source, installs, builds, and opens the room (a few minutes; it's honest work — the npm package is a 9 kB bootstrapper, so the code you run is the code on GitHub, matched to the version tag). Or clone and `pnpm start`. Node 22.13+ and pnpm. If you have zero agent CLIs installed, a built-in mock agent still shows you the whole flow.
+First run downloads the release source, installs, builds, and opens the room (a few minutes; it's honest work — the npm package is one ~9 kB bootstrap script plus README and LICENSE, no app code, so the code you run is the code on GitHub, matched to the version tag). Or clone and `pnpm start`. Node 22.13+ and pnpm. If you have zero agent CLIs installed, a built-in mock agent still shows you the whole flow.
 
 MIT. The repo is github.com/neric-joel/Whatsapp-Agents, docs cover the architecture, the canary gate, the memory model, and fourteen ADRs' worth of decisions, including the wrong ones.

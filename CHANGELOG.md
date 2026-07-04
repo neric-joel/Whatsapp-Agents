@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.5.0] - 2026-07-04
+
+The publishable-launch release: every live doc verified against the code
+(ADR-0013), a real npm install path with provenance (ADR-0014), a technical
+writeup, a re-recorded demo, and a fix for every Critical/High/Medium finding
+from four adversarial review panels along the way.
+
 ### Added
 
 - **`npx agentroom`** — AgentRoom is now publishable to npm as a tiny bootstrapper
@@ -18,9 +27,38 @@ All notable changes to this project are documented here. The format is based on
   `publish-npm` job that publishes with npm provenance (OIDC) whenever `NPM_TOKEN`
   is configured, and skips with a visible notice otherwise so the GitHub Release is
   never blocked.
+- **`docs/WRITEUP.md` + `docs/LAUNCH_POST.md`** — a technical launch writeup
+  (grounding + the canary lookahead gate, the `/discuss` redesign and dissent stage,
+  the subprocess trust model and its limits, injection-scanned memory) and a
+  Show-HN draft. Every claim independently fact-checked against the repo.
+- **Fresh demo GIF** recorded on this release's UI: connecting the detected Claude
+  Code + Codex CLIs, a full real-CLI `/discuss` (plan → execute → cross-review →
+  attributed team answer), and a dark-theme switch. The old GIF predated the
+  local-only rewrite and still showed a "Sign out" button.
 
 ### Fixed
 
+- **The `/discuss` kickoff bubble now shows what you typed.** The timeline used to
+  render the internal coordinator phase prompt as the *user's own message* (the
+  stored content is the agents' trigger and stays unchanged — this was a display
+  bug). User bubbles, reply previews, and new pins now show the literal typed text
+  (`/discuss …` or an `@everyone …?` question), which the server now records
+  alongside the trigger (#94 + follow-ups from the final review sweep).
+- **`packages/shared` tests now run in CI.** The `verify` gates invoke
+  `test:coverage`, which `@agentroom/shared` didn't define — so its 25 tests
+  (including the canary suite) were silently skipped by `--if-present`. One-line
+  script addition.
+- **Release safety:** the tag-must-match-`package.json` check now runs
+  unconditionally in the release `verify` job (it previously lived only inside the
+  npm-publish job, which skips entirely when `NPM_TOKEN` is absent — and the new
+  tag-immutability ruleset would have made a mis-tagged release unfixable).
+- **npx bootstrapper hardening** (final security sweep): pnpm/corepack/tar probes
+  pin their working directory (Windows resolves bare commands from the invocation
+  cwd before `PATH`); an empty-but-set `AGENTROOM_APP_CACHE` falls back to the
+  default instead of rooting the cache in the current directory; deleting a cached
+  app that is still running fails with a friendly message instead of a raw
+  `EBUSY` stack; orphaned `.extract-*`/`*.part` leftovers from hard-killed runs are
+  swept on startup.
 - **Gemini connections no longer send a stray `-` token with every prompt.** The
   auto-detect catalog invoked gemini as `--prompt -`, but gemini *appends* the
   `--prompt` value to the stdin input — so every reply carried a meaningless
@@ -42,6 +80,21 @@ All notable changes to this project are documented here. The format is based on
 - README: the themes bullet now states exactly what is verified — 7 themes, core
   screens axe-clean (0 serious/critical WCAG 2.1 A/AA violations) in CI — instead
   of "WCAG 2.1 AA verified".
+- More falsifiable absolutes replaced with the scoped truth (final review sweep):
+  "Nothing leaves `localhost`" → AgentRoom itself makes no network calls and serves
+  only `127.0.0.1`; what leaves the machine is what your own CLIs send to their
+  providers. `ARCHITECTURE.md` now describes the real `/discuss` phase machine
+  (plan → execute → integrate → [dissent] → converge) instead of the legacy
+  pre-ADR-0011 one. The npm package description no longer says "nothing leaves
+  your machine".
+
+### Deferred (tracked, not blocking)
+
+- **#90** — pin the Origin/CSRF self-check to localhost hosts (DNS-rebinding
+  hardening). **#95** — canary false-positive when a discussion's *topic* names a
+  database backend. **#96** — collapse the gray phase-prompt blocks in `/discuss`
+  timelines. **#97** — Dracula bubble contrast. **#98** — edited messages show no
+  indicator (a content-PATCH on a `/discuss` kickoff is invisible in the bubble).
 
 ## [1.4.1] - 2026-06-28
 
@@ -347,7 +400,8 @@ returned **GO** (0 Critical, 0 confirmed High). Highlights by phase:
   server/service-role path is unaffected. Verified against a live DB (pgTAP +
   role-level SQL + real PostgREST HTTP); migration `20260531000004_agents_column_privs.sql`.
 
-[Unreleased]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.2.0...v1.3.0

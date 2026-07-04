@@ -4,6 +4,34 @@ import { userVisibleContent } from '../message-display'
 
 const KICKOFF_PROMPT = 'TEAM DISCUSSION — plan & decompose (you are the coordinator)…'
 
+describe('userVisibleContent (original_input, v1.5.0+)', () => {
+  it('prefers the literal typed text when the server stored it', () => {
+    expect(
+      userVisibleContent(KICKOFF_PROMPT, 'user', {
+        discussion: {
+          enabled: true,
+          command: 'discuss',
+          original_prompt: 'should we ship?',
+          original_input: '@everyone should we ship?',
+        },
+      }),
+    ).toBe('@everyone should we ship?')
+  })
+
+  it('ignores a non-string original_input and falls back to the rebuild', () => {
+    expect(
+      userVisibleContent(KICKOFF_PROMPT, 'user', {
+        discussion: {
+          enabled: true,
+          command: 'discuss',
+          original_prompt: 'x',
+          original_input: 42,
+        },
+      }),
+    ).toBe('/discuss x')
+  })
+})
+
 describe('userVisibleContent', () => {
   it('rebuilds the typed command for a /discuss kickoff user bubble', () => {
     expect(

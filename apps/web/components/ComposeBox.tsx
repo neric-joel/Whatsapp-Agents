@@ -12,6 +12,7 @@ import {
 
 import { useRooms } from '@/hooks/useRooms'
 import { ALLOWED_UPLOAD_MIME_TYPES, MAX_UPLOAD_BYTES } from '@/lib/api-validation'
+import { userVisibleContent } from '@/lib/message-display'
 import { getImageFilesFromClipboardItems } from '@/lib/pasted-files'
 import { parseSlashCommand, type SlashCommand } from '@/lib/slash-commands'
 
@@ -29,6 +30,7 @@ interface Props {
     id: string
     content: string
     sender_type: string
+    metadata?: Record<string, unknown>
     agents?: { name: string; provider: string } | null
   } | null
   onCancelReply?: () => void
@@ -391,11 +393,12 @@ export default function ComposeBox({
       : replyingTo?.sender_type === 'user'
         ? 'You'
         : 'System'
-  const replyPreview = replyingTo
-    ? replyingTo.content.length > 80
-      ? `${replyingTo.content.slice(0, 80)}...`
-      : replyingTo.content
+  // A /discuss kickoff stores the internal phase prompt as content — preview what
+  // the human actually typed instead (same rule as the timeline bubble).
+  const replyVisible = replyingTo
+    ? userVisibleContent(replyingTo.content, replyingTo.sender_type, replyingTo.metadata ?? null)
     : ''
+  const replyPreview = replyVisible.length > 80 ? `${replyVisible.slice(0, 80)}...` : replyVisible
 
   return (
     <div className="flex-shrink-0 border-t border-[var(--border)] bg-[var(--panel)] px-4 py-3">

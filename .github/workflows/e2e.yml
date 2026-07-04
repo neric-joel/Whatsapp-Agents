@@ -46,7 +46,8 @@ jobs:
 
       - name: Run Playwright tests
         run: pnpm exec playwright test
-        # playwright.config.ts starts the Next.js dev server (fresh in CI).
+        # playwright.config.ts builds and starts the production app
+        # (next build + next start) — deliberately not the dev server.
 
       - name: Upload Playwright report
         if: always()

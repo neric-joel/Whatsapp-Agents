@@ -128,6 +128,10 @@ export async function POST(req: NextRequest, props: RouteParams) {
             command: discussionRequest.command,
             phase: 'plan',
             original_prompt: discussionRequest.prompt,
+            // What the human literally typed (`/discuss …`, or an `@everyone …?`
+            // question) — the timeline renders THIS, never the built phase prompt.
+            // Server-owned: stripServerOwnedMetadata blocks client forgery.
+            original_input: rawContent,
           },
         }
       : {}),

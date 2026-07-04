@@ -24,7 +24,9 @@ never paste a Claude or Codex key into AgentRoom.
 
 State lives in a single local folder (`~/.agentroom`, or `%APPDATA%\AgentRoom` on
 Windows): a SQLite database, your uploaded files, and a `config.json` of connected CLIs.
-Nothing leaves `localhost`.
+AgentRoom itself serves nothing beyond `127.0.0.1` and makes no network calls of its
+own — the only thing that leaves your machine is what your own CLIs send to their
+providers, exactly as they do in your terminal.
 
 It's a **pnpm monorepo**: a Next.js web app + API, a local SQLite data layer
 (`@agentroom/db`), and a separate TypeScript **bridge daemon** that runs the agent CLIs.
@@ -39,21 +41,29 @@ It's a **pnpm monorepo**: a Next.js web app + API, a local SQLite data layer
 using the built-in **mock** agent.
 
 ```bash
-# 1. Clone and enter the repo (every command runs from here)
-git clone https://github.com/neric-joel/Whatsapp-Agents.git
-cd Whatsapp-Agents
-
-# 2. Start AgentRoom — one command, cross-platform
-pnpm start
+npx agentroom
 ```
 
-`pnpm start` installs dependencies on first run, builds the app, starts the web server and
-the bridge daemon, waits until **http://localhost:3000** is ready, and opens it in your
-browser. Press **Ctrl-C** to stop both. (On Windows you can double-click
-**`start-agentroom.bat`**, which just runs `pnpm start`.)
+That's the whole install (from v1.5.0). The npm package is one small bootstrap
+script — no app code: it downloads the source for its own release tag into
+`~/.agentroom/app/<version>/` (on Windows this cache lives under
+`%USERPROFILE%\.agentroom\app\`, separate from the `%APPDATA%\AgentRoom` data
+folder), builds it locally, starts the web server and the bridge daemon, waits until
+**http://localhost:3000** is ready, and opens it in your browser. First run does the
+install + build, so give it a few minutes; later runs start fast. Press **Ctrl-C**
+to stop.
 
-On first run AgentRoom creates `~/.agentroom/` (the SQLite DB + a `files/` folder) and
-seeds a starter room — you're straight in, no sign-up.
+Prefer git (contributors do)?
+
+```bash
+git clone https://github.com/neric-joel/Whatsapp-Agents.git
+cd Whatsapp-Agents
+pnpm start                # same flow: install + build + run + open browser
+```
+
+(On Windows you can double-click **`start-agentroom.bat`**, which just runs
+`pnpm start`.) On first run AgentRoom creates `~/.agentroom/` (the SQLite DB + a
+`files/` folder) and seeds a starter room — you're straight in, no sign-up.
 
 ### Use it
 
@@ -160,7 +170,7 @@ apps/web/         Next.js App Router app + API route handlers
 bridge/           TypeScript bridge daemon + agent adapters (incl. the CLI-profile adapter)
 packages/db/      Local SQLite data layer: schema, queue, app-data paths, config.json, CLI detection
 packages/shared/  Types + helpers shared by web and bridge (ContextPacketV1, discussion engine, …)
-scripts/          Local dev helpers
+scripts/          launch.mjs (pnpm start) · npx-bootstrap.mjs (the published npx agentroom bin) · dev helpers
 docs/             CONNECTING_CLIS · ARCHITECTURE · OBSERVABILITY · adr/ (decision records)
 ```
 
