@@ -128,8 +128,10 @@ posts a visible *"Deliberation ended …"* system message):
 
 Because `deliberation_depth` strictly increases per hand-off and is bounded by
 `max_agent_hops` — and a repeat participant is rejected — every chain terminates.
-The `/discuss` phase machine (`individual → critique → consensus`) and the
-`tag_turns` mention-follow-up path are bounded the same way by `max_agent_rounds`.
+The `/discuss` phase machine (`plan → execute → integrate → [dissent] → converge`,
+ADR-0011) terminates via its monotonic phase DAG plus compile-time caps
+(`DISCUSSION_MAX_PHASES`, `ABS_MAX_DISCUSSION_ROUNDS`); the `tag_turns`
+mention-follow-up path is bounded by `max_agent_rounds`.
 
 ## Slash commands & RBAC (Phase 11)
 

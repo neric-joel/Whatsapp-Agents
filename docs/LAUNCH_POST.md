@@ -14,4 +14,4 @@ Two things I think are worth a look even if you never run it:
 
 It's single-user and deliberately so. The subprocess model is locked down (no shell, static argv, env allowlist, output caps, tree kill) but there's no OS sandbox: connected CLIs run with their real permissions on your machine. Docs are explicit about what's dormant vs. wired.
 
-npx agentroom to try it (downloads + builds the tagged source locally; the npm package is a 9 kB bootstrapper). Feedback very welcome, especially on the canary's false-negative space.
+npx agentroom to try it (downloads + builds the tagged source locally; the npm package is one ~9 kB bootstrap script plus README/LICENSE — no app code). Feedback very welcome, especially on the canary's false-negative space.

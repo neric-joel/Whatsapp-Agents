@@ -23,7 +23,10 @@ This page covers how to run it and the one security decision that matters when y
 | local data (`@agentroom/db`) | SQLite DB + uploaded files + `config.json`, under `~/.agentroom` | No — on-disk only |
 
 The browser talks only to `web`. Both `web` and `bridge` read/write the same local
-SQLite database and files folder. Nothing leaves `localhost`.
+SQLite database and files folder. AgentRoom itself serves nothing beyond
+`127.0.0.1` and makes no network calls of its own — the only thing that leaves
+your machine is what your connected CLIs send to their providers, exactly as they
+do in your terminal.
 
 ---
 

@@ -133,7 +133,7 @@ export default function MessageBubble({
   async function handlePin() {
     if (!onPin) return
     try {
-      await onPin(message.id, content)
+      await onPin(message.id, displayContent)
       showToast('Message pinned', 'success')
     } catch {
       showToast('Failed to pin message', 'error')

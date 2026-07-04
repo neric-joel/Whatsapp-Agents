@@ -60,10 +60,12 @@ Security fixes target the `main` branch and the latest tagged release (currently
   unauthenticated **because** it is localhost-only — do not reverse-proxy it onto
   a network you don't trust.
 - **The `npx agentroom` bootstrapper** downloads the tagged release source from
-  GitHub over TLS and trusts its local cache (`~/.agentroom/app/`) the same way
-  npm trusts its own cache: anyone who can write those paths (or your shell env)
-  already runs code as you. Release tags are the trust root and are protected
-  against moves/deletion (ADR-0014).
+  GitHub over TLS and trusts its local cache (`~/.agentroom/app/` — on Windows
+  `%USERPROFILE%\.agentroom\app\`, a source cache separate from the
+  `%APPDATA%\AgentRoom` data folder) the same way npm trusts its own cache:
+  anyone who can write those paths (or your shell env) already runs code as you.
+  Release tags are the trust root and are protected against moves/deletion
+  (ADR-0014).
 - **Third-party data egress.** Optional image text/OCR extraction sends image bytes to
   OpenAI. It is **off by default** (`ENABLE_IMAGE_TEXT_EXTRACTION=false`) and must be
   explicitly enabled with an API key.
