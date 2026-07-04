@@ -87,8 +87,10 @@ converge` lifecycle.
 | Memory (`/remember`), connected CLIs         | Run claims/heartbeats (recovered on restart) |
 | Uploaded files (metadata + bytes on disk)    | Optimistic UI state (reconciled by polling)  |
 
-A run that was mid-flight when the bridge stops is **auto-recovered** on the next start
-(the stale-run sweep re-queues or fails it), so a crash never strands a run.
+A run that was mid-flight when the bridge stops is **cleaned up** on the next start:
+the stale-run sweep marks it `failed` with a visible error card, and you re-send the
+message. Recovered runs are deliberately **not** auto-retried — a crash never strands
+a run in a stuck state, and it never silently re-executes work either.
 
 ## The sandbox (how agent CLIs are run safely)
 

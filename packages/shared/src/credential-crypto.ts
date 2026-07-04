@@ -4,7 +4,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
  * App-layer AES-256-GCM envelope for BYO provider secrets (ADR-0010 / WS2).
  *
  * The web API encrypts a user's secret before storing it; the bridge decrypts it
- * (service-role only) at spawn to inject one env var into the child CLI. The 256-bit
+ * (server-side only) at spawn to inject one env var into the child CLI. The 256-bit
  * key comes from `CREDENTIAL_ENCRYPTION_KEY` (server-only env, never the browser,
  * never logged). GCM provides confidentiality + integrity (a tampered ciphertext or
  * wrong key fails to decrypt rather than yielding garbage).

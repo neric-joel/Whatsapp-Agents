@@ -138,8 +138,8 @@ A single **command registry** (`packages/shared/src/commands.ts`,
 `{ name, description, argsSpec, minRole, surface }`. Both the message parser
 (`apps/web/lib/slash-commands.ts`, via `extractCommand`) and the API read from it,
 so a command's existence and role gating live in one place. The v1 set:
-`/help`, `/commands`, `/discuss`, `/remember`, `/recall`, `/handoff`, `/agents`,
-`/pin`, `/reset`.
+`/help`, `/commands`, `/discuss`, `/debate`, `/remember`, `/recall`, `/handoff`,
+`/agents`, `/pin`, `/reset`.
 
 **RBAC.** Roles are the per-room `MemberRole` (`owner > admin > member`). `roleAllows`
 ranks them; `allowedCommands`/`formatHelp` drive `/help`, which lists **exactly** the

@@ -7,8 +7,8 @@ import { log } from '../lib/logger.js'
 type DiscussionMode = 'independent' | 'tag_turns'
 
 /**
- * Phase 10 agent-to-agent hand-off. An agent emits a `handoff_requested` event;
- * the bridge (service role) resolves the target peer and creates a TARGETED
+ * Agent-to-agent hand-off. An agent emits a `handoff_requested` event; the
+ * bridge (the trusted local process) resolves the target peer and creates a TARGETED
  * agent_run for it — subject to the room's loop guards (`allow_agent_to_agent`,
  * `max_agent_rounds`, `max_agent_hops`) PLUS cycle detection on the hand-off
  * chain. The agent never writes the DB. A blocked or invalid hand-off is logged

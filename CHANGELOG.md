@@ -6,7 +6,29 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+
+- **Gemini connections no longer send a stray `-` token with every prompt.** The
+  auto-detect catalog invoked gemini as `--prompt -`, but gemini *appends* the
+  `--prompt` value to the stdin input — so every reply carried a meaningless
+  trailing `-`. The catalog now passes a real trailing instruction, and existing
+  `config.json` gemini profiles that still carry the old catalog snapshot are
+  repaired automatically on load.
+- `/help` no longer describes `/debate` as a plain alias of `/discuss` — it runs the
+  adversarial flow (assigned positions → argue → rebut → a coordinator adjudicates a
+  winner), and now says so.
+
+### Changed — claims now match reality (docs truth pass, ADR-0013)
+
+- Recorded the v1.2.0 local-only rewrite as **ADR-0013** (supersedes ADR-0001/0004)
+  and aligned every live doc with it: `SECURITY.md`'s trust model now describes the
+  real boundaries (write path, localhost-only, subprocess env allowlist + provider
+  pass-through, dormant tool-call denylist) instead of the removed
+  Supabase/RLS/Docker stack; `CONTRIBUTING`, `OBSERVABILITY`, issue templates,
+  `CODEOWNERS`, and stale code comments were corrected to match.
+- README: the themes bullet now states exactly what is verified — 7 themes, core
+  screens axe-clean (0 serious/critical WCAG 2.1 A/AA violations) in CI — instead
+  of "WCAG 2.1 AA verified".
 
 ## [1.4.1] - 2026-06-28
 

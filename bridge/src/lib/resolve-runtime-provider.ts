@@ -8,9 +8,9 @@ import {
 
 /**
  * resolveRuntimeProvider — the Hermes analog (ADR-0010 / WS2). Given an agent's
- * adapter type + bound credential + creator, load the creator's stored credential
- * (service-role), decrypt it, and return the env var the adapter's CLI reads its key
- * from. Returns `null` (→ unchanged host-login behavior) whenever BYO does not apply.
+ * adapter type + bound credential + creator, load the stored credential
+ * (server-side only), decrypt it, and return the env var the adapter's CLI reads its
+ * key from. Returns `null` (→ unchanged host-login behavior) whenever BYO does not apply.
  *
  * The decrypted secret is runtime-only: it flows bridge → adapter out-of-band and is
  * injected into exactly one child env var (never argv, the stdin packet, or logs).

@@ -42,7 +42,8 @@ Rewrite the data and auth layers **local-only** (shipped in v1.2.0):
   no sign-up. This is the entire onboarding.
 - **Single-user by design.** There is no multi-tenant or hosted deployment path any
   more; isolation moved from RLS to the OS (your user account owns `~/.agentroom`),
-  the localhost bind, the Origin/CSRF check, and rate limits.
+  the localhost bind, the Origin/CSRF check on every mutating route, and rate limits
+  on the expensive routes.
 - Queue semantics were preserved, so ADR-0002 (agent_runs as queue) and ADR-0003
   (separate bridge daemon) remain correct in amended, SQLite-flavoured form.
 - The docs and every architecture claim had to be re-grounded on the new reality —

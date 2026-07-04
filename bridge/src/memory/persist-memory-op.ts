@@ -8,7 +8,7 @@ import { log } from '../lib/logger.js'
  * Validate + persist a `memory_op` AgentEvent emitted by an agent.
  *
  * The agent NEVER writes the DB directly — it emits an event and the bridge
- * (service role) validates, injection-scans, sanitizes, and persists. There is
+ * (the trusted local process) validates, injection-scans, sanitizes, and persists. There is
  * deliberately NO field by which a memory op can grant tool permissions or alter
  * a persona: it can only store labelled DATA.
  */

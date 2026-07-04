@@ -31,26 +31,34 @@ Security fixes target the `main` branch and the latest tagged release (currently
   `codex-cli`, and any CLI you connect) spawn host-installed binaries as child
   processes. Anyone who can create an agent + send a message in a room the bridge
   serves can cause those CLIs to run. **Run AgentRoom only on a machine whose users
-  you trust, and only connect CLIs you trust.** With no real CLI connected, the
-  built-in **mock adapter** is the only thing that runs. See
+  you trust, and only connect CLIs you trust.** Until you connect a CLI or create an
+  agent on the `claude-code`/`codex-cli` adapter types (which resolve installed
+  binaries from `PATH`), only the built-in **mock adapter** runs. See
   [`docs/SELF_HOSTING.md`](docs/SELF_HOSTING.md) and
   [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full boundary.
 - **Subprocess hardening**: commands are spawned with `shell: false` and an
   argv array (no shell string, no command interpolation); agent-controlled
-  `system_prompt` is delivered via **stdin**, never argv; binaries are resolved from
-  an allowlisted path; the child environment is reduced to an allowlist, and anything
-  matching the secret denylist (tokens, keys, `SUPABASE_*`/`SERVICE_ROLE` leftovers)
-  is **never** forwarded to children; output is capped (10 MB → kill) and runs are
-  bounded by a timeout with a force-kill of the process tree. A denylist blocks
-  obviously destructive tool commands.
+  `system_prompt` is delivered via **stdin**, never argv; the binary is resolved
+  from trusted host configuration (a `*_BIN` env var, `PATH`, or your own
+  Connections entry) — **never from agent data**; the child environment is reduced
+  to an allowlist — base OS vars plus the provider auth vars the CLIs need
+  (`ANTHROPIC_*`, `OPENAI_*`, `GEMINI_*`, …) — and nothing else from the bridge's
+  own environment is forwarded (the only secrets a child sees beyond that are ones
+  you explicitly bind: a BYO credential's single var, or a Connections profile's
+  own `env`); output is capped (10 MB → kill) and runs are bounded by a timeout
+  with a force-kill of the process tree. (A destructive-command denylist exists in
+  the tool-call path, but that path is dormant scaffolding today — no bundled
+  adapter emits `tool_call_requested`; see #83.)
 - **Write-path boundary.** The browser never writes `agent_runs` or `messages`
   directly — every write goes Browser → Next.js route handler → local SQLite
   (`@agentroom/db`), and only the bridge claims and completes runs. Mutating API
-  routes enforce an Origin/CSRF check and are rate-limited.
+  routes enforce an Origin/CSRF check; the expensive ones (messages, uploads,
+  agents, credentials, connections, memory, reset) are also rate-limited.
 - **Local and single-user by design.** There are no accounts and no row-level
   policies: the web server binds `127.0.0.1` only, and all state lives in
-  `~/.agentroom` (SQLite + files). The API is unauthenticated **because** it is
-  localhost-only — do not reverse-proxy it onto a network you don't trust.
+  `~/.agentroom` (`%APPDATA%\AgentRoom` on Windows) — SQLite + files. The API is
+  unauthenticated **because** it is localhost-only — do not reverse-proxy it onto
+  a network you don't trust.
 - **Third-party data egress.** Optional image text/OCR extraction sends image bytes to
   OpenAI. It is **off by default** (`ENABLE_IMAGE_TEXT_EXTRACTION=false`) and must be
   explicitly enabled with an API key.

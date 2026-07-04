@@ -23,8 +23,9 @@ pnpm install
 pnpm dev                 # web (:3000) + bridge in parallel, watch mode
 ```
 
-The first run creates `~/.agentroom/` (SQLite DB + a `files/` folder) and seeds a starter
-room — no env files needed for local use (the `.env.example` files document optional vars).
+The first run creates `~/.agentroom/` (`%APPDATA%\AgentRoom` on Windows — SQLite DB +
+a `files/` folder) and seeds a starter room — no env files needed for local use (the
+`.env.example` files document optional vars).
 
 Env vars are documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#environment-variables).
 **Nothing is required for local use** — every var is an optional override, validated at
@@ -96,7 +97,11 @@ Adapters live in `bridge/src/adapters/`. A subprocess adapter extends
 `SubprocessAdapter` and implements `resolveCommand()`, `buildArgs()`, and
 `envVarName()`; it yields the `AgentEvent` union and must **never** write to the
 database directly (the run worker owns persistence). Register it in
-`bridge/src/adapters/registry.ts`. Respect the subprocess trust model in
+`bridge/src/adapters/registry.ts` **and** add its `adapter_type` to
+`AGENT_ADAPTER_TYPES` in `apps/web/lib/api-validation.ts` (the agents API rejects
+unknown types). Most bring-your-own CLIs need **no** new adapter at all — the `cli`
+profile adapter covers any binary that reads a prompt on stdin. Respect the
+subprocess trust model in
 [`SECURITY.md`](SECURITY.md): no shell strings, no agent input in argv, allowlisted
 binary, minimized env.
 

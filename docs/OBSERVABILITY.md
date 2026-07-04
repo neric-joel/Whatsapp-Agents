@@ -43,9 +43,9 @@ status code:
 }}
 ```
 
-`db` is a best-effort, **2 s-timeout** count against `agents` (`lib/health.ts`):
-`up` (reachable), `down` (error/timeout/unreachable). The check never throws and
-never blocks the response.
+`db` is a best-effort count against `agents` (`lib/health.ts` — a synchronous local
+SQLite query, effectively instant): `up` (reachable), `down` (error/unreachable).
+The check never throws and never blocks the response.
 
 ### Bridge — `GET /healthz`
 

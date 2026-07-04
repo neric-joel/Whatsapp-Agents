@@ -43,11 +43,13 @@ export const COMMAND_REGISTRY: Record<string, CommandSpec> = {
     surface: 'chat',
   },
   debate: {
-    // Server-side synonym of /discuss (parseDiscussionCommand accepts both). Listed
-    // here so it is discoverable in /help, role-gated, and recognized by the parser
-    // — closing the registry⇄dispatch divergence flagged in the pre-v1.0 sweep.
+    // Parsed by the same parseDiscussionCommand as /discuss, but runs the
+    // adversarial flow (assign positions → argue → rebut → adjudicate a winner).
+    // Listed here so it is discoverable in /help, role-gated, and recognized by
+    // the parser — closing the registry⇄dispatch divergence from the pre-v1.0 sweep.
     name: 'debate',
-    description: 'Alias of /discuss — start a multi-agent discussion',
+    description:
+      'Adversarial debate: agents argue assigned positions; a coordinator picks a winner',
     minRole: 'member',
     argsSpec: '<problem>',
     surface: 'chat',

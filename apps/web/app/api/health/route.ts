@@ -6,9 +6,10 @@ import { checkDatabase } from '@/lib/health'
 export const dynamic = 'force-dynamic'
 
 // Liveness + best-effort readiness. ALWAYS returns 200 with the standard
-// { ok, data } envelope so container/orchestrator liveness probes (and the CI
-// image smoke test) stay green even when the DB is unreachable — the DB status
-// is reported in the body (`db: 'up' | 'down' | 'unknown'`), not via the HTTP code.
+// { ok, data } envelope so external liveness checks (the launcher's readiness
+// probe, `curl /api/health`) stay green even when the DB is unreachable — the DB
+// status is reported in the body (`db: 'up' | 'down' | 'unknown'`), not via the
+// HTTP code.
 export async function GET() {
   const db = await checkDatabase()
   return ok({
