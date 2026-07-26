@@ -56,7 +56,7 @@ export default function AgentRunCard({ run, onRetry, onCancel }: AgentRunCardPro
     >
       <div className="flex items-start gap-3">
         <div
-          className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border ${providerStyle.avatar} ${providerStyle.border}`}
+          className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border ${providerStyle.avatar}`}
         >
           <span className="text-[11px] font-semibold text-white">
             {agents ? initials(agents.name) : 'AG'}
