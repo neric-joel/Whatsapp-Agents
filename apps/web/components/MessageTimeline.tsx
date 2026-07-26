@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { type UIEvent, useCallback, useEffect, useRef, useState } from 'react'
 
 import { useAgentRuns } from '@/hooks/useAgentRuns'
 import { useMessages } from '@/hooks/useMessages'
@@ -20,6 +20,7 @@ export interface OptimisticMessage {
   created_at: string
   metadata?: Record<string, unknown>
   reply_to_id?: string | null
+  updated_at?: string
 }
 
 export interface ReplyingMessage {
@@ -69,6 +70,10 @@ function LoadingSkeleton() {
   )
 }
 
+function isNearBottom(element: HTMLDivElement) {
+  return element.scrollHeight - element.scrollTop - element.clientHeight < 80
+}
+
 export default function MessageTimeline({
   roomId,
   refreshSignal,
@@ -81,16 +86,14 @@ export default function MessageTimeline({
   const [filesMap, setFilesMap] = useState<Record<string, FileRow>>({})
   const [currentUserName, setCurrentUserName] = useState<string | null>(null)
   const [pinsByMessageId, setPinsByMessageId] = useState<Record<string, string>>({})
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const wasNearBottomRef = useRef(true)
+  const hasInitialScrolledRef = useRef(false)
 
-  useEffect(() => {
-    // Honour prefers-reduced-motion: ScrollIntoViewOptions.behavior overrides
-    // the CSS scroll-behavior, so we must branch in JS (not only in CSS).
-    const reduceMotion =
-      typeof window !== 'undefined' &&
-      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    bottomRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' })
-  }, [messages, optimisticMessages])
+  const handleTimelineScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
+    wasNearBottomRef.current = isNearBottom(event.currentTarget)
+  }, [])
 
   useEffect(() => {
     // Local single-user app — the human is always "You".
@@ -145,14 +148,6 @@ export default function MessageTimeline({
     }
   }, [roomId])
 
-  if (loading) {
-    return (
-      <div className="flex-1 overflow-y-auto bg-[var(--surface)]">
-        <LoadingSkeleton />
-      </div>
-    )
-  }
-
   const allMessages = [
     ...messages,
     ...optimisticMessages.map((m) => ({
@@ -162,8 +157,39 @@ export default function MessageTimeline({
       reply_to_id: m.reply_to_id ?? null,
       agents: null,
       metadata: m.metadata ?? {},
+      updated_at: m.updated_at ?? m.created_at,
     })),
   ]
+  const lastMessageId = allMessages.at(-1)?.id ?? null
+  const optimisticCount = optimisticMessages.length
+
+  useEffect(() => {
+    if (loading) return
+    const shouldScroll = !hasInitialScrolledRef.current || wasNearBottomRef.current
+    hasInitialScrolledRef.current = true
+    if (!shouldScroll) return
+
+    // Honour prefers-reduced-motion: ScrollIntoViewOptions.behavior overrides
+    // the CSS scroll-behavior, so we must branch in JS (not only in CSS).
+    const reduceMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
+    window.requestAnimationFrame(() => {
+      bottomRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' })
+      const scrollContainer = scrollContainerRef.current
+      if (scrollContainer) wasNearBottomRef.current = isNearBottom(scrollContainer)
+    })
+  }, [lastMessageId, optimisticCount, loading])
+
+  if (loading) {
+    return (
+      <div className="flex-1 overflow-y-auto bg-[var(--surface)]">
+        <LoadingSkeleton />
+      </div>
+    )
+  }
+
   const timelineEvents = buildTimelineEvents(allMessages, runs)
 
   async function handlePin(messageId: string, content: string) {
@@ -208,12 +234,14 @@ export default function MessageTimeline({
 
   return (
     <div
+      ref={scrollContainerRef}
       className="flex-1 overflow-y-auto bg-[var(--surface)]"
       data-testid="message-timeline"
       role="log"
       aria-label="Message timeline"
       aria-live="polite"
       aria-relevant="additions"
+      onScroll={handleTimelineScroll}
     >
       <div className="min-h-full py-4">
         {allMessages.length === 0 && runs.length === 0 && !loading && (

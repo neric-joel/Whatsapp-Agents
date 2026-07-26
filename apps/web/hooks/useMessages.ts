@@ -7,6 +7,7 @@ interface DbMessage {
   sender_type: string
   sender_user_id: string | null
   created_at: string
+  updated_at: string
   sender_agent_id: string | null
   reply_to_id: string | null
   content_type?: string

@@ -16,14 +16,13 @@ const ACTIVE_RUN_STATUSES = ['queued', 'claimed', 'running']
 export default function AgentsPanel({ roomId }: Props) {
   const [agents, setAgents] = useState<AgentRow[]>([])
   const [activeByAgent, setActiveByAgent] = useState<Record<string, number>>({})
-  const [loading, setLoading] = useState(true)
+  const [loadedRoomId, setLoadedRoomId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busyMember, setBusyMember] = useState<string | null>(null)
   // Local single-user app: the current user is always present and is the owner/admin.
   const [isAdmin] = useState(true)
 
   const load = useCallback(async () => {
-    setLoading(true)
     setError(null)
     try {
       const res = await fetch(`/api/rooms/${roomId}/members`)
@@ -43,7 +42,7 @@ export default function AgentsPanel({ roomId }: Props) {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load agents')
     } finally {
-      setLoading(false)
+      setLoadedRoomId(roomId)
     }
   }, [roomId])
 
@@ -94,7 +93,7 @@ export default function AgentsPanel({ roomId }: Props) {
         <div role="alert" className="p-4 text-sm text-red-600">
           Failed to load agents
         </div>
-      ) : loading ? (
+      ) : loadedRoomId !== roomId ? (
         <div role="status" className="p-4 text-sm text-[var(--muted)]">
           Loading agents…
         </div>

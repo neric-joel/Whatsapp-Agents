@@ -8,6 +8,8 @@ describe('app themes', () => {
     expect(APP_THEMES.map((theme) => theme.id)).toContain('dark-modern')
     expect(APP_THEMES.map((theme) => theme.id)).toContain('github-light')
     expect(APP_THEMES.map((theme) => theme.id)).toContain('dracula')
+    expect(APP_THEMES.find((theme) => theme.id === 'dracula')?.isDark).toBe(true)
+    expect(APP_THEMES.find((theme) => theme.id === 'github-light')?.isDark).toBe(false)
   })
 
   it('validates theme ids', () => {

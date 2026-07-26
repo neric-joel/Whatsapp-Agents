@@ -405,6 +405,7 @@ export async function GET(req: NextRequest, props: RouteParams) {
       sender_type: r['sender_type'] as string,
       sender_user_id: (r['sender_user_id'] ?? null) as string | null,
       created_at: r['created_at'] as string,
+      updated_at: r['updated_at'] as string,
       sender_agent_id: (r['sender_agent_id'] ?? null) as string | null,
       reply_to_id: (r['reply_to_id'] ?? null) as string | null,
       content_type: r['content_type'] as string,

@@ -1,11 +1,11 @@
 export const APP_THEMES = [
-  { id: 'light-modern', label: 'Light Modern' },
-  { id: 'github-light', label: 'GitHub Light' },
-  { id: 'solarized-light', label: 'Solarized Light' },
-  { id: 'dark-modern', label: 'Dark Modern' },
-  { id: 'github-dark', label: 'GitHub Dark' },
-  { id: 'one-dark-pro', label: 'One Dark Pro' },
-  { id: 'dracula', label: 'Dracula' },
+  { id: 'light-modern', label: 'Light Modern', isDark: false },
+  { id: 'github-light', label: 'GitHub Light', isDark: false },
+  { id: 'solarized-light', label: 'Solarized Light', isDark: false },
+  { id: 'dark-modern', label: 'Dark Modern', isDark: true },
+  { id: 'github-dark', label: 'GitHub Dark', isDark: true },
+  { id: 'one-dark-pro', label: 'One Dark Pro', isDark: true },
+  { id: 'dracula', label: 'Dracula', isDark: true },
 ] as const
 
 export type AppThemeId = (typeof APP_THEMES)[number]['id']

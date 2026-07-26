@@ -12,7 +12,7 @@ interface ProviderStyle {
 
 export const PROVIDER_STYLES: Record<AgentProvider, ProviderStyle> = {
   claude_code: {
-    bubble: 'bg-[#fff7ed]',
+    bubble: 'agent-provider-bubble agent-provider-claude-code',
     border: 'border-[#fdba74]/70',
     text: 'text-[#432818]',
     // avatar bg darkened to orange-700 so white initials meet WCAG AA (5.18:1);
@@ -23,7 +23,7 @@ export const PROVIDER_STYLES: Record<AgentProvider, ProviderStyle> = {
     glow: 'shadow-[0_0_14px_rgba(234,88,12,0.16)]',
   },
   codex_cli: {
-    bubble: 'bg-[#ecfeff]',
+    bubble: 'agent-provider-bubble agent-provider-codex-cli',
     border: 'border-[#67e8f9]/70',
     text: 'text-[#083344]',
     // avatar bg darkened to cyan-700 so white initials meet WCAG AA (5.35:1);
@@ -34,7 +34,7 @@ export const PROVIDER_STYLES: Record<AgentProvider, ProviderStyle> = {
     glow: 'shadow-[0_0_14px_rgba(8,145,178,0.16)]',
   },
   mock: {
-    bubble: 'bg-[#f1f5f9]',
+    bubble: 'agent-provider-bubble agent-provider-mock',
     border: 'border-[#cbd5e1]/80',
     text: 'text-[#0f172a]',
     avatar: 'bg-[#64748b]',
