@@ -35,12 +35,13 @@ export function allowedOrigins(): string[] {
 }
 
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+const PINNED_SELF_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]'])
 
 /**
  * CSRF defense for state-changing requests. This is a local single-user app with no
- * cross-site auth, so we require the Origin of any mutating request to match the
- * request host or an allowlisted origin. Returns true when the request should be
- * rejected as cross-origin.
+ * cross-site auth, so we require the Origin of any mutating request to match an
+ * allowlisted origin or a pinned loopback self-origin. Returns true when the
+ * request should be rejected as cross-origin.
  */
 export function isForbiddenCrossOrigin(req: {
   method: string
@@ -54,16 +55,29 @@ export function isForbiddenCrossOrigin(req: {
   // No Origin on a state-changing cookie request → treat as suspicious.
   if (!origin) return true
 
-  const selfOrigin = req.nextUrl?.origin ?? (req.url ? safeOrigin(req.url) : null)
-  const allowed = new Set(allowedOrigins())
-  if (selfOrigin) allowed.add(selfOrigin)
+  const originUrl = safeUrl(origin)
+  if (!originUrl) return true
 
-  return !allowed.has(origin)
+  if (new Set(allowedOrigins()).has(originUrl.origin)) return false
+
+  const requestUrl = safeUrl(req.nextUrl?.origin ?? req.url ?? '')
+  if (!requestUrl) return true
+
+  return !isPinnedSelfOrigin(originUrl, requestUrl)
 }
 
-function safeOrigin(url: string): string | null {
+function isPinnedSelfOrigin(originUrl: URL, requestUrl: URL): boolean {
+  return (
+    PINNED_SELF_HOSTNAMES.has(originUrl.hostname) &&
+    originUrl.protocol === requestUrl.protocol &&
+    originUrl.hostname === requestUrl.hostname &&
+    originUrl.port === requestUrl.port
+  )
+}
+
+function safeUrl(url: string): URL | null {
   try {
-    return new URL(url).origin
+    return new URL(url)
   } catch {
     return null
   }

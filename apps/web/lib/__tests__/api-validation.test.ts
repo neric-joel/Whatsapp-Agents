@@ -4,8 +4,10 @@ import {
   createMemorySchema,
   createPinSchema,
   createRoomSchema,
+  MAX_MESSAGE_CONTENT_CHARS,
   sendMessageSchema,
   updateMemorySchema,
+  updateMessageSchema,
   updatePinSchema,
 } from '../api-validation'
 
@@ -41,6 +43,16 @@ describe('sendMessageSchema', () => {
   it('rejects empty content', () => {
     expect(sendMessageSchema.safeParse({ content: '' }).success).toBe(false)
   })
+  it('accepts content at the 8000-char cap', () => {
+    expect(
+      sendMessageSchema.safeParse({ content: 'x'.repeat(MAX_MESSAGE_CONTENT_CHARS) }).success,
+    ).toBe(true)
+  })
+  it('rejects content over the 8000-char cap', () => {
+    expect(
+      sendMessageSchema.safeParse({ content: 'x'.repeat(MAX_MESSAGE_CONTENT_CHARS + 1) }).success,
+    ).toBe(false)
+  })
   it('rejects a non-uuid reply_to_id', () => {
     expect(sendMessageSchema.safeParse({ content: 'x', reply_to_id: 'not-a-uuid' }).success).toBe(
       false,
@@ -65,6 +77,22 @@ describe('sendMessageSchema', () => {
         metadata: { file_ids: [] },
       }).success,
     ).toBe(true)
+  })
+})
+
+describe('updateMessageSchema', () => {
+  it('rejects an empty update', () => {
+    expect(updateMessageSchema.safeParse({}).success).toBe(false)
+  })
+  it('accepts content at the 8000-char cap', () => {
+    expect(
+      updateMessageSchema.safeParse({ content: 'x'.repeat(MAX_MESSAGE_CONTENT_CHARS) }).success,
+    ).toBe(true)
+  })
+  it('rejects content over the 8000-char cap', () => {
+    expect(
+      updateMessageSchema.safeParse({ content: 'x'.repeat(MAX_MESSAGE_CONTENT_CHARS + 1) }).success,
+    ).toBe(false)
   })
 })
 

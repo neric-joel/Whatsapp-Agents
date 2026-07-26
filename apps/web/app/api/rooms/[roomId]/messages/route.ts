@@ -377,6 +377,13 @@ export async function GET(req: NextRequest, props: RouteParams) {
   }
 
   try {
+    const room = db.prepare('SELECT 1 FROM rooms WHERE id = ?').get(roomId)
+    if (!room) return apiError('NOT_FOUND', 'Room not found', 404)
+  } catch (e) {
+    return internalError('room fetch', e)
+  }
+
+  try {
     const rows = db
       .prepare(
         `SELECT m.*, a.name AS agent_name, a.provider AS agent_provider

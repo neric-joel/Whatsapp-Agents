@@ -37,8 +37,10 @@ export const updateRoomSchema = z
   })
   .refine((d) => Object.keys(d).length > 0, 'At least one field required')
 
+export const MAX_MESSAGE_CONTENT_CHARS = 8000
+
 export const sendMessageSchema = z.object({
-  content: z.string().min(1),
+  content: z.string().min(1).max(MAX_MESSAGE_CONTENT_CHARS),
   content_type: z.string().optional(),
   reply_to_id: z.string().uuid().optional(),
   mentions: z.array(z.string()).optional(),
@@ -47,6 +49,14 @@ export const sendMessageSchema = z.object({
   hop_index: z.number().int().nonnegative().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 })
+
+// PATCH body: edit a message's content and/or metadata. At least one field required.
+export const updateMessageSchema = z
+  .object({
+    content: z.string().min(1).max(MAX_MESSAGE_CONTENT_CHARS).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  })
+  .refine((d) => Object.keys(d).length > 0, 'At least one field required')
 
 export const addRoomAgentSchema = z.object({
   agentId: z.string().uuid(),
