@@ -43,7 +43,8 @@ export async function GET(req: Request, props: RouteParams) {
          FROM agent_runs r LEFT JOIN agents a ON a.id = r.agent_id
          WHERE r.room_id = ?
            AND r.status IN ('queued','claimed','running','failed','cancelled')
-         ORDER BY r.created_at ASC`,
+         ORDER BY r.created_at DESC
+         LIMIT 200`,
       )
       .all(params.roomId) as Record<string, unknown>[]
     const runs = rows.map((row) => ({

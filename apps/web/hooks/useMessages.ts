@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 interface DbMessage {
   id: string
@@ -17,30 +17,88 @@ interface DbMessage {
 
 const POLL_MS = 1500
 
+interface MessagesState {
+  roomId: string
+  messages: DbMessage[]
+}
+
+export function shouldApplyMessagesResponse(
+  requestRoomId: string,
+  currentRoomId: string,
+  requestSeq: number,
+  latestSeq: number,
+) {
+  return requestRoomId === currentRoomId && requestSeq === latestSeq
+}
+
+export function messagesForRoom(state: MessagesState, roomId: string) {
+  return state.roomId === roomId ? state.messages : []
+}
+
 /**
  * Messages for a room. Local app: reads the GET API and polls for live updates
  * (replaces the old Supabase realtime channel). `refreshSignal` forces an
  * immediate refetch (e.g. after the compose box clears the chat).
  */
 export function useMessages(roomId: string, refreshSignal?: number) {
-  const [messages, setMessages] = useState<DbMessage[]>([])
+  const [state, setState] = useState<MessagesState>({ roomId, messages: [] })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const currentRoomIdRef = useRef(roomId)
+  const requestSeqRef = useRef(0)
 
   const refetch = useCallback(async () => {
+    const requestRoomId = roomId
+    const requestSeq = requestSeqRef.current + 1
+    requestSeqRef.current = requestSeq
     try {
-      const res = await fetch(`/api/rooms/${roomId}/messages`, { cache: 'no-store' })
+      const res = await fetch(`/api/rooms/${requestRoomId}/messages`, { cache: 'no-store' })
       const json = await res.json()
+      if (
+        !shouldApplyMessagesResponse(
+          requestRoomId,
+          currentRoomIdRef.current,
+          requestSeq,
+          requestSeqRef.current,
+        )
+      ) {
+        return
+      }
       if (!json.ok) setError(json.error?.message ?? 'Failed to load messages')
       else {
-        setMessages((json.data as DbMessage[]) ?? [])
+        setState({ roomId: requestRoomId, messages: (json.data as DbMessage[]) ?? [] })
         setError(null)
       }
     } catch (e) {
+      if (
+        !shouldApplyMessagesResponse(
+          requestRoomId,
+          currentRoomIdRef.current,
+          requestSeq,
+          requestSeqRef.current,
+        )
+      ) {
+        return
+      }
       setError(e instanceof Error ? e.message : 'Failed to load messages')
     } finally {
-      setLoading(false)
+      if (
+        shouldApplyMessagesResponse(
+          requestRoomId,
+          currentRoomIdRef.current,
+          requestSeq,
+          requestSeqRef.current,
+        )
+      ) {
+        setLoading(false)
+      }
     }
+  }, [roomId])
+
+  useEffect(() => {
+    currentRoomIdRef.current = roomId
+    setLoading(true)
+    setError(null)
   }, [roomId])
 
   useEffect(() => {
@@ -52,5 +110,6 @@ export function useMessages(roomId: string, refreshSignal?: number) {
     return () => clearInterval(t)
   }, [refetch])
 
-  return { messages, loading, error, refetch }
+  const messages = messagesForRoom(state, roomId)
+  return { messages, loading: state.roomId === roomId ? loading : true, error, refetch }
 }
