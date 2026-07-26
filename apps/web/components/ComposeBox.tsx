@@ -1,5 +1,11 @@
 'use client'
-import { formatHelp, getCommandSpec, type MemberRole, roleAllows } from '@agentroom/shared'
+import {
+  formatHelp,
+  getCommandSpec,
+  type MemberRole,
+  roleAllows,
+  type RoomAgentMember,
+} from '@agentroom/shared'
 import {
   ChangeEvent,
   ClipboardEvent,
@@ -15,6 +21,7 @@ import { useRooms } from '@/hooks/useRooms'
 import { ALLOWED_UPLOAD_MIME_TYPES, MAX_UPLOAD_BYTES } from '@/lib/api-validation'
 import { userVisibleContent } from '@/lib/message-display'
 import { getImageFilesFromClipboardItems } from '@/lib/pasted-files'
+import { mapMembersToMentionAgents, type MentionAgent } from '@/lib/room-members'
 import { parseSlashCommand, type SlashCommand } from '@/lib/slash-commands'
 
 import { AGENTS_EVENT } from './AgentsPanel'
@@ -35,15 +42,10 @@ interface Props {
     agents?: { name: string; provider: string } | null
   } | null
   onCancelReply?: () => void
+  roomName?: string | null
 }
 
-interface SlimAgent {
-  id: string
-  slug: string
-  name: string
-}
-
-const EVERYONE: SlimAgent = { id: '__everyone__', slug: 'everyone', name: 'Everyone' }
+const EVERYONE: MentionAgent = { id: '__everyone__', slug: 'everyone', name: 'Everyone' }
 
 export default function ComposeBox({
   roomId,
@@ -51,6 +53,7 @@ export default function ComposeBox({
   onRefetch,
   replyingTo,
   onCancelReply,
+  roomName,
 }: Props) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
@@ -61,7 +64,7 @@ export default function ComposeBox({
   const [attachedFile, setAttachedFile] = useState<{ id: string; name: string } | null>(null)
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
   const [mentionStart, setMentionStart] = useState(-1)
-  const [roomAgents, setRoomAgents] = useState<SlimAgent[]>([])
+  const [roomAgents, setRoomAgents] = useState<MentionAgent[]>([])
   const [activeMentionIndex, setActiveMentionIndex] = useState(0)
   const [userRole, setUserRole] = useState<MemberRole>('member')
   const [roleLoaded, setRoleLoaded] = useState(false)
@@ -78,15 +81,7 @@ export default function ComposeBox({
       .then((res) => res.json())
       .then((json) => {
         if (cancelled || !json?.ok) return
-        const members = (json.data ?? []) as Array<{
-          member_type: string
-          muted?: boolean
-          agents?: (SlimAgent & { is_active: boolean }) | null
-        }>
-        const agents = members
-          .filter((m) => m.member_type === 'agent' && !m.muted && m.agents?.is_active)
-          .map((m) => ({ id: m.agents!.id, slug: m.agents!.slug, name: m.agents!.name }))
-        setRoomAgents(agents)
+        setRoomAgents(mapMembersToMentionAgents((json.data ?? []) as RoomAgentMember[]))
       })
       .catch(() => {})
     return () => {
@@ -112,7 +107,7 @@ export default function ComposeBox({
     return () => document.removeEventListener('mousedown', onMouseDown)
   }, [mentionQuery])
 
-  const mentionOptions = useMemo<SlimAgent[]>(() => {
+  const mentionOptions = useMemo<MentionAgent[]>(() => {
     if (mentionQuery === null) return []
     const q = mentionQuery.toLowerCase()
     const filtered = roomAgents.filter((a) => a.slug.toLowerCase().startsWith(q))
@@ -348,22 +343,28 @@ export default function ComposeBox({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content, metadata, reply_to_id: replyingTo?.id }),
       })
-      if (!res.ok) {
-        const json = (await res.json().catch(() => ({}))) as { error?: { message?: string } }
+      const json = (await res.json().catch(() => ({}))) as {
+        ok?: boolean
+        data?: { message?: { id: string; created_at: string; metadata?: Record<string, unknown> } }
+        error?: { message?: string }
+      }
+      if (!res.ok || !json.ok) {
         setSendError(json.error?.message ?? 'Failed to send message')
         return
       }
+      const serverMessage = json.data?.message
       setSendError(null)
       setText('')
       setMentionQuery(null)
       setMentionStart(-1)
       setActiveMentionIndex(0)
       onOptimistic({
-        id: crypto.randomUUID(),
+        id: serverMessage ? `optimistic-${serverMessage.id}` : crypto.randomUUID(),
+        server_message_id: serverMessage?.id,
         content,
         sender_type: 'user',
-        created_at: new Date().toISOString(),
-        metadata,
+        created_at: serverMessage?.created_at ?? new Date().toISOString(),
+        metadata: serverMessage?.metadata ?? metadata,
         reply_to_id: replyingTo?.id ?? null,
       })
       setAttachedFile(null)
@@ -479,7 +480,7 @@ export default function ComposeBox({
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder={`Message #${room?.name ?? '...'}...`}
+          placeholder={`Message #${roomName ?? '...'}...`}
           rows={1}
           role="combobox"
           aria-expanded={showDropdown}

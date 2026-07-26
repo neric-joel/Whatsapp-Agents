@@ -1,4 +1,5 @@
 import { getDb, intBool, newId } from '@agentroom/db'
+import type { RoomAgentMember, RoomAgentSummary, RunStatus } from '@agentroom/shared'
 import { NextRequest } from 'next/server'
 
 import { apiError, apiSuccess } from '@/lib/api-error'
@@ -9,15 +10,6 @@ import { requireRoomMember } from '@/lib/permissions'
 
 interface RouteParams {
   params: Promise<{ roomId: string }>
-}
-
-type AgentRow = {
-  id: string
-  name: string
-  slug: string
-  provider: string
-  adapter_type: string
-  is_active: boolean
 }
 
 // Flat row shape returned by the room_members + agents JOIN. SQLite stores booleans
@@ -36,18 +28,6 @@ type RoomAgentMemberJoinRow = {
   agent_provider: string
   agent_adapter_type: string
   agent_is_active: number
-}
-
-type FormattedMember = {
-  id: string
-  room_id: string
-  agent_id: string
-  member_type: 'agent'
-  reply_enabled: boolean
-  muted: boolean
-  joined_at: string
-  agent: AgentRow
-  last_run_status: string | null
 }
 
 // SELECT room_members for the room joined to agents. Mirrors the old
@@ -71,7 +51,7 @@ const MEMBER_SELECT = `
   INNER JOIN agents a ON a.id = m.agent_id
 `
 
-function formatMember(row: RoomAgentMemberJoinRow): FormattedMember {
+function formatMember(row: RoomAgentMemberJoinRow): RoomAgentMember {
   return {
     id: row.id,
     room_id: row.room_id,
@@ -84,10 +64,10 @@ function formatMember(row: RoomAgentMemberJoinRow): FormattedMember {
       id: row.agent_id_a,
       name: row.agent_name,
       slug: row.agent_slug,
-      provider: row.agent_provider,
-      adapter_type: row.agent_adapter_type,
+      provider: row.agent_provider as RoomAgentSummary['provider'],
+      adapter_type: row.agent_adapter_type as RoomAgentSummary['adapter_type'],
       is_active: row.agent_is_active === 1,
-    },
+    } satisfies RoomAgentSummary,
     last_run_status: null,
   }
 }
@@ -98,7 +78,7 @@ function addLatestRunStatus(
   db: ReturnType<typeof getDb>,
   roomId: string,
   members: RoomAgentMemberJoinRow[],
-): FormattedMember[] {
+): RoomAgentMember[] {
   const agentIds = members.map((member) => member.agent_id)
   if (agentIds.length === 0) return members.map(formatMember)
 
@@ -119,7 +99,7 @@ function addLatestRunStatus(
 
   return members.map((member) => ({
     ...formatMember(member),
-    last_run_status: latestStatusByAgent.get(member.agent_id) ?? null,
+    last_run_status: (latestStatusByAgent.get(member.agent_id) as RunStatus | undefined) ?? null,
   }))
 }
 

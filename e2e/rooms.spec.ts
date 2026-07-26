@@ -44,11 +44,12 @@ test('a room can be renamed from its menu', async ({ page }) => {
   await createRoom(page, original)
 
   const nav = page.getByRole('navigation', { name: 'Room list' })
-  // The newly-created room sorts to the top (most recently active). Open its menu.
-  await nav.getByRole('button', { name: 'Room actions' }).first().click()
+  const activeRoomRow = nav.getByRole('link', { name: `# ${original}` }).locator('xpath=..')
+  await activeRoomRow.getByRole('button', { name: 'Room actions' }).click()
   const renamed = `Renamed ${Date.now().toString().slice(-5)}`
   page.once('dialog', (d) => d.accept(renamed))
   await page.getByRole('button', { name: /Rename/ }).click()
 
   await expect(nav.getByText(renamed)).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByPlaceholder(`Message #${renamed}...`)).toBeVisible({ timeout: 10_000 })
 })

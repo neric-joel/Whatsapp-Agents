@@ -5,6 +5,7 @@ import { DM_Sans, JetBrains_Mono } from 'next/font/google'
 
 import AppShell from '@/components/AppShell'
 import { ToastProvider } from '@/contexts/ToastContext'
+import { APP_THEMES, DEFAULT_APP_THEME, THEME_STORAGE_KEY } from '@/lib/themes'
 
 // Self-hosted via next/font (downloaded at build, served from /_next). This removes the
 // runtime request to fonts.googleapis.com/fonts.gstatic.com that the app's tight CSP
@@ -20,12 +21,28 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata = { title: 'AgentRoom', description: 'AgentRoom' }
 
+const themeInitScript = `(() => {
+  try {
+    const allowed = ${JSON.stringify(APP_THEMES.map((theme) => theme.id))};
+    const stored = window.localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)});
+    const theme = allowed.includes(stored) ? stored : ${JSON.stringify(DEFAULT_APP_THEME)};
+    document.documentElement.dataset.agentroomTheme = theme;
+  } catch {
+    document.documentElement.dataset.agentroomTheme = ${JSON.stringify(DEFAULT_APP_THEME)};
+  }
+})();`
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="en"
+      data-agentroom-theme={DEFAULT_APP_THEME}
+      suppressHydrationWarning
       className={`h-full overflow-hidden ${dmSans.variable} ${jetbrainsMono.variable}`}
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="flex h-screen flex-row overflow-hidden bg-[var(--app-bg)] font-sans text-[var(--text)]">
         <ToastProvider>
           <AppShell>{children}</AppShell>

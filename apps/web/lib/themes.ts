@@ -11,6 +11,7 @@ export const APP_THEMES = [
 export type AppThemeId = (typeof APP_THEMES)[number]['id']
 
 export const DEFAULT_APP_THEME: AppThemeId = 'light-modern'
+export const THEME_STORAGE_KEY = 'agentroom-theme'
 
 export function isAppThemeId(value: string | null): value is AppThemeId {
   return APP_THEMES.some((theme) => theme.id === value)
