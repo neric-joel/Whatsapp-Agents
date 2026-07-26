@@ -38,7 +38,9 @@ vi.mock('@/lib/permissions', () => ({
   requireRoomMember: vi.fn(() => Promise.resolve()),
 }))
 
-import { GET, SAFE_INLINE_DOWNLOAD_MIME_TYPES } from './route'
+import { SAFE_INLINE_DOWNLOAD_MIME_TYPES } from '@/lib/download-disposition'
+
+import { GET } from './route'
 
 const baseFileRow = {
   id: 'file-1',
