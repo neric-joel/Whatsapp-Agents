@@ -12,6 +12,16 @@ interface RouteParams {
   params: Promise<{ fileId: string }>
 }
 
+export const SAFE_INLINE_DOWNLOAD_MIME_TYPES = [
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+  'text/plain',
+] as const
+
+const safeInlineDownloadMimeTypes = new Set<string>(SAFE_INLINE_DOWNLOAD_MIME_TYPES)
+
 export async function GET(req: Request, props: RouteParams) {
   const params = await props.params
   const {
@@ -45,10 +55,14 @@ export async function GET(req: Request, props: RouteParams) {
     return apiError('NOT_FOUND', 'File not found', 404)
   }
 
+  const disposition = safeInlineDownloadMimeTypes.has(file.mime_type) ? 'inline' : 'attachment'
+
   return new Response(new Uint8Array(buf), {
     headers: {
       'Content-Type': file.mime_type,
-      'Content-Disposition': `inline; filename="${file.filename}"`,
+      'Content-Disposition': `${disposition}; filename="${file.filename}"`,
+      'Content-Security-Policy': "default-src 'none'; sandbox",
+      'X-Content-Type-Options': 'nosniff',
       'Cache-Control': 'private, max-age=3600',
     },
   })
