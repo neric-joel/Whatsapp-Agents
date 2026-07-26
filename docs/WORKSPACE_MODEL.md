@@ -50,10 +50,13 @@ produced files belong.
   current session; switching updates it. New rooms attach to the active session.
 - **D-W4 — Backward compatible.** Rooms created before sessions have `session_id = NULL`
   and are grouped under the active session's view as "unassigned" rather than orphaned.
-- **D-W5 — Read-only-for-now folder.** v2 persists + displays the working folder and uses
-  it as the outputs root; wiring it as each CLI's spawn `cwd` is a tracked follow-up (the
-  subprocess layer would need a per-run cwd, kept out of this phase to avoid touching the
-  hardened spawn path under time pressure).
+- **D-W5 — The folder is where agents work.** v2 persisted and displayed the working folder
+  and used it only as the outputs root; wiring it as each CLI's spawn `cwd` was deferred to
+  avoid touching the hardened spawn path under time pressure. That follow-up has since
+  landed (#86): `ContextPacketV1` carries `working_dir`, `buildContextPacket` reads it from
+  the room's session, and `SubprocessAdapter` passes it through `resolveSpawnCwd` — which
+  re-validates (realpath, allow-root, denylist) immediately before `spawn`. The hardened
+  path was not modified; no stored path reaches `spawn` unvalidated.
 
 ## Onboarding flow
 
