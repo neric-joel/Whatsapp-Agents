@@ -244,6 +244,7 @@ export default function MessageTimeline({
       onScroll={handleTimelineScroll}
     >
       <div className="min-h-full py-4">
+        {loading && <LoadingSkeleton />}
         {allMessages.length === 0 && runs.length === 0 && !loading && (
           // No role="status" here: this lives inside the role="log" live region,
           // so a separate status region would double-announce.

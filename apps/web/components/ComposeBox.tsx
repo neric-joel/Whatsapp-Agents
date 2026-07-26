@@ -5,6 +5,7 @@ import {
   ClipboardEvent,
   KeyboardEvent,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -61,11 +62,13 @@ export default function ComposeBox({
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
   const [mentionStart, setMentionStart] = useState(-1)
   const [roomAgents, setRoomAgents] = useState<SlimAgent[]>([])
+  const [activeMentionIndex, setActiveMentionIndex] = useState(0)
   const [userRole, setUserRole] = useState<MemberRole>('member')
   const [roleLoaded, setRoleLoaded] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropdownRef = useRef<HTMLUListElement>(null)
+  const mentionListboxId = useId()
   const { rooms } = useRooms()
   const room = rooms.find((r) => r.id === roomId)
 
@@ -126,9 +129,11 @@ export default function ComposeBox({
     if (match) {
       setMentionQuery(match[1] ?? '')
       setMentionStart(before.length - match[0].length)
+      setActiveMentionIndex(0)
     } else {
       setMentionQuery(null)
       setMentionStart(-1)
+      setActiveMentionIndex(0)
     }
   }
 
@@ -352,6 +357,7 @@ export default function ComposeBox({
       setText('')
       setMentionQuery(null)
       setMentionStart(-1)
+      setActiveMentionIndex(0)
       onOptimistic({
         id: crypto.randomUUID(),
         content,
@@ -370,14 +376,27 @@ export default function ComposeBox({
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    const dropdownOpen = mentionQuery !== null && mentionOptions.length > 0
+    if (dropdownOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      e.preventDefault()
+      setActiveMentionIndex((index) => {
+        const offset = e.key === 'ArrowDown' ? 1 : -1
+        return (index + offset + mentionOptions.length) % mentionOptions.length
+      })
+      return
+    }
+    if (dropdownOpen && e.key === 'Enter') {
+      e.preventDefault()
+      const selectedIndex = Math.min(activeMentionIndex, mentionOptions.length - 1)
+      const selected = mentionOptions[selectedIndex] ?? mentionOptions[0]
+      if (selected) selectMention(selected.slug)
+      return
+    }
     if (mentionQuery !== null && e.key === 'Escape') {
       e.preventDefault()
       setMentionQuery(null)
       setMentionStart(-1)
-      return
-    }
-    if (mentionQuery !== null && e.key === 'Enter') {
-      e.preventDefault()
+      setActiveMentionIndex(0)
       return
     }
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -387,6 +406,12 @@ export default function ComposeBox({
   }
 
   const showDropdown = mentionQuery !== null && mentionOptions.length > 0
+  const clampedActiveMentionIndex = showDropdown
+    ? Math.min(activeMentionIndex, mentionOptions.length - 1)
+    : 0
+  const activeMentionId = showDropdown
+    ? `${mentionListboxId}-option-${mentionOptions[clampedActiveMentionIndex]?.id ?? mentionOptions[0]?.id}`
+    : undefined
   const replySender =
     replyingTo?.sender_type === 'agent'
       ? (replyingTo.agents?.name ?? 'Agent')
@@ -421,20 +446,29 @@ export default function ComposeBox({
       <div className="relative flex items-end gap-3 rounded-2xl transition focus-within:ring-2 focus-within:ring-[#8b5cf6]/20">
         {showDropdown && (
           <ul
+            id={mentionListboxId}
             ref={dropdownRef}
+            role="listbox"
+            aria-label="Mention suggestions"
             className="absolute bottom-full left-0 right-[52px] z-50 mb-2 max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg"
           >
-            {mentionOptions.map((opt) => (
+            {mentionOptions.map((opt, index) => (
               <li
                 key={opt.id}
+                id={`${mentionListboxId}-option-${opt.id}`}
+                role="option"
+                aria-selected={index === clampedActiveMentionIndex}
                 onMouseDown={(e) => {
                   e.preventDefault()
                   selectMention(opt.slug)
                 }}
-                className="flex cursor-pointer items-center gap-2 px-4 py-2 hover:bg-gray-50"
+                onMouseEnter={() => setActiveMentionIndex(index)}
+                className={`flex cursor-pointer items-center gap-2 px-4 py-2 ${
+                  index === clampedActiveMentionIndex ? 'bg-gray-100' : 'hover:bg-gray-50'
+                }`}
               >
                 <span className="text-sm font-medium text-purple-700">@{opt.slug}</span>
-                <span className="text-xs text-gray-500">{opt.name}</span>
+                <span className="text-xs text-gray-600">{opt.name}</span>
               </li>
             ))}
           </ul>
@@ -447,19 +481,28 @@ export default function ComposeBox({
           onPaste={handlePaste}
           placeholder={`Message #${room?.name ?? '...'}...`}
           rows={1}
+          role="combobox"
+          aria-expanded={showDropdown}
+          aria-controls={showDropdown ? mentionListboxId : undefined}
+          aria-autocomplete="list"
+          aria-activedescendant={activeMentionId}
           className="max-h-32 min-h-[46px] flex-1 resize-none overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm text-[var(--text)] outline-none transition-shadow placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--focus-ring)]"
         />
         {sendError && (
           <p className="absolute left-1 top-full mt-1 px-1 text-xs text-red-600">{sendError}</p>
         )}
-        {!sendError && notice && (
-          <p
-            role="status"
-            className="absolute bottom-full left-1 right-1 mb-1 max-h-48 overflow-y-auto whitespace-pre-line rounded-lg border border-[var(--border)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--muted)] shadow-sm"
-          >
-            {notice}
-          </p>
-        )}
+        <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className="absolute bottom-full left-1 right-1 mb-1"
+        >
+          {!sendError && notice && (
+            <p className="max-h-48 overflow-y-auto whitespace-pre-line rounded-lg border border-[var(--border)] bg-[var(--panel)] px-2 py-1 text-xs text-[var(--muted)] shadow-sm">
+              {notice}
+            </p>
+          )}
+        </div>
         <input
           ref={fileInputRef}
           type="file"

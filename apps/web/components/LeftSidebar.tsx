@@ -2,7 +2,7 @@
 import type { Room } from '@agentroom/shared'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { FormEvent, MouseEvent, useMemo, useRef, useState } from 'react'
+import { FormEvent, KeyboardEvent, MouseEvent, useMemo, useRef, useState } from 'react'
 
 import { useRooms } from '@/hooks/useRooms'
 import { useSessions } from '@/hooks/useSessions'
@@ -11,6 +11,7 @@ import { notifyChatCleared } from '@/lib/chat-events'
 import SessionBar from './SessionBar'
 
 type ApiResponse<T> = { ok: true; data: T } | { ok: false; error: { message?: string } | string }
+type DestructiveAction = { type: 'delete'; room: Room } | { type: 'clear'; room: Room }
 
 function ArchiveIcon() {
   return (
@@ -117,9 +118,12 @@ export default function LeftSidebar() {
   const [busyRoomId, setBusyRoomId] = useState<string | null>(null)
   const [showArchived, setShowArchived] = useState(false)
   const [openRoomMenuId, setOpenRoomMenuId] = useState<string | null>(null)
+  const [destructiveAction, setDestructiveAction] = useState<DestructiveAction | null>(null)
   const dialogRef = useRef<HTMLFormElement>(null)
+  const confirmDialogRef = useRef<HTMLDivElement>(null)
   // Element focused before the modal opened, so we can restore focus on close.
   const createTriggerRef = useRef<HTMLElement | null>(null)
+  const confirmTriggerRef = useRef<HTMLElement | null>(null)
 
   const { activeRooms, archivedRooms } = useMemo(
     () => ({
@@ -176,9 +180,9 @@ export default function LeftSidebar() {
   }
 
   // Focus trap: keep Tab / Shift+Tab cycling within the open dialog.
-  function trapDialogFocus(e: React.KeyboardEvent) {
-    if (e.key !== 'Tab' || !dialogRef.current) return
-    const focusables = dialogRef.current.querySelectorAll<HTMLElement>(
+  function trapFocusWithin(e: KeyboardEvent, container: HTMLElement | null) {
+    if (e.key !== 'Tab' || !container) return
+    const focusables = container.querySelectorAll<HTMLElement>(
       'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
     )
     const enabled = Array.from(focusables).filter((el) => !el.hasAttribute('disabled'))
@@ -193,6 +197,14 @@ export default function LeftSidebar() {
       e.preventDefault()
       first.focus()
     }
+  }
+
+  function trapCreateDialogFocus(e: KeyboardEvent) {
+    trapFocusWithin(e, dialogRef.current)
+  }
+
+  function trapConfirmDialogFocus(e: KeyboardEvent) {
+    trapFocusWithin(e, confirmDialogRef.current)
   }
 
   async function handleCreateRoom(event: FormEvent<HTMLFormElement>) {
@@ -314,11 +326,15 @@ export default function LeftSidebar() {
     }
   }
 
-  async function deleteRoom(room: Room, event: MouseEvent<HTMLButtonElement>) {
+  function requestDeleteRoom(room: Room, event: MouseEvent<HTMLButtonElement>) {
     event.preventDefault()
     event.stopPropagation()
-    if (!window.confirm(`Delete "${room.name}"? This cannot be undone.`)) return
+    confirmTriggerRef.current = event.currentTarget
+    setRoomActionError(null)
+    setDestructiveAction({ type: 'delete', room })
+  }
 
+  async function performDeleteRoom(room: Room) {
     setBusyRoomId(room.id)
     setRoomActionError(null)
     try {
@@ -344,11 +360,15 @@ export default function LeftSidebar() {
     }
   }
 
-  async function clearRoomChat(room: Room, event: MouseEvent<HTMLButtonElement>) {
+  function requestClearRoomChat(room: Room, event: MouseEvent<HTMLButtonElement>) {
     event.preventDefault()
     event.stopPropagation()
-    if (!window.confirm(`Clear chat in "${room.name}"? This cannot be undone.`)) return
+    confirmTriggerRef.current = event.currentTarget
+    setRoomActionError(null)
+    setDestructiveAction({ type: 'clear', room })
+  }
 
+  async function performClearRoomChat(room: Room) {
     setBusyRoomId(room.id)
     setRoomActionError(null)
     try {
@@ -375,6 +395,20 @@ export default function LeftSidebar() {
     } finally {
       setBusyRoomId(null)
     }
+  }
+
+  function closeConfirmDialog() {
+    if (destructiveAction && busyRoomId === destructiveAction.room.id) return
+    setDestructiveAction(null)
+    confirmTriggerRef.current?.focus?.()
+  }
+
+  async function confirmDestructiveAction() {
+    if (!destructiveAction || busyRoomId === destructiveAction.room.id) return
+    const action = destructiveAction
+    if (action.type === 'delete') await performDeleteRoom(action.room)
+    else await performClearRoomChat(action.room)
+    setDestructiveAction(null)
   }
 
   function renderRoom(room: Room) {
@@ -431,7 +465,7 @@ export default function LeftSidebar() {
               </button>
               <button
                 type="button"
-                onClick={(event) => clearRoomChat(room, event)}
+                onClick={(event) => requestClearRoomChat(room, event)}
                 disabled={isBusy}
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-40"
               >
@@ -440,7 +474,7 @@ export default function LeftSidebar() {
               </button>
               <button
                 type="button"
-                onClick={(event) => deleteRoom(room, event)}
+                onClick={(event) => requestDeleteRoom(room, event)}
                 disabled={isBusy}
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-red-600 transition-colors hover:bg-red-50 disabled:opacity-40"
               >
@@ -552,7 +586,7 @@ export default function LeftSidebar() {
           }}
           onKeyDown={(event) => {
             if (event.key === 'Escape') closeCreateModal()
-            else trapDialogFocus(event)
+            else trapCreateDialogFocus(event)
           }}
         >
           <form
@@ -632,6 +666,64 @@ export default function LeftSidebar() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+      {destructiveAction && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeConfirmDialog()
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') closeConfirmDialog()
+            else trapConfirmDialogFocus(event)
+          }}
+        >
+          <div
+            ref={confirmDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="destructive-room-action-title"
+            aria-describedby="destructive-room-action-description"
+            className="w-full max-w-sm rounded-lg border border-[var(--border)] bg-[var(--panel)] p-5 text-[var(--text)] shadow-2xl"
+          >
+            <h2 id="destructive-room-action-title" className="text-lg font-semibold">
+              {destructiveAction.type === 'delete' ? 'Delete room?' : 'Clear chat?'}
+            </h2>
+            <p
+              id="destructive-room-action-description"
+              className="mt-2 text-sm text-[var(--muted)]"
+            >
+              {destructiveAction.type === 'delete'
+                ? `Delete "${destructiveAction.room.name}"? This cannot be undone.`
+                : `Clear chat in "${destructiveAction.room.name}"? This cannot be undone.`}
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeConfirmDialog}
+                disabled={busyRoomId === destructiveAction.room.id}
+                autoFocus
+                className="rounded-md px-3 py-2 text-sm font-medium text-[var(--text)] transition-colors hover:bg-[var(--sidebar-hover)] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmDestructiveAction()}
+                disabled={busyRoomId === destructiveAction.room.id}
+                className="rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-red-700 disabled:opacity-50"
+              >
+                {busyRoomId === destructiveAction.room.id
+                  ? destructiveAction.type === 'delete'
+                    ? 'Deleting...'
+                    : 'Clearing...'
+                  : destructiveAction.type === 'delete'
+                    ? 'Delete'
+                    : 'Clear chat'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </aside>

@@ -38,6 +38,31 @@ export default function FormattedMessageContent({ content }: { content: string }
               {children}
             </pre>
           ),
+          table: ({ children }) => (
+            <div className="mb-3 overflow-x-auto last:mb-0">
+              <table className="min-w-full border-collapse text-sm">{children}</table>
+            </div>
+          ),
+          thead: ({ children }) => (
+            <thead className="border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--text)_6%,transparent)]">
+              {children}
+            </thead>
+          ),
+          tbody: ({ children }) => <tbody>{children}</tbody>,
+          tr: ({ children }) => (
+            <tr className="border-b border-[var(--border)] last:border-b-0">{children}</tr>
+          ),
+          th: ({ children }) => (
+            <th
+              scope="col"
+              className="border border-[var(--border)] px-3 py-2 text-left font-semibold"
+            >
+              {children}
+            </th>
+          ),
+          td: ({ children }) => (
+            <td className="border border-[var(--border)] px-3 py-2 align-top">{children}</td>
+          ),
           hr: () => <hr className="my-3 border-current/15" />,
         }}
       >
