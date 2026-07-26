@@ -68,7 +68,11 @@ export async function buildContextPacket({
 
   const roomRaw = db
     .prepare(
-      'SELECT id, name, reply_mode, max_agent_rounds, discussion_mode, context_reset_at FROM rooms WHERE id = ?',
+      `SELECT r.id, r.name, r.reply_mode, r.max_agent_rounds, r.discussion_mode, r.context_reset_at,
+              s.working_dir AS working_dir
+       FROM rooms r
+       LEFT JOIN sessions s ON s.id = r.session_id
+       WHERE r.id = ?`,
     )
     .get(run.room_id)
   if (!roomRaw) throw new Error(`Room ${run.room_id} not found`)
@@ -79,6 +83,7 @@ export async function buildContextPacket({
     max_agent_rounds: number
     discussion_mode: DiscussionMode
     context_reset_at: string | null
+    working_dir: string | null
   }
 
   // ADR-0011: in a discussion, an agent MUST see its teammates' contributions in this same
@@ -192,6 +197,7 @@ export async function buildContextPacket({
       max_agent_rounds: room.max_agent_rounds,
       discussion_mode: room.discussion_mode,
     },
+    working_dir: room.working_dir ?? null,
     agent: {
       id: agentInfo.id,
       name: agentInfo.name,

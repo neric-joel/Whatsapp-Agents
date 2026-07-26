@@ -43,6 +43,7 @@ let h: TestDb
 beforeEach(() => {
   h = freshTestDb()
 })
+
 afterEach(() => {
   h.cleanup()
 })
@@ -116,4 +117,24 @@ test('no watermark → no lower bound (full window)', async () => {
   )
   // Chronological order (oldest first), matching the source reverse() of the DESC query.
   assert.deepEqual(ids, ['msg-before', 'msg-after'], 'full window in chronological order')
+})
+
+test('includes the attached session working_dir in the context packet', async () => {
+  const workingDir = 'C:/work/session-project'
+  h.db
+    .prepare('INSERT INTO sessions (id, name, working_dir) VALUES (?, ?, ?)')
+    .run('session-1', 'Session', workingDir)
+  seedRoom(h.db, {
+    id: 'room-1',
+    name: 'Demo',
+    reply_mode: 'everyone',
+    max_agent_rounds: 3,
+    discussion_mode: 'independent',
+    context_reset_at: null,
+    session_id: 'session-1',
+  })
+
+  const packet = await buildContextPacket({ run, agentInfo, triggerMsg })
+
+  assert.equal(packet.working_dir, workingDir)
 })
