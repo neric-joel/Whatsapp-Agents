@@ -1,10 +1,11 @@
 'use client'
 
+import { readDiscussionMetadata } from '@agentroom/shared'
 import { type ReactNode, useState } from 'react'
 
 import { useToast } from '@/contexts/ToastContext'
 import { extractHallucination } from '@/lib/hallucination-detector'
-import { userVisibleContent } from '@/lib/message-display'
+import { hasMeaningfulUpdate, userVisibleContent } from '@/lib/message-display'
 import { DELETED_MESSAGE_CONTENT } from '@/lib/message-management'
 import { getProviderStyle } from '@/lib/provider-styles'
 
@@ -13,6 +14,10 @@ import HallucinationBanner from './HallucinationBanner'
 
 function formatTime(ts: string) {
   return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+function formatTimestamp(ts: string) {
+  return new Date(ts).toLocaleString()
 }
 
 function initials(name: string) {
@@ -36,6 +41,8 @@ interface MessageBubbleProps {
     sender_type: string
     sender_user_id?: string | null
     created_at: string
+    updated_at?: string
+    round_index?: number
     metadata?: Record<string, unknown>
     agents?: { name: string; provider: string } | null
   }
@@ -84,6 +91,14 @@ function CanaryBadge({ status }: { status: string }) {
   )
 }
 
+function EditedMarker({ updatedAt }: { updatedAt: string }) {
+  return (
+    <span className="text-xs text-[var(--muted)]" title={formatTimestamp(updatedAt)}>
+      (edited)
+    </span>
+  )
+}
+
 export default function MessageBubble({
   message,
   children,
@@ -96,14 +111,20 @@ export default function MessageBubble({
   onDeleted,
   onHallucinationDismiss,
 }: MessageBubbleProps) {
-  const { content, sender_type, created_at, agents, metadata } = message
+  const { content, sender_type, created_at, updated_at, agents, metadata } = message
   // A /discuss kickoff stores the coordinator phase prompt as content; show the
   // command the human actually typed instead (display-only — see message-display.ts).
-  const displayContent = userVisibleContent(content, sender_type, metadata ?? null)
+  const displayContent = userVisibleContent(content, sender_type, metadata ?? null, {
+    createdAt: created_at,
+    updatedAt: updated_at,
+  })
   const [copied, setCopied] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [phasePromptExpanded, setPhasePromptExpanded] = useState(false)
   const { showToast } = useToast()
   const isDeleted = content === DELETED_MESSAGE_CONTENT || Boolean(metadata?.deleted_at)
+  const isEdited = hasMeaningfulUpdate(created_at, updated_at)
+  const discussionMetadata = readDiscussionMetadata(metadata ?? null)
   const hallucinationMeta = sender_type === 'agent' ? extractHallucination(metadata ?? {}) : null
   const hallucinationState =
     metadata?.hallucination && typeof metadata.hallucination === 'object'
@@ -238,6 +259,7 @@ export default function MessageBubble({
               {agents?.name ?? 'Agent'}
             </span>
             <span className="text-xs text-gray-500">{formatTime(created_at)}</span>
+            {isEdited && updated_at && <EditedMarker updatedAt={updated_at} />}
             {canaryStatus && <CanaryBadge status={canaryStatus} />}
           </div>
           <div
@@ -280,10 +302,65 @@ export default function MessageBubble({
           <div className="mt-1.5 flex items-center justify-end gap-2 text-right">
             {actionButtons}
             <span className="text-xs text-gray-500">{formatTime(created_at)}</span>
+            {isEdited && updated_at && <EditedMarker updatedAt={updated_at} />}
           </div>
         </div>
         <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-blue-500 text-xs font-semibold text-white">
           {avatarInitial(currentUserName)}
+        </div>
+      </div>
+    )
+  }
+
+  if (sender_type === 'system' && discussionMetadata) {
+    let rawRound: unknown = message.round_index
+    const discussionBlock = metadata?.discussion
+    if (
+      rawRound == null &&
+      discussionBlock &&
+      typeof discussionBlock === 'object' &&
+      !Array.isArray(discussionBlock)
+    ) {
+      rawRound =
+        (discussionBlock as { round?: unknown; round_index?: unknown }).round ??
+        (discussionBlock as { round?: unknown; round_index?: unknown }).round_index
+    }
+    const roundNumber =
+      typeof rawRound === 'number'
+        ? rawRound
+        : typeof rawRound === 'string' && rawRound.trim().length > 0
+          ? Number(rawRound)
+          : null
+    const roundLabel =
+      typeof roundNumber === 'number' && Number.isFinite(roundNumber)
+        ? `round ${roundNumber}`
+        : null
+    const detailId = `phase-prompt-${message.id}`
+
+    return (
+      <div className="flex animate-message-in justify-center px-5 py-3">
+        <div className="max-w-3xl text-center">
+          <button
+            type="button"
+            aria-expanded={phasePromptExpanded}
+            aria-controls={detailId}
+            onClick={() => setPhasePromptExpanded((expanded) => !expanded)}
+            className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel)] px-3 py-1 text-xs text-[var(--text)] shadow-sm transition-colors hover:border-[var(--accent)]"
+          >
+            <span>phase: {discussionMetadata.phase}</span>
+            {roundLabel && <span className="text-[var(--muted)]">{roundLabel}</span>}
+            <span className="text-[var(--muted)]">
+              {phasePromptExpanded ? 'Collapse' : 'Expand'}
+            </span>
+          </button>
+          {phasePromptExpanded && (
+            <div
+              id={detailId}
+              className="mt-2 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3 text-left text-xs leading-5 text-[var(--text)] shadow-sm"
+            >
+              <FormattedMessageContent content={content} />
+            </div>
+          )}
         </div>
       </div>
     )

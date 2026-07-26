@@ -57,6 +57,39 @@ pre {
   padding: 0;
 }
 
+.agent-provider-bubble {
+  background: var(--agent-provider-bg, var(--panel));
+  border-color: var(--agent-provider-border, var(--border));
+  color: var(--agent-provider-text, var(--text));
+}
+
+.agent-provider-claude-code {
+  --agent-provider-bg: #fff7ed;
+  --agent-provider-border: rgb(253 186 116 / 0.7);
+  --agent-provider-text: #432818;
+}
+
+.agent-provider-codex-cli {
+  --agent-provider-bg: #ecfeff;
+  --agent-provider-border: rgb(103 232 249 / 0.7);
+  --agent-provider-text: #083344;
+}
+
+.agent-provider-mock {
+  --agent-provider-bg: #f1f5f9;
+  --agent-provider-border: rgb(203 213 225 / 0.8);
+  --agent-provider-text: #0f172a;
+}
+
+:root[data-agentroom-theme='dark-modern'] .agent-provider-bubble,
+:root[data-agentroom-theme='github-dark'] .agent-provider-bubble,
+:root[data-agentroom-theme='one-dark-pro'] .agent-provider-bubble,
+:root[data-agentroom-theme='dracula'] .agent-provider-bubble {
+  background: var(--panel);
+  border-color: color-mix(in srgb, var(--agent-provider-border, var(--border)) 65%, var(--border));
+  color: var(--text);
+}
+
 /*
  * Respect the user's reduced-motion preference (WCAG 2.3.3 / 2.2.2). Collapses
  * the toast/message/thinking animations and any transition to near-instant

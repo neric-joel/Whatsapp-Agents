@@ -9,4 +9,12 @@ describe('provider styles', () => {
     expect(getProviderStyle('unknown')).toBe(PROVIDER_STYLES.mock)
     expect(getProviderStyle(null)).toBe(PROVIDER_STYLES.mock)
   })
+
+  it('uses theme-aware bubble classes instead of hard-coded light backgrounds', () => {
+    expect(PROVIDER_STYLES.codex_cli.bubble).toBe('agent-provider-bubble agent-provider-codex-cli')
+    expect(PROVIDER_STYLES.claude_code.bubble).toBe(
+      'agent-provider-bubble agent-provider-claude-code',
+    )
+    expect(PROVIDER_STYLES.mock.bubble).toBe('agent-provider-bubble agent-provider-mock')
+  })
 })
