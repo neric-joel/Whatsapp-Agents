@@ -80,25 +80,76 @@ interface ChildEnvOptions {
    * identifier; an invalid name is ignored (fail-closed, no injection).
    */
   inject?: { name: string; value: string }
+  /**
+   * Platform override used by tests. Runtime callers use the host platform.
+   */
+  platform?: NodeJS.Platform
 }
 
 const ENV_NAME_RE = /^[A-Z][A-Z0-9_]*$/
+const CMD_META_RE = /([()\][%!^"`<>&|;, *?])/g
+const CMD_SAFE_TOKEN_RE = /^[A-Za-z0-9_./:\\-]+$/
+
+function normalizeEnvName(name: string, platform: NodeJS.Platform): string {
+  return platform === 'win32' ? name.toUpperCase() : name
+}
+
+function envValue(
+  source: NodeJS.ProcessEnv,
+  name: string,
+  platform: NodeJS.Platform,
+): string | undefined {
+  if (platform !== 'win32') return source[name]
+  const normalized = name.toUpperCase()
+  for (const [key, value] of Object.entries(source)) {
+    if (key.toUpperCase() === normalized) return value
+  }
+  return undefined
+}
+
+function escapeCmdCommand(command: string): string {
+  return command.replace(CMD_META_RE, '^$1')
+}
+
+function escapeCmdArgument(arg: string): string {
+  let escaped = String(arg)
+  escaped = escaped.replace(/(?=(\\+?)?)\1"/g, '$1$1\\"')
+  escaped = escaped.replace(/(?=(\\+?)?)\1$/, '$1$1')
+  escaped = `"${escaped}"`
+  escaped = escaped.replace(CMD_META_RE, '^$1')
+  return escaped.replace(CMD_META_RE, '^$1')
+}
+
+export function buildWindowsCmdCommandLine(binPath: string, args: readonly string[]): string {
+  const argv = [escapeCmdCommand(binPath), ...args.map((arg) => escapeCmdArgument(arg))]
+  // With `cmd /s /c`, cmd.exe strips the first and last quote from the command
+  // string. The outer pair here is deliberate; the escaped inner argv survives as
+  // the literal .cmd invocation, including paths with spaces.
+  return `"${argv.join(' ')}"`
+}
+
+function needsWindowsCmdCommandLine(binPath: string, args: readonly string[]): boolean {
+  return ![binPath, ...args].every((arg) => CMD_SAFE_TOKEN_RE.test(arg))
+}
 
 export function buildChildEnv(
   source: NodeJS.ProcessEnv = process.env,
   options: ChildEnvOptions = {},
 ): NodeJS.ProcessEnv {
-  const extra = (source['BRIDGE_CHILD_ENV_ALLOW'] ?? '')
+  const platform = options.platform ?? process.platform
+  const extra = (envValue(source, 'BRIDGE_CHILD_ENV_ALLOW', platform) ?? '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
-  const allow = new Set([...BASE_ENV_KEYS, ...extra])
+  const allow = new Set([...BASE_ENV_KEYS, ...extra].map((key) => normalizeEnvName(key, platform)))
 
   const out: NodeJS.ProcessEnv = {}
   for (const [key, value] of Object.entries(source)) {
     if (value === undefined) continue
     if (SECRET_ENV_PATTERN.test(key)) continue // never forward secrets
-    if (allow.has(key) || PROVIDER_ENV_PATTERN.test(key)) out[key] = value
+    if (allow.has(normalizeEnvName(key, platform)) || PROVIDER_ENV_PATTERN.test(key)) {
+      out[key] = value
+    }
   }
 
   // Deliberate single-var injection of a resolved BYO credential — the ONLY way a
@@ -161,21 +212,31 @@ export function resolveBinaryPath(
  * Decide how to spawn a resolved binary with `shell:false`.
  *
  * Node refuses to execute a Windows `.cmd`/`.bat` shim without a shell (EINVAL,
- * post-CVE-2024-27980). We route those through `cmd.exe /d /s /c`. The args may be
- * user-configured (a connected CLI profile's `args`), but they are NOT attacker-
- * influenced: no message / system_prompt / packet data ever reaches argv (the prompt
- * goes via stdin), and with `shell:false` + Node's default cmd.exe arg-escaping (no
- * `windowsVerbatimArguments`) each arg is one literal argv token — not a new command.
+ * post-CVE-2024-27980). We route those through `cmd.exe /d /s /c`. Simple tokens
+ * use Node's default cmd.exe arg escaping. Tokens that contain spaces or cmd
+ * metacharacters are packed into one escaped `/c` command string and spawned with
+ * `windowsVerbatimArguments`, so `cmd /s` cannot strip path quotes into an
+ * unquoted `C:\Program Files\...` command and metachar-looking args stay data.
+ * The args may be user-configured (a connected CLI profile's `args`), but they are
+ * NOT attacker-influenced: no message / system_prompt / packet data ever reaches
+ * argv (the prompt goes via stdin).
  */
 export function resolveSpawnTarget(
   binPath: string,
   args: readonly string[],
   platform: NodeJS.Platform = process.platform,
   source: NodeJS.ProcessEnv = process.env,
-): { command: string; args: string[] } {
+): { command: string; args: string[]; windowsVerbatimArguments?: boolean } {
   if (platform === 'win32' && /\.(cmd|bat)$/i.test(binPath)) {
     const comspec = source['COMSPEC'] || 'cmd.exe'
-    return { command: comspec, args: ['/d', '/s', '/c', binPath, ...args] }
+    if (!needsWindowsCmdCommandLine(binPath, args)) {
+      return { command: comspec, args: ['/d', '/s', '/c', binPath, ...args] }
+    }
+    return {
+      command: comspec,
+      args: ['/d', '/s', '/c', buildWindowsCmdCommandLine(binPath, args)],
+      windowsVerbatimArguments: true,
+    }
   }
   return { command: binPath, args: [...args] }
 }

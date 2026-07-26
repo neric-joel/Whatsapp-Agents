@@ -97,6 +97,34 @@ const isFile = (p: string): boolean => {
   }
 }
 
+const CMD_META_RE = /([()\][%!^"`<>&|;, *?])/g
+const CMD_SAFE_TOKEN_RE = /^[A-Za-z0-9_./:\\-]+$/
+
+function escapeCmdCommand(command: string): string {
+  return command.replace(CMD_META_RE, '^$1')
+}
+
+function escapeCmdArgument(arg: string): string {
+  let escaped = String(arg)
+  escaped = escaped.replace(/(?=(\\+?)?)\1"/g, '$1$1\\"')
+  escaped = escaped.replace(/(?=(\\+?)?)\1$/, '$1$1')
+  escaped = `"${escaped}"`
+  escaped = escaped.replace(CMD_META_RE, '^$1')
+  return escaped.replace(CMD_META_RE, '^$1')
+}
+
+export function buildWindowsCmdCommandLine(binPath: string, args: readonly string[]): string {
+  const argv = [escapeCmdCommand(binPath), ...args.map((arg) => escapeCmdArgument(arg))]
+  // `cmd /s /c` strips the first and last quote from the command string, so the
+  // outer quote pair is intentional. The escaped argv inside is what reaches the
+  // .cmd shim, including paths containing spaces.
+  return `"${argv.join(' ')}"`
+}
+
+function needsWindowsCmdCommandLine(binPath: string, args: readonly string[]): boolean {
+  return ![binPath, ...args].every((arg) => CMD_SAFE_TOKEN_RE.test(arg))
+}
+
 /**
  * Resolve a command to an absolute path against PATH (+ PATHEXT on Windows).
  * Mirrors the bridge's spawn-time `resolveBinaryPath` so the Connections screen
@@ -139,29 +167,63 @@ interface ProbeOutput {
 /**
  * Decide how to spawn a resolved binary with `shell:false`. Node refuses to execute a
  * Windows `.cmd`/`.bat` shim without a shell (EINVAL, post-CVE-2024-27980), so route
- * those through `cmd.exe /d /s /c` — mirrors the bridge's resolveSpawnTarget. Args here
- * are the fixed `--version` probe flags; with `shell:false` + Node's default cmd.exe
- * arg-escaping each is one literal argv token, so there is no injection surface.
+ * those through `cmd.exe /d /s /c` and mirror the bridge's resolveSpawnTarget. Simple
+ * tokens use Node's default cmd.exe arg escaping. Tokens with spaces or cmd
+ * metacharacters use one escaped `/c` command string with `windowsVerbatimArguments`,
+ * preserving paths like `C:\Program Files\...\x.cmd` without making args shell syntax.
  */
 export function spawnTarget(
   bin: string,
   args: string[],
   platform: NodeJS.Platform = process.platform,
   source: NodeJS.ProcessEnv = process.env,
-): { command: string; args: string[] } {
+): { command: string; args: string[]; windowsVerbatimArguments?: boolean } {
   if (platform === 'win32' && /\.(cmd|bat)$/i.test(bin)) {
     const comspec = source['COMSPEC'] || 'cmd.exe'
-    return { command: comspec, args: ['/d', '/s', '/c', bin, ...args] }
+    if (!needsWindowsCmdCommandLine(bin, args)) {
+      return { command: comspec, args: ['/d', '/s', '/c', bin, ...args] }
+    }
+    return {
+      command: comspec,
+      args: ['/d', '/s', '/c', buildWindowsCmdCommandLine(bin, args)],
+      windowsVerbatimArguments: true,
+    }
   }
   return { command: bin, args }
 }
 
+function killProbeProcessTree(pid: number | undefined): Promise<void> {
+  if (!pid) return Promise.resolve()
+  if (process.platform !== 'win32') {
+    try {
+      process.kill(pid, 'SIGKILL')
+    } catch {
+      /* best effort */
+    }
+    return Promise.resolve()
+  }
+
+  return new Promise((resolve) => {
+    const killer = spawn('taskkill', ['/pid', String(pid), '/T', '/F'], {
+      stdio: 'ignore',
+      windowsHide: true,
+    })
+    killer.on('error', () => {
+      resolve()
+    })
+    killer.on('close', () => {
+      resolve()
+    })
+  })
+}
+
 /** Run `<bin> <args>` with a short timeout, capturing output. Never throws. */
-function runProbe(bin: string, args: string[], timeoutMs = 8000): Promise<ProbeOutput> {
+export function runProbe(bin: string, args: string[], timeoutMs = 8000): Promise<ProbeOutput> {
   return new Promise((resolve) => {
     let stdout = ''
     let stderr = ''
     let settled = false
+    let timedOut = false
     const finish = (o: ProbeOutput) => {
       if (settled) return
       settled = true
@@ -174,18 +236,17 @@ function runProbe(bin: string, args: string[], timeoutMs = 8000): Promise<ProbeO
         stdio: ['ignore', 'pipe', 'pipe'],
         shell: false,
         windowsHide: true,
+        windowsVerbatimArguments: target.windowsVerbatimArguments === true,
       })
     } catch (e) {
       finish({ code: null, stdout: '', stderr: '', timedOut: false, spawnError: String(e) })
       return
     }
     const timer = setTimeout(() => {
-      try {
-        child.kill('SIGKILL')
-      } catch {
-        /* best effort */
-      }
-      finish({ code: null, stdout, stderr, timedOut: true, spawnError: null })
+      timedOut = true
+      void killProbeProcessTree(child.pid).finally(() => {
+        finish({ code: null, stdout, stderr, timedOut: true, spawnError: null })
+      })
     }, timeoutMs)
     child.stdout?.on('data', (d) => {
       stdout += String(d)
@@ -201,7 +262,7 @@ function runProbe(bin: string, args: string[], timeoutMs = 8000): Promise<ProbeO
     })
     child.on('close', (code) => {
       clearTimeout(timer)
-      finish({ code, stdout, stderr, timedOut: false, spawnError: null })
+      finish({ code, stdout, stderr, timedOut, spawnError: null })
     })
   })
 }

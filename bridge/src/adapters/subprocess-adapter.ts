@@ -108,7 +108,7 @@ export abstract class SubprocessAdapter implements AgentAdapter {
 
     // Resolve the binary to an absolute path from a trusted source (the *_BIN
     // env var or PATH) before spawning. Never spawn agent-controlled strings.
-    let target: { command: string; args: string[] }
+    let target: { command: string; args: string[]; windowsVerbatimArguments?: boolean }
     try {
       const binPath = resolveBinaryPath(this.resolveCommand())
       target = resolveSpawnTarget(binPath, args)
@@ -170,6 +170,7 @@ export abstract class SubprocessAdapter implements AgentAdapter {
       shell: false, // never spawn through a shell — no command-injection surface
       env: childEnv, // allowlisted env — process.env secrets stripped; only the resolved BYO var injected
       windowsHide: true,
+      windowsVerbatimArguments: target.windowsVerbatimArguments === true,
       // On POSIX, make the child its own process-group leader so a force-kill can
       // signal the WHOLE group (`process.kill(-pid)`) and reap grandchildren — a bare
       // `process.kill(pid)` would orphan them. Windows uses `taskkill /T` instead, and
@@ -186,12 +187,21 @@ export abstract class SubprocessAdapter implements AgentAdapter {
     const kill = () => {
       if (killed) return
       killed = true
+      if (process.platform === 'win32') {
+        void this.forceKillProcessTree(child.pid).finally(() => {
+          forceExitTimer = setTimeout(() => {
+            forceExitResolve()
+          }, 1_000)
+        })
+        return
+      }
       child.kill('SIGTERM')
       killTimer = setTimeout(() => {
-        this.forceKillProcessTree(child.pid)
-        forceExitTimer = setTimeout(() => {
-          forceExitResolve()
-        }, 1_000)
+        void this.forceKillProcessTree(child.pid).finally(() => {
+          forceExitTimer = setTimeout(() => {
+            forceExitResolve()
+          }, 1_000)
+        })
       }, 2_000)
     }
 
@@ -347,18 +357,22 @@ export abstract class SubprocessAdapter implements AgentAdapter {
     }
   }
 
-  private forceKillProcessTree(pid: number | undefined): void {
-    if (!pid) return
+  private forceKillProcessTree(pid: number | undefined): Promise<void> {
+    if (!pid) return Promise.resolve()
 
     if (process.platform === 'win32' && pid) {
-      const killer = spawn('taskkill', ['/pid', String(pid), '/T', '/F'], {
-        stdio: 'ignore',
-        windowsHide: true,
+      return new Promise((resolve) => {
+        const killer = spawn('taskkill', ['/pid', String(pid), '/T', '/F'], {
+          stdio: 'ignore',
+          windowsHide: true,
+        })
+        killer.on('error', () => {
+          resolve()
+        })
+        killer.on('close', () => {
+          resolve()
+        })
       })
-      killer.on('error', () => {
-        /* best effort */
-      })
-      return
     }
 
     // POSIX: the child was spawned `detached`, so it leads its own process group
@@ -378,5 +392,6 @@ export abstract class SubprocessAdapter implements AgentAdapter {
         }
       }
     }
+    return Promise.resolve()
   }
 }
