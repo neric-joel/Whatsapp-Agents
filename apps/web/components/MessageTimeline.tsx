@@ -5,6 +5,7 @@ import { type UIEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { useAgentRuns } from '@/hooks/useAgentRuns'
 import { useMessages } from '@/hooks/useMessages'
 import { useToolCalls } from '@/hooks/useToolCalls'
+import { fileIdsFromMessages, unresolvedFileIds } from '@/lib/message-files'
 import { applyPinnedItemChange, buildPinsByMessageId, type PinMessageRow } from '@/lib/pins'
 import { buildTimelineEvents } from '@/lib/timeline-events'
 
@@ -15,6 +16,7 @@ import ToolCallCard from './ToolCallCard'
 
 export interface OptimisticMessage {
   id: string
+  server_message_id?: string
   content: string
   sender_type: 'user'
   created_at: string
@@ -46,6 +48,7 @@ interface Props {
   roomId: string
   refreshSignal?: number
   optimisticMessages?: OptimisticMessage[]
+  onOptimisticSettled?: (ids: string[]) => void
   onReply?: (message: ReplyingMessage) => void
 }
 
@@ -78,12 +81,14 @@ export default function MessageTimeline({
   roomId,
   refreshSignal,
   optimisticMessages = [],
+  onOptimisticSettled,
   onReply,
 }: Props) {
   const { messages, loading, refetch } = useMessages(roomId, refreshSignal)
   const { runs, refetch: refetchRuns } = useAgentRuns(roomId, refreshSignal)
   const toolCalls = useToolCalls(roomId, refreshSignal)
   const [filesMap, setFilesMap] = useState<Record<string, FileRow>>({})
+  const [knownMissingFileIds, setKnownMissingFileIds] = useState<Set<string>>(new Set())
   const [currentUserName, setCurrentUserName] = useState<string | null>(null)
   const [pinsByMessageId, setPinsByMessageId] = useState<Record<string, string>>({})
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -101,24 +106,37 @@ export default function MessageTimeline({
   }, [])
 
   useEffect(() => {
-    const fileIds = messages.flatMap((m) => {
-      const ids = (m.metadata as { file_ids?: unknown }).file_ids
-      return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []
-    })
-    const missingIds = [...new Set(fileIds)].filter((id) => !filesMap[id])
+    setFilesMap({})
+    setKnownMissingFileIds(new Set())
+  }, [roomId])
+
+  useEffect(() => {
+    const missingIds = unresolvedFileIds(
+      fileIdsFromMessages(messages),
+      filesMap,
+      knownMissingFileIds,
+    )
     if (missingIds.length === 0) return
 
     fetch(`/api/rooms/${roomId}/files`)
       .then((res) => res.json())
       .then((json) => {
         const rows = (json?.data as FileRow[]) ?? []
+        const foundIds = new Set(rows.map((file) => file.id))
         setFilesMap((prev) => ({
           ...prev,
           ...Object.fromEntries(rows.map((file) => [file.id, file])),
         }))
+        setKnownMissingFileIds((prev) => {
+          const next = new Set(prev)
+          for (const id of missingIds) {
+            if (!foundIds.has(id)) next.add(id)
+          }
+          return next
+        })
       })
       .catch(() => {})
-  }, [messages, filesMap, roomId])
+  }, [messages, filesMap, knownMissingFileIds, roomId])
 
   useEffect(() => {
     let mounted = true
@@ -148,9 +166,33 @@ export default function MessageTimeline({
     }
   }, [roomId])
 
+  useEffect(() => {
+    if (optimisticMessages.length === 0) return
+    const settledIds = optimisticMessages
+      .filter((optimistic) =>
+        messages.some(
+          (message) =>
+            message.id === optimistic.server_message_id ||
+            (!optimistic.server_message_id &&
+              message.sender_type === 'user' &&
+              message.content === optimistic.content &&
+              message.reply_to_id === (optimistic.reply_to_id ?? null) &&
+              JSON.stringify(message.metadata ?? {}) === JSON.stringify(optimistic.metadata ?? {})),
+        ),
+      )
+      .map((message) => message.id)
+
+    if (settledIds.length > 0) onOptimisticSettled?.(settledIds)
+  }, [messages, optimisticMessages, onOptimisticSettled])
+
+  const serverMessageIds = new Set(messages.map((message) => message.id))
+  const pendingOptimisticMessages = optimisticMessages.filter(
+    (message) => !message.server_message_id || !serverMessageIds.has(message.server_message_id),
+  )
+
   const allMessages = [
     ...messages,
-    ...optimisticMessages.map((m) => ({
+    ...pendingOptimisticMessages.map((m) => ({
       ...m,
       sender_user_id: null,
       sender_agent_id: null,
@@ -161,7 +203,7 @@ export default function MessageTimeline({
     })),
   ]
   const lastMessageId = allMessages.at(-1)?.id ?? null
-  const optimisticCount = optimisticMessages.length
+  const optimisticCount = pendingOptimisticMessages.length
 
   useEffect(() => {
     if (loading) return

@@ -22,6 +22,33 @@ test.describe('compose', () => {
     await page.getByPlaceholder(/Message #/).fill('hello')
     await expect(send).toBeEnabled()
   })
+
+  test('sent text remains visible while the immediate message refetch is pending', async ({
+    page,
+  }) => {
+    await gotoRoom(page)
+    let holdMessageGets = false
+    let releaseHeldGet: (() => void) | null = null
+
+    await page.route('**/api/rooms/*/messages', async (route) => {
+      if (route.request().method() === 'GET' && holdMessageGets && !releaseHeldGet) {
+        await new Promise<void>((resolve) => {
+          releaseHeldGet = resolve
+        })
+      }
+      await route.continue()
+    })
+
+    const msg = `optimistic ${Date.now()}`
+    holdMessageGets = true
+    await page.getByPlaceholder(/Message #/).fill(msg)
+    await page.getByRole('button', { name: 'Send' }).click()
+
+    await expect(page.getByTestId('message-timeline').getByText(msg)).toBeVisible({
+      timeout: 1000,
+    })
+    releaseHeldGet?.()
+  })
 })
 
 test.describe('send → reply journey (live)', () => {

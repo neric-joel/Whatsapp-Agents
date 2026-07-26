@@ -145,6 +145,23 @@ export interface RoomMember {
   updated_at: string
 }
 
+export type RoomAgentSummary = Pick<
+  Agent,
+  'id' | 'name' | 'slug' | 'provider' | 'adapter_type' | 'is_active'
+>
+
+export interface RoomAgentMember {
+  id: string
+  room_id: string
+  agent_id: string
+  member_type: 'agent'
+  reply_enabled: boolean
+  muted: boolean
+  joined_at: string
+  agent: RoomAgentSummary
+  last_run_status: RunStatus | null
+}
+
 export interface Message {
   id: string
   room_id: string

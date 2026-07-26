@@ -9,6 +9,7 @@ import MessageTimeline from '@/components/MessageTimeline'
 import OutputsPanel from '@/components/OutputsPanel'
 import PinnedItemsPanel from '@/components/PinnedItemsPanel'
 import RoomHeader from '@/components/RoomHeader'
+import { useRooms } from '@/hooks/useRooms'
 import { subscribeToChatCleared } from '@/lib/chat-events'
 
 export default function RoomPage(props: { params: Promise<{ roomId: string }> }) {
@@ -17,6 +18,8 @@ export default function RoomPage(props: { params: Promise<{ roomId: string }> })
   const [refreshSignal, setRefreshSignal] = useState(0)
   const [optimistic, setOptimistic] = useState<OptimisticMessage[]>([])
   const [replyingTo, setReplyingTo] = useState<ReplyingMessage | null>(null)
+  const { rooms } = useRooms()
+  const roomName = rooms.find((room) => room.id === roomId)?.name ?? null
 
   const handleOptimistic = useCallback((msg: OptimisticMessage) => {
     setOptimistic((prev) => [...prev, msg])
@@ -24,10 +27,23 @@ export default function RoomPage(props: { params: Promise<{ roomId: string }> })
 
   const handleRefetch = useCallback(() => {
     setRefreshSignal((s) => s + 1)
+  }, [])
+
+  const handleChatCleared = useCallback(() => {
+    setRefreshSignal((s) => s + 1)
     setOptimistic([])
   }, [])
 
-  useEffect(() => subscribeToChatCleared(roomId, handleRefetch), [roomId, handleRefetch])
+  const handleOptimisticSettled = useCallback((ids: string[]) => {
+    setOptimistic((prev) => prev.filter((message) => !ids.includes(message.id)))
+  }, [])
+
+  useEffect(() => {
+    setOptimistic([])
+    setReplyingTo(null)
+  }, [roomId])
+
+  useEffect(() => subscribeToChatCleared(roomId, handleChatCleared), [roomId, handleChatCleared])
 
   return (
     <div className="flex min-h-0 flex-1">
@@ -37,6 +53,7 @@ export default function RoomPage(props: { params: Promise<{ roomId: string }> })
           roomId={roomId}
           refreshSignal={refreshSignal}
           optimisticMessages={optimistic}
+          onOptimisticSettled={handleOptimisticSettled}
           onReply={setReplyingTo}
         />
         <ComposeBox
@@ -45,6 +62,7 @@ export default function RoomPage(props: { params: Promise<{ roomId: string }> })
           onRefetch={handleRefetch}
           replyingTo={replyingTo}
           onCancelReply={() => setReplyingTo(null)}
+          roomName={roomName}
         />
       </main>
       <aside

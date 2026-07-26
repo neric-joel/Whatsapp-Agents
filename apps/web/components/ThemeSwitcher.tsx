@@ -2,15 +2,19 @@
 
 import { useEffect, useState } from 'react'
 
-import { APP_THEMES, type AppThemeId, DEFAULT_APP_THEME, isAppThemeId } from '@/lib/themes'
-
-const STORAGE_KEY = 'agentroom-theme'
+import {
+  APP_THEMES,
+  type AppThemeId,
+  DEFAULT_APP_THEME,
+  isAppThemeId,
+  THEME_STORAGE_KEY,
+} from '@/lib/themes'
 
 export default function ThemeSwitcher() {
   const [theme, setTheme] = useState<AppThemeId>(DEFAULT_APP_THEME)
 
   useEffect(() => {
-    const stored = window.localStorage.getItem(STORAGE_KEY)
+    const stored = window.localStorage.getItem(THEME_STORAGE_KEY)
     const nextTheme = isAppThemeId(stored) ? stored : DEFAULT_APP_THEME
     setTheme(nextTheme)
     document.documentElement.dataset.agentroomTheme = nextTheme
@@ -20,7 +24,7 @@ export default function ThemeSwitcher() {
     if (!isAppThemeId(value)) return
     setTheme(value)
     document.documentElement.dataset.agentroomTheme = value
-    window.localStorage.setItem(STORAGE_KEY, value)
+    window.localStorage.setItem(THEME_STORAGE_KEY, value)
   }
 
   return (
