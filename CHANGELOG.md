@@ -6,7 +6,118 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
-_Nothing yet._
+Cleared the entire tracked backlog (every open issue and PR), then ran an adversarial
+review sweep over the result — parallel reviewers by lens, each finding cross-examined by
+skeptics instructed to refute it — and fixed the twelve defects that survived. All twelve
+were live with a fully green test suite, which is the honest headline: the gates said the
+shape was right, not that the thing worked.
+
+### Added
+
+- **Agents now run in the session's working folder.** The folder was validated, persisted,
+  displayed, and used as the outputs root, but `getWorkingDir()` returned `null`, so every
+  CLI actually ran in the bridge's own directory. `ContextPacketV1` carries `working_dir`,
+  `buildContextPacket` reads it from the room's session, and `SubprocessAdapter` routes it
+  through the unchanged `resolveSpawnCwd`, which re-validates (realpath, allow-root,
+  sensitive-dir denylist) immediately before `spawn`. Wiring this revealed that the
+  spawn-time re-validation added for #71 had never once run against a real folder. (#86)
+- **Keyboard and ARIA polish** for the deferred v1.4 audit findings: the mention dropdown
+  is a real combobox/listbox with arrow-key navigation, the manage-agents panel is a
+  focus-managed dialog that Escape closes and returns focus from, markdown tables render
+  semantic `th[scope=col]`, a global `:focus-visible` ring is driven by each theme's
+  `--focus-ring` token, notices sit in always-mounted live regions, and destructive
+  confirms are themed dialogs instead of `window.confirm`. Axe stays at 0 serious/critical,
+  now also scanned with the dropdown and dialog open. (#76)
+- **`docs/LINKEDIN_POST.md`** — a launch post drafted from the same honesty rule as the
+  writeup: nothing in it is a claim the repo can't back.
+
+### Fixed
+
+- **Uploaded files are served inert.** `image/svg+xml` was on the upload allowlist and
+  `signed-download` served stored bytes with `Content-Disposition: inline`, so opening an
+  SVG — one click from the Outputs panel, which links every file with `target=_blank`
+  — executed embedded `<script>` in the app's own origin. The CSP is no mitigation
+  (`script-src` includes `'unsafe-inline'`), and because auth is a fixed local user with
+  no-op role checks, that script held full same-origin API authority, including
+  `POST /api/connections` to register a CLI profile the bridge would later spawn. Inline is
+  now a safe MIME allowlist (png/jpeg/gif/webp/text-plain); everything else is an
+  attachment, served with `default-src 'none'; sandbox`. SVG uploads stay allowed on
+  purpose — agents produce legitimate diagrams, so the serving is inert, not the artifact
+  rejected.
+- **Windows shim spawning and process-tree kills.** A `.cmd` shim whose path contained a
+  space could not be spawned at all — `cmd /s /c` stripped the quoting — so any CLI under
+  `C:\Program Files` was unreachable. Cancel, timeout, and the output cap killed only the
+  `cmd.exe` wrapper, orphaning the real agent process; they now `taskkill /T /F` the tree,
+  matching the POSIX negative-pid guarantee. The `--version` probe had the same
+  wrapper-only kill. The child-env allowlist compared names case-sensitively on a platform
+  where env names are case-insensitive. Injection safety was verified directly rather than
+  assumed: a metacharacter payload reaches the shim as one literal argv token and executes
+  nothing.
+- **`@`-mention autocomplete never worked** — the code read `m.agents`, the API returns
+  `agent`. This is the same singular/plural mismatch that made the agents panel
+  permanently claim "No agents in this room yet", and it had silently come back. The shape
+  is now pinned by shared types plus a test that fails on the plural spelling, so a third
+  recurrence is a type error rather than a silent empty list.
+- **Switching rooms showed the previous room's messages** until the first poll landed, and
+  a response for the old room could land after the switch. State is masked on room change
+  and a sequence guard drops stale responses.
+- **The optimistic message never rendered** — it was added and cleared within the same
+  React batch. Optimistic rows now survive until the matching server id arrives.
+- **A message referencing an unresolvable file id refetched the whole room file list every
+  1.5 s, forever.** Missing ids are negative-cached.
+- **The runs endpoint had no `LIMIT`** despite a comment claiming a 200 cap, re-delivering
+  every historical run on every poll. The comment is now true.
+- **The saved theme only applied where `ThemeSwitcher` happened to mount**, so other pages
+  and first paint ignored it. Applied at the root before paint.
+- **`ComposeBox` read a private rooms cache**, so its placeholder kept the pre-rename name.
+- **Timeline auto-scroll fought manual scrolling.** The effect scrolled to the bottom on
+  every poll re-render, yanking back anyone reading while agents worked. It now scrolls
+  only when the user was already near the bottom, keyed on the last message id rather than
+  array identity. The agents panel no longer flashes "Loading agents…" on every refetch.
+  (#99)
+- **Edited messages are marked.** The messages payload carries `updated_at`, an edited
+  message shows `(edited)`, and an edited `/discuss` kickoff renders its edited content
+  instead of silently displaying the original command from metadata. (#98)
+- **Agent bubbles follow the theme.** Provider colors were hard-coded light, so they stayed
+  light while the chrome went dark. Provider identity is now an accent over theme tokens.
+  (#97)
+- **`/discuss` phase prompts collapse to a chip** that expands on click, instead of
+  dominating the timeline as full gray blocks. (#96)
+- **Canary false positive on discussion topics.** A `/discuss` about choosing between
+  SQLite and Postgres had its converged answer flagged for claiming this app uses Postgres.
+  A grounding hit on a backend term the discussion topic itself names now downgrades to
+  `unverified` rather than `flagged`. The exception is context-scoped, not term-scoped: no
+  backend noun is whitelisted, an explicit claim about this app still flags, and every
+  pre-existing canary test passes unmodified. (#95)
+- **`GET /api/rooms/:roomId/messages` returned `200 []` for a nonexistent room**, making it
+  indistinguishable from an empty one. It returns `NOT_FOUND`, after the membership check so
+  it can't become an enumeration oracle. (#82)
+- **Message `content` had no upper bound** (a 1 MB body was accepted). Both send and update
+  schemas cap at 8000 characters, the limit the memory and handoff paths already used. (#81)
+
+### Security
+
+- **The Origin/CSRF check no longer trusts the `Host` header.** `isForbiddenCrossOrigin`
+  accepted any `Origin` equal to `req.nextUrl.origin`, which Next derives from `Host`, so a
+  DNS-rebound page could present a matching `Origin` and reach the mutating API. The
+  implicit self-origin is pinned to loopback hostnames; explicitly configured origins still
+  pass. (#90)
+
+### Changed
+
+- **The CI `audit` job is enforcing.** It carried `continue-on-error: true` under ADR-0009
+  decision D3 while a dev-toolchain advisory was outstanding, and had been red on every PR.
+  With every high advisory cleared, the allowance is retired and `pnpm audit --audit-level
+  high` is a real gate. (#78)
+- **Dev-dependency majors:** TypeScript 6, ESLint 10, `@types/node` 25, vitest 4.1.10.
+  TypeScript is held at 6.0.x deliberately — `typescript-eslint@8` peers `<6.1.0`. Targeted
+  overrides for `vite`, `postcss`, `sharp`, and `brace-expansion` live in
+  `pnpm-workspace.yaml`, since pnpm 11 no longer reads them from `package.json`. Supersedes
+  dependabot PR #104. (#78)
+- **Docs corrected where the code moved past them:** `HOW_IT_WORKS.md` and
+  `WORKSPACE_MODEL.md` D-W5 no longer say the working folder isn't the spawn `cwd`,
+  `CONTRIBUTING.md` no longer calls the audit job informational, and `WRITEUP.md` drops the
+  working-folder caveat from its limitations list.
 
 ## [1.5.0] - 2026-07-04
 

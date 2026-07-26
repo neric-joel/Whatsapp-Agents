@@ -53,8 +53,12 @@ pnpm e2e            # Playwright (mock adapter; live journeys gated on E2E_LIVE)
 
 A change is not ready until typecheck, lint (0 errors), format, knip, and tests are
 green locally **and** the GitHub CI required checks are green on the PR. The `audit`
-job is informational (decision D3, [ADR-0009](docs/adr/0009-v1.0.1-deferred-gates.md));
-the remaining advisory is in the dev-only test toolchain, tracked as issue #78.
+job (`pnpm audit --audit-level high`) is **enforcing** — it was informational under
+decision D3 of [ADR-0009](docs/adr/0009-v1.0.1-deferred-gates.md) while a dev-toolchain
+advisory was outstanding (issue #78); that was resolved, so the allowance was retired.
+If a new high advisory lands in a transitive dependency, bump the direct dependency that
+pulls it, or add a targeted override in `pnpm-workspace.yaml` (pnpm 11 does not read
+overrides from `package.json`).
 
 ## Branching, commits, and PRs
 

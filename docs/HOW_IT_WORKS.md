@@ -104,10 +104,11 @@ The bridge is the *only* component that runs an agent CLI, and it does so defens
   secret-looking variables) is dropped.
 - **Working-folder validation.** A session's working folder must be an absolute path inside
   an allow-root; `..` traversal, UNC/device paths, and symlink escapes are rejected when it
-  is saved. The folder is the session's *outputs root*; **wiring it as each CLI's spawn
-  `cwd` is a tracked follow-up** (see [WORKSPACE_MODEL.md](WORKSPACE_MODEL.md) D-W5), so
-  agents currently run in the bridge's own working directory. The spawn-time re-validation
-  (`resolveSpawnCwd`) is in place as defense-in-depth for when a per-run `cwd` is wired.
+  is saved. The folder is the session's *outputs root* **and each CLI's spawn `cwd`** (see
+  [WORKSPACE_MODEL.md](WORKSPACE_MODEL.md) D-W5), so agents run in the folder you picked.
+  The path is validated twice: canonicalized when saved, then re-validated by
+  `resolveSpawnCwd` immediately before `spawn`, which closes the time-of-check/time-of-use
+  window if a symlink is swapped in between.
 - **Bounded output and a hard timeout**, with a process-tree kill on timeout or cancel.
 - **Prompt-injection in stored memory is treated as data.** A `/remember` note containing
   an injection attempt is flagged and stored as inert data — verified: a planted
