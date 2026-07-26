@@ -90,6 +90,20 @@ pre {
   color: var(--text);
 }
 
+:where(
+  a[href],
+  button,
+  input,
+  select,
+  textarea,
+  summary,
+  [role='button'],
+  [tabindex]:not([tabindex='-1'])
+):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 /*
  * Respect the user's reduced-motion preference (WCAG 2.3.3 / 2.2.2). Collapses
  * the toast/message/thinking animations and any transition to near-instant

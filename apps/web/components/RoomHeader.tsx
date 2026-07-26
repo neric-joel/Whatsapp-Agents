@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { KeyboardEvent, useEffect, useId, useRef, useState } from 'react'
 
 import { getProviderStyle } from '@/lib/provider-styles'
 
@@ -43,6 +43,9 @@ export default function RoomHeader({ roomId }: Props) {
   const [loadingAgents, setLoadingAgents] = useState(false)
   const [agentError, setAgentError] = useState<string | null>(null)
   const [busyMemberId, setBusyMemberId] = useState<string | null>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const panelTriggerRef = useRef<HTMLButtonElement>(null)
+  const panelId = useId()
 
   useEffect(() => {
     let cancelled = false
@@ -132,6 +135,51 @@ export default function RoomHeader({ roomId }: Props) {
     if (!panelOpen) return
     void fetchAgentPanelData()
   }, [panelOpen, roomId])
+
+  useEffect(() => {
+    if (!panelOpen) return
+    panelRef.current?.focus()
+  }, [panelOpen])
+
+  function closePanel() {
+    setPanelOpen(false)
+    panelTriggerRef.current?.focus()
+  }
+
+  useEffect(() => {
+    if (!panelOpen) return
+    function onMouseDown(event: MouseEvent) {
+      const target = event.target as Node
+      if (panelRef.current?.contains(target) || panelTriggerRef.current?.contains(target)) return
+      closePanel()
+    }
+    document.addEventListener('mousedown', onMouseDown)
+    return () => document.removeEventListener('mousedown', onMouseDown)
+  }, [panelOpen])
+
+  function trapPanelFocus(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closePanel()
+      return
+    }
+    if (event.key !== 'Tab' || !panelRef.current) return
+    const focusables = panelRef.current.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    )
+    const enabled = Array.from(focusables).filter((el) => !el.hasAttribute('disabled'))
+    if (enabled.length === 0) return
+    const first = enabled[0]!
+    const last = enabled[enabled.length - 1]!
+    const active = document.activeElement
+    if (event.shiftKey && active === first) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault()
+      first.focus()
+    }
+  }
 
   async function updateMember(member: RoomAgentMember, muted: boolean) {
     setBusyMemberId(member.id)
@@ -250,11 +298,13 @@ export default function RoomHeader({ roomId }: Props) {
 
       <ThemeSwitcher />
       <button
+        ref={panelTriggerRef}
         type="button"
         onClick={() => setPanelOpen((open) => !open)}
         className="ml-3 inline-flex h-9 w-9 items-center justify-center rounded-md text-[var(--muted)] transition-colors hover:bg-[var(--sidebar-hover)] hover:text-[var(--text)]"
         aria-label="Manage agents"
         aria-expanded={panelOpen}
+        aria-controls={panelId}
       >
         <svg
           aria-hidden="true"
@@ -270,7 +320,15 @@ export default function RoomHeader({ roomId }: Props) {
       </button>
 
       {panelOpen && (
-        <div className="absolute right-4 top-[72px] z-50 w-[360px] max-w-[calc(100vw-2rem)] border border-sky-100 bg-white shadow-xl">
+        <div
+          id={panelId}
+          ref={panelRef}
+          role="dialog"
+          aria-label="Manage room agents"
+          tabIndex={-1}
+          onKeyDown={trapPanelFocus}
+          className="absolute right-4 top-[72px] z-50 w-[360px] max-w-[calc(100vw-2rem)] border border-sky-100 bg-white shadow-xl"
+        >
           <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-3 py-2">
             <span className="text-sm font-semibold text-gray-900">Agents</span>
             <button
