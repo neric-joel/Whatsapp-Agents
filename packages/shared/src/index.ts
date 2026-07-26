@@ -303,6 +303,7 @@ export interface ContextPacketV1 {
   schema_version: 1
   run_id: string
   room: Pick<Room, 'id' | 'name' | 'reply_mode' | 'max_agent_rounds' | 'discussion_mode'>
+  working_dir?: string | null
   agent: Pick<Agent, 'id' | 'name' | 'slug' | 'system_prompt' | 'provider'>
   /**
    * Authoritative, auto-generated grounding facts about THIS runtime (local SQLite

@@ -46,13 +46,12 @@ export abstract class SubprocessAdapter implements AgentAdapter {
   }
 
   /**
-   * The session working_dir to use as the spawn cwd, or null to inherit the bridge cwd. The base
-   * adapter returns null — working_dir is not yet wired to a spawn cwd (the deferred Cowork Phase-D
-   * feature). A subclass that wires it returns the raw STORED path; resolveSpawnCwd re-validates it
-   * at spawn time (issue #71) so a raw path can never reach `cwd`.
+   * The session working_dir to use as the spawn cwd, or null to inherit the bridge cwd. This returns
+   * the raw STORED path from the packet; resolveSpawnCwd re-validates it at spawn time (issue #71)
+   * so a raw path can never reach `cwd`.
    */
-  protected getWorkingDir(): string | null {
-    return null
+  protected getWorkingDir(packet: ContextPacketV1): string | null {
+    return packet.working_dir ?? null
   }
 
   protected parseStdoutLine(line: string): AgentEvent | null {
@@ -159,12 +158,12 @@ export abstract class SubprocessAdapter implements AgentAdapter {
 
     // SECURITY (issues #67 + #71): the spawn cwd is resolved ONLY through resolveSpawnCwd, which
     // RE-VALIDATES the stored working_dir at this moment (realpath + allow-root; rejects UNC/
-    // traversal/symlink-escape) and returns the canonical path — closing the TOCTOU window where a
+    // traversal/symlink-escape) and returns the canonical path - closing the TOCTOU window where a
     // path component could be swapped for a symlink/junction after the write-time check. getWorkingDir()
-    // returns null today (working_dir is not yet wired to a cwd), so cwd is undefined and the child
+    // returns the raw stored session path from the packet, or null so cwd is undefined and the child
     // inherits the bridge cwd. A raw stored/user path can never reach spawn({ cwd }) by construction;
     // a now-invalid stored path makes resolveSpawnCwd throw, aborting the spawn instead of using it.
-    const cwd = resolveSpawnCwd(this.getWorkingDir())
+    const cwd = resolveSpawnCwd(this.getWorkingDir(packet))
     const child = spawn(target.command, target.args, {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
