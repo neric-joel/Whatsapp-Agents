@@ -18,11 +18,14 @@ function req(
 
 describe('isForbiddenCrossOrigin', () => {
   const prev = process.env.NEXT_PUBLIC_APP_URL
+  const prevExtra = process.env.EXTRA_ALLOWED_ORIGINS
   beforeEach(() => {
     process.env.NEXT_PUBLIC_APP_URL = 'https://app.example.com'
+    delete process.env.EXTRA_ALLOWED_ORIGINS
   })
   afterEach(() => {
     process.env.NEXT_PUBLIC_APP_URL = prev
+    process.env.EXTRA_ALLOWED_ORIGINS = prevExtra
   })
 
   it('ignores safe (non-mutating) methods', () => {
@@ -35,6 +38,34 @@ describe('isForbiddenCrossOrigin', () => {
 
   it('allows a same-origin POST', () => {
     expect(isForbiddenCrossOrigin(req('POST', { origin: 'https://app.example.com' }))).toBe(false)
+  })
+
+  it('rejects a Host-forged same-origin POST for an unpinned hostname', () => {
+    expect(
+      isForbiddenCrossOrigin(
+        req('POST', { origin: 'http://evil.test' }, 'http://internal.example.com/api/x'),
+      ),
+    ).toBe(true)
+    expect(
+      isForbiddenCrossOrigin({
+        method: 'POST',
+        headers: new Headers({ origin: 'http://evil.test:3000' }),
+        nextUrl: { origin: 'http://evil.test:3000' },
+      }),
+    ).toBe(true)
+  })
+
+  it('allows pinned localhost origins on the request port', () => {
+    expect(
+      isForbiddenCrossOrigin(
+        req('POST', { origin: 'http://localhost:3000' }, 'http://localhost:3000/api/x'),
+      ),
+    ).toBe(false)
+    expect(
+      isForbiddenCrossOrigin(
+        req('POST', { origin: 'http://127.0.0.1:3000' }, 'http://127.0.0.1:3000/api/x'),
+      ),
+    ).toBe(false)
   })
 
   it('rejects a mutating request with no Origin header (cookie auth)', () => {
@@ -54,7 +85,6 @@ describe('isForbiddenCrossOrigin', () => {
   it('honors EXTRA_ALLOWED_ORIGINS', () => {
     process.env.EXTRA_ALLOWED_ORIGINS = 'https://proxy.example.com'
     expect(isForbiddenCrossOrigin(req('POST', { origin: 'https://proxy.example.com' }))).toBe(false)
-    delete process.env.EXTRA_ALLOWED_ORIGINS
   })
 })
 

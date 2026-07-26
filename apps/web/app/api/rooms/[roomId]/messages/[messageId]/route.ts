@@ -1,9 +1,9 @@
 import { getDb, jsonText, rowToMessage } from '@agentroom/db'
 import { NextRequest } from 'next/server'
-import { z } from 'zod'
 
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { assertSameOrigin, internalError } from '@/lib/api-security'
+import { updateMessageSchema } from '@/lib/api-validation'
 import { getAuthenticatedUser } from '@/lib/auth'
 import { canCurrentUserDeleteMessage, createDeletedMessagePatch } from '@/lib/message-management'
 import { stripServerOwnedMetadata } from '@/lib/message-metadata'
@@ -12,14 +12,6 @@ import { requireRoomMember } from '@/lib/permissions'
 interface RouteParams {
   params: Promise<{ roomId: string; messageId: string }>
 }
-
-// PATCH body: edit a message's content and/or metadata. At least one field required.
-const updateMessageSchema = z
-  .object({
-    content: z.string().min(1).optional(),
-    metadata: z.record(z.string(), z.unknown()).optional(),
-  })
-  .refine((d) => Object.keys(d).length > 0, 'At least one field required')
 
 export async function PATCH(req: NextRequest, props: RouteParams) {
   const params = await props.params
