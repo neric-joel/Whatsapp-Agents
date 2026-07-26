@@ -1,6 +1,6 @@
 {
   "name": "agentroom",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "A local, single-user chat room that puts the agent CLIs you already have installed (Claude Code, Codex, or your own) into one conversation as named participants. `npx agentroom` downloads the matching release source, builds it locally, and runs it — no hosted service, no accounts.",
   "license": "MIT",
   "repository": {
