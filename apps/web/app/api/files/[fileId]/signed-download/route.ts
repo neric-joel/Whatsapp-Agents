@@ -6,21 +6,12 @@ import { filesDir, getDb, rowToFile } from '@agentroom/db'
 import { apiError } from '@/lib/api-error'
 import { internalError } from '@/lib/api-security'
 import { getAuthenticatedUser } from '@/lib/auth'
+import { isSafeInlineMimeType } from '@/lib/download-disposition'
 import { requireRoomMember } from '@/lib/permissions'
 
 interface RouteParams {
   params: Promise<{ fileId: string }>
 }
-
-export const SAFE_INLINE_DOWNLOAD_MIME_TYPES = [
-  'image/png',
-  'image/jpeg',
-  'image/gif',
-  'image/webp',
-  'text/plain',
-] as const
-
-const safeInlineDownloadMimeTypes = new Set<string>(SAFE_INLINE_DOWNLOAD_MIME_TYPES)
 
 export async function GET(req: Request, props: RouteParams) {
   const params = await props.params
@@ -55,7 +46,7 @@ export async function GET(req: Request, props: RouteParams) {
     return apiError('NOT_FOUND', 'File not found', 404)
   }
 
-  const disposition = safeInlineDownloadMimeTypes.has(file.mime_type) ? 'inline' : 'attachment'
+  const disposition = isSafeInlineMimeType(file.mime_type) ? 'inline' : 'attachment'
 
   return new Response(new Uint8Array(buf), {
     headers: {
