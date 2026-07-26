@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.6.0] - 2026-07-26
+
 Cleared the entire tracked backlog (every open issue and PR), then ran an adversarial
 review sweep over the result — parallel reviewers by lens, each finding cross-examined by
 skeptics instructed to refute it — and fixed the twelve defects that survived. All twelve
@@ -513,7 +517,8 @@ returned **GO** (0 Critical, 0 confirmed High). Highlights by phase:
   server/service-role path is unaffected. Verified against a live DB (pgTAP +
   role-level SQL + real PostgREST HTTP); migration `20260531000004_agents_column_privs.sql`.
 
-[Unreleased]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.3.0...v1.4.0
