@@ -375,11 +375,16 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
     const replyContent = redact(sanitizeAgentOutput(finalContent))
     const isConclusion = conclusionDetected(replyContent)
     const hallucination = detectHallucination(replyContent)
+    // ADR-0011: discussion metadata must be available before canary runs so topic-scoped
+    // backend mentions can be treated as discussion claims, not AgentRoom architecture claims.
+    const disc = readDiscussionMetadata(triggerMsg.metadata)
     // Canary lookahead (HalluCana): grounds claims against the real architecture and gates
     // propagation. Fail safe — any error becomes 'unverified', never 'verified'.
     let canary: { status: 'verified' | 'unverified' | 'flagged'; reasons: string[] }
     try {
-      canary = runCanary(replyContent)
+      canary = runCanary(replyContent, {
+        discussionOriginalPrompt: disc?.original_prompt ?? null,
+      })
     } catch (err) {
       canary = {
         status: 'unverified',
@@ -396,7 +401,6 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
     // reply and stamp whether it substantively challenged a peer. The scoped peer query
     // (build-context-packet) matches replies by this metadata, so later phases can see this
     // agent's contribution; the challenge flag drives the anti-sycophancy / dissent gate.
-    const disc = readDiscussionMetadata(triggerMsg.metadata)
     const metadata = {
       agent_loop: {
         is_conclusion: isConclusion,

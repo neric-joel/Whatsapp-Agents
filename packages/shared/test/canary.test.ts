@@ -75,6 +75,30 @@ test('does NOT flag a generic, non-app-referential backend mention (off-topic FP
   assert.equal(runCanary('Supabase is a popular backend choice for many teams.').status, 'verified')
 })
 
+const SQLITE_VS_POSTGRES_TOPIC = 'Should a local-first app use SQLite or Postgres?'
+const SQLITE_VS_POSTGRES_REPLY =
+  'For a local-first app, SQLite is usually the better default because the data is stored locally and works offline. Postgres is a good choice when the app uses a server-hosted database for collaboration, sync, or shared access.'
+
+test('discussion topic context downgrades a same-backend topic hit instead of flagging', () => {
+  const r = runCanary(SQLITE_VS_POSTGRES_REPLY, {
+    discussionOriginalPrompt: SQLITE_VS_POSTGRES_TOPIC,
+  })
+  assert.equal(r.status, 'unverified')
+  assert.match(r.reasons.join(' '), /backend term appears in the discussion topic/i)
+})
+
+test('same SQLite vs Postgres reply still flags without discussion context', () => {
+  assert.equal(runCanary(SQLITE_VS_POSTGRES_REPLY).status, 'flagged')
+})
+
+test('discussion topic context does not suppress an explicit current-app storage claim', () => {
+  const r = runCanary('This app stores data in Postgres.', {
+    discussionOriginalPrompt: SQLITE_VS_POSTGRES_TOPIC,
+  })
+  assert.equal(r.status, 'flagged')
+  assert.match(r.reasons.join(' '), /claims this app's data lives/i)
+})
+
 test('citation: flags an attribution with no URL in the sentence', () => {
   assert.equal(runCanary('According to Professor Lee, the result holds.').status, 'unverified')
 })

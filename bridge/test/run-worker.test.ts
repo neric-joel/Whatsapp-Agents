@@ -441,6 +441,48 @@ test('canary metadata is written to the reply row and flags a hallucinated backe
   )
 })
 
+test('discussion topic context is passed to canary before persisting reply metadata', async () => {
+  seedWorld({
+    triggerMsg: {
+      metadata: JSON.stringify({
+        discussion: {
+          enabled: true,
+          command: 'discuss',
+          phase: 'converge',
+          original_message_id: '00000000-0000-4000-8000-000000000095',
+          original_prompt: 'Should a local-first app use SQLite or Postgres?',
+        },
+      }),
+    },
+  })
+  const adapter = fakeAdapter(async function* (packet) {
+    yield {
+      type: 'final_response',
+      run_id: packet.run_id,
+      response: {
+        schema_version: 1,
+        run_id: packet.run_id,
+        content:
+          'For a local-first app, SQLite is usually the better default because the data is stored locally and works offline. Postgres is a good choice when the app uses a server-hosted database for collaboration, sync, or shared access.',
+      },
+    }
+  })
+
+  await processRun('run-1', { getAdapter: () => adapter })
+
+  assert.equal(runRow().status, 'completed')
+  const replies = agentReplies()
+  assert.equal(replies.length, 1)
+  const meta = JSON.parse(replies[0]!.metadata) as {
+    canary?: { status?: string; reasons?: string[] }
+  }
+  assert.notEqual(
+    meta.canary?.status,
+    'flagged',
+    'a backend term from the discussion topic must not be persisted as a flagged canary hit',
+  )
+})
+
 test('a cancel that lands after the adapter finishes does NOT post a reply (A2)', async () => {
   seedWorld()
   // The adapter finishes normally, but the run is cancelled in the DB just as it yields its

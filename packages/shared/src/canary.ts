@@ -26,15 +26,20 @@ export interface CanaryResult {
   reasons: string[]
 }
 
+export interface CanaryOptions {
+  discussionOriginalPrompt?: string | null
+}
+
 // Backends/storage this app does NOT use. A confident claim that AgentRoom stores data in
 // any of these contradicts the ground truth (local SQLite under ~/.agentroom) — the exact
 // hallucination seen in the wild (one agent said Supabase, another said a ChatGPT workspace).
 const FORBIDDEN_BACKENDS =
   /\b(supabase|postgres(ql)?|mysql|mongo(db)?|firebase|dynamo(db)?|redis|cloud (?:database|storage|backend|server)|chatgpt (?:workspace|memory|cloud|server|storage)|openai (?:workspace|storage|server)|a (?:remote|hosted) (?:database|server|backend))\b/i
+const FORBIDDEN_BACKENDS_GLOBAL = new RegExp(FORBIDDEN_BACKENDS.source, 'gi')
 
 // Verbs that turn a backend mention into a *storage/architecture assertion* about this app.
 const STORAGE_ASSERTION =
-  /\b(stored?|saved?|persist(?:ed|s)?|kept|lives?|hosted|backed by|uses?|using|runs? on|powered by|relies on|database is|backend is)\b/i
+  /\b(stores?|stored?|saved?|persist(?:ed|s)?|kept|lives?|hosted|backed by|uses?|using|runs? on|powered by|relies on|database is|backend is)\b/i
 
 // Negation cues — don't flag a CORRECT statement that denies the forbidden backend
 // (e.g. "this is NOT stored in Supabase", "no cloud database, it's local SQLite").
@@ -51,6 +56,12 @@ const NEGATION =
 const GENERIC_SUBJECT =
   /\b(?:most|many|some|other|several|various|certain|all|numerous)\s+(?:apps?|applications?|programs?|tools?|projects?|systems?|services?|websites?|platforms?|teams?|companies|developers?|people|users?|clients?|databases?|backends?|frameworks?|stacks?)\b|\b(?:people|developers|other apps|many apps|the industry)\b/i
 
+// In a discussion whose topic itself names a backend ("SQLite or Postgres?"), an otherwise
+// bare backend-storage sentence may be talking about the topic rather than AgentRoom. Keep
+// explicit current-app claims on the flagged path so the exception cannot become term-scoped.
+const CURRENT_APP_SUBJECT =
+  /\b(?:agentroom|this (?:app|application|project|system|service|tool|chat|conversation|room|backend|database|storage)|our (?:app|application|project|system|service|tool|backend|database|storage)|your (?:messages?|conversations?|chats?|data|files?|room data))\b/i
+
 // Split into clauses (sentence boundaries + commas/semicolons/em–en dashes) so a negation
 // in one clause ("it's NOT local — data lives in Supabase") can't disarm a backend claim in
 // the next. Two passes over simple character classes (no `\s+…\s+` alternation) keeps this
@@ -65,10 +76,35 @@ function splitSentences(content: string): string[] {
     .filter((s) => s.length > 0)
 }
 
+function normalizeBackendTerm(term: string): string {
+  const t = term.toLowerCase()
+  if (t.includes('postgres')) return 'postgres'
+  if (t.includes('mongo')) return 'mongo'
+  if (t.includes('dynamo')) return 'dynamo'
+  if (t.includes('cloud')) return 'cloud'
+  if (t.includes('chatgpt')) return 'chatgpt'
+  if (t.includes('openai')) return 'openai'
+  if (t.includes('remote') || t.includes('hosted')) return 'remote'
+  return t
+}
+
+function discussionPromptNamesBackend(
+  discussionOriginalPrompt: string | null | undefined,
+  backendHit: string,
+): boolean {
+  if (!discussionOriginalPrompt) return false
+  const backend = normalizeBackendTerm(backendHit)
+  for (const m of discussionOriginalPrompt.matchAll(FORBIDDEN_BACKENDS_GLOBAL)) {
+    if (normalizeBackendTerm(m[0]) === backend) return true
+  }
+  return false
+}
+
 /** Run the canary over an agent reply. Pure + deterministic. */
-export function runCanary(content: string): CanaryResult {
+export function runCanary(content: string, opts: CanaryOptions = {}): CanaryResult {
   const reasons: string[] = []
   const sentences = splitSentences(content)
+  let grounded = false
 
   // 1. Grounding check (strongest): a storage/architecture claim naming a forbidden backend.
   for (const s of sentences) {
@@ -82,12 +118,19 @@ export function runCanary(content: string): CanaryResult {
     // Supabase"). A negation in a different clause was already split off above, so it can't
     // disarm the flag — that was the bypass ("it's NOT local — data lives in Supabase").
     if (NEGATION.test(s.slice(0, m.index))) continue
+    if (
+      discussionPromptNamesBackend(opts.discussionOriginalPrompt, m[0]) &&
+      !CURRENT_APP_SUBJECT.test(s)
+    ) {
+      reasons.push(`Unverified: backend term appears in the discussion topic ("${m[0]}").`)
+      continue
+    }
     reasons.push(
       `Contradicts the real architecture: claims this app's data lives in "${m[0]}" — it is local SQLite under ~/.agentroom (no cloud).`,
     )
+    grounded = true
     break
   }
-  const grounded = reasons.length > 0
 
   // 2. Weaker behavioral signals → unverified (kept distinct from the grounding flag).
   const weak: string[] = []
@@ -119,6 +162,6 @@ export function runCanary(content: string): CanaryResult {
   }
   reasons.push(...weak)
 
-  const status: CanaryStatus = grounded ? 'flagged' : weak.length > 0 ? 'unverified' : 'verified'
+  const status: CanaryStatus = grounded ? 'flagged' : reasons.length > 0 ? 'unverified' : 'verified'
   return { status, reasons: [...new Set(reasons)] }
 }
