@@ -1,4 +1,8 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { test } from 'node:test'
 
 import type { ContextPacketV1 } from '@agentroom/shared'
@@ -7,6 +11,7 @@ import { ClaudeCodeAdapter } from '../src/adapters/claude-code-adapter.js'
 import {
   BinaryNotFoundError,
   buildChildEnv,
+  buildWindowsCmdCommandLine,
   resolveBinaryPath,
   resolveSpawnTarget,
 } from '../src/lib/subprocess-security.js'
@@ -130,6 +135,46 @@ test('buildChildEnv inject is opt-in and name-validated (no injection by default
   assert.equal(bad['bad name; rm -rf'], undefined)
 })
 
+test('buildChildEnv matches allowlisted names case-insensitively on Windows only', () => {
+  const source = {
+    ComSpec: 'C:\\Windows\\System32\\cmd.exe',
+    ProgramData: 'C:\\ProgramData',
+    ProgramFiles: 'C:\\Program Files',
+    'ProgramFiles(x86)': 'C:\\Program Files (x86)',
+    some_secret: 'must-stay-hidden',
+    random_app_var: 'must-stay-hidden',
+  }
+
+  const windowsEnv = buildChildEnv(source, { platform: 'win32' })
+  assert.equal(windowsEnv['ComSpec'], 'C:\\Windows\\System32\\cmd.exe')
+  assert.equal(windowsEnv['ProgramData'], 'C:\\ProgramData')
+  assert.equal(windowsEnv['ProgramFiles'], 'C:\\Program Files')
+  assert.equal(windowsEnv['ProgramFiles(x86)'], 'C:\\Program Files (x86)')
+  assert.equal(windowsEnv['some_secret'], undefined)
+  assert.equal(windowsEnv['random_app_var'], undefined)
+
+  const posixEnv = buildChildEnv(source, { platform: 'linux' })
+  assert.equal(posixEnv['ComSpec'], undefined)
+  assert.equal(posixEnv['ProgramData'], undefined)
+  assert.equal(posixEnv['ProgramFiles'], undefined)
+  assert.equal(posixEnv['ProgramFiles(x86)'], undefined)
+})
+
+test('buildChildEnv honors Windows-cased extra allow names but still strips secrets first', () => {
+  const env = buildChildEnv(
+    {
+      bridge_child_env_allow: 'MY_CLI_HOME,SOME_SECRET',
+      my_cli_home: 'C:\\Users\\First Last\\.cli',
+      some_secret: 'must-stay-hidden',
+    },
+    { platform: 'win32' },
+  )
+
+  assert.equal(env['my_cli_home'], 'C:\\Users\\First Last\\.cli')
+  assert.equal(env['some_secret'], undefined)
+  assert.equal(env['bridge_child_env_allow'], undefined)
+})
+
 // --- resolveBinaryPath ---
 
 test('resolveBinaryPath resolves a bare command from PATH', () => {
@@ -176,6 +221,55 @@ test('resolveSpawnTarget routes a Windows .cmd shim through cmd.exe with static 
     'json',
   ])
 })
+
+test('buildWindowsCmdCommandLine quotes .cmd paths with spaces and escapes shell metachars', () => {
+  const commandLine = buildWindowsCmdCommandLine(
+    'C:\\Users\\First Last\\AppData\\Roaming\\npm\\claude.cmd',
+    ['--print', 'a&b', 'x|y', 'quote" & echo PWNED & "tail', '100%PATH%'],
+  )
+
+  assert.equal(
+    commandLine,
+    String.raw`"C:\Users\First^ Last\AppData\Roaming\npm\claude.cmd ^^^"--print^^^" ^^^"a^^^&b^^^" ^^^"x^^^|y^^^" ^^^"quote\^^^"^^^ ^^^&^^^ echo^^^ PWNED^^^ ^^^&^^^ \^^^"tail^^^" ^^^"100^^^%PATH^^^%^^^""`,
+  )
+})
+
+test('resolveSpawnTarget prequotes Windows .cmd shims when cmd /s would strip path quotes', () => {
+  const binPath = 'C:\\Users\\First Last\\AppData\\Roaming\\npm\\claude.cmd'
+  const args = ['--print', 'a&b']
+  const t = resolveSpawnTarget(binPath, args, 'win32', {
+    COMSPEC: 'C:\\Windows\\System32\\cmd.exe',
+  })
+
+  assert.equal(t.command, 'C:\\Windows\\System32\\cmd.exe')
+  assert.deepEqual(t.args, ['/d', '/s', '/c', buildWindowsCmdCommandLine(binPath, args)])
+  assert.equal(t.windowsVerbatimArguments, true)
+})
+
+test(
+  'Windows: spawned .cmd shim under a path with spaces preserves literal args',
+  { skip: process.platform === 'win32' ? false : 'Windows-only .cmd integration' },
+  () => {
+    const dir = mkdtempSync(join(tmpdir(), 'agentroom shim space '))
+    const script = join(dir, 'print-args.cjs')
+    const shim = join(dir, 'print args.cmd')
+    writeFileSync(script, 'process.stdout.write(JSON.stringify(process.argv.slice(2)))\n')
+    writeFileSync(shim, '@echo off\r\nnode "%~dp0print-args.cjs" %*\r\n')
+
+    const args = ['--print', 'a&b', 'x|y', 'quote" & echo PWNED & "tail', '100%PATH%']
+    const target = resolveSpawnTarget(shim, args, 'win32')
+    const result = spawnSync(target.command, target.args, {
+      encoding: 'utf8',
+      shell: false,
+      windowsHide: true,
+      windowsVerbatimArguments: target.windowsVerbatimArguments === true,
+    })
+
+    assert.equal(result.status, 0, result.stderr)
+    assert.deepEqual(JSON.parse(result.stdout), args)
+    assert.doesNotMatch(result.stdout + result.stderr, /^PWNED$/m)
+  },
+)
 
 // --- argv injection regression ---
 
