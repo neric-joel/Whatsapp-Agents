@@ -71,7 +71,12 @@ Security fixes target the `main` branch and the latest tagged release (currently
   fetches `/archive/<commit>.tar.gz` (a commit id cannot be force-moved the way a
   `vX.Y.Z` tag can), and it refuses to extract — let alone build or run — bytes whose
   digest does not match. A missing or malformed pin is a hard failure, not a skipped
-  check; the resolved redirect target must still be `https:` on a GitHub host. It then
+  check; the resolved redirect target must still be `https:` on `github.com` or
+  `codeload.github.com`. Two env vars deliberately opt out and both say so loudly on
+  stderr: `AGENTROOM_ALLOW_UNVERIFIED_SOURCE=1` (only when the pin is **absent** — i.e.
+  running the bin from a git checkout) and `AGENTROOM_SOURCE_TARBALL` (an
+  operator-supplied tarball, which no recorded digest can describe). Neither can suppress
+  a digest **mismatch** or a malformed pin. It then
   trusts its local cache (`~/.agentroom/app/` — on Windows
   `%USERPROFILE%\.agentroom\app\`, a source cache separate from the
   `%APPDATA%\AgentRoom` data folder) the same way npm trusts its own cache:

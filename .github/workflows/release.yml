@@ -16,6 +16,13 @@ name: Release
 #
 # To cut a release (human):
 #   git tag v1.5.0 && git push origin v1.5.0
+# Preflight removes the missing-token case, but `publish-npm` can still fail AFTER
+# the GitHub Release exists (registry outage, the archive fetch failing, an expired
+# token) — that half-state is reachable, and this is how to finish it: fix the cause,
+# then re-run just the failed job on the tag's existing run —
+#   gh run rerun <run-id> --failed
+# (Actions UI → the run → Re-run failed jobs). `release` is idempotent-by-skip: it
+# will not be re-run, so the Release page is left as-is.
 # NEVER delete and re-push a released tag — the ruleset blocks it, and the bin
 # published from it pins that tag's COMMIT; cut a new patch version instead.
 
@@ -91,6 +98,8 @@ jobs:
   #
   # If the owner switches to npm Trusted Publishing (OIDC), delete this job, its entry in
   # `release.needs`, and publish-npm's `NODE_AUTH_TOKEN`: there is no token to require.
+  # Intended side effect: a fork that pushes a `v*` tag now gets a red run here instead of
+  # a green one with a GitHub Release, because forks do not inherit the secret.
   publish-preflight:
     runs-on: ubuntu-latest
     permissions: {} # no checkout, no API calls — it needs no token scopes at all

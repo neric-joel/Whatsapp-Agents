@@ -17,9 +17,10 @@ All notable changes to this project are documented here. The format is based on
   fetches `archive/<commit>.tar.gz` and refuses to extract bytes whose digest does not
   match. An absent or malformed pin is a hard failure (`AGENTROOM_ALLOW_UNVERIFIED_SOURCE=1`
   is the documented opt-out for running the bin from a checkout; there is none for a
-  mismatch). The primary download's resolved redirect target must now be `https:` on a
-  GitHub host — previously only the `AGENTROOM_SOURCE_TARBALL` override rejected `http://`,
-  and nothing looked at where a redirect actually landed. (ADR-0014, amended)
+  mismatch). The primary download's resolved redirect target must now be `https:` on
+  `github.com` or `codeload.github.com` — previously only the `AGENTROOM_SOURCE_TARBALL`
+  override rejected `http://`, and nothing looked at where a redirect actually landed.
+  Both opt-outs now warn on stderr rather than passing quietly. (ADR-0014, amended)
 - **A release that cannot publish to npm now fails instead of reporting success.** The
   publish job downgraded a missing `NPM_TOKEN` to a `::notice` and skipped, so every tag
   from v1.0.0 to v1.6.0 produced a green run and a GitHub Release while publishing nothing

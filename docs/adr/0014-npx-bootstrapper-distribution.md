@@ -92,9 +92,13 @@ the bin:
 - fetches `archive/<commit>.tar.gz` — a commit id cannot be force-moved,
 - refuses to extract bytes whose digest does not match the recorded one,
 - refuses to run at all when the pin is absent or malformed, and
-- constrains the primary fetch's resolved redirect target to `https:` on a GitHub
-  host (previously only the `AGENTROOM_SOURCE_TARBALL` override rejected `http://`,
-  and neither path looked at where a redirect landed).
+- constrains the primary fetch's resolved redirect target to `https:` on exactly
+  `github.com` or `codeload.github.com` — not a `*.github.com` suffix rule, which would
+  also admit `raw`/`objects.githubusercontent.com` (arbitrary user content) on the
+  digest-less opt-out path. Previously only the `AGENTROOM_SOURCE_TARBALL` override
+  rejected `http://`, and neither path looked at where a redirect landed. Only the
+  landing URL is checked; `release.yml`'s own fetch of the same archive is stricter
+  (`curl --proto-redir '=https'`, every hop).
 
 CI refuses to publish unless the pin it just wrote is well formed and names the
 commit being released, so the "absent pin" branch is unreachable from a published

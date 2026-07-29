@@ -3,11 +3,10 @@
  * `npx agentroom` — the published entry point.
  *
  * This package deliberately ships NO app code: the bin you are reading downloads the
- * AgentRoom source for its own exact version (the `vX.Y.Z` git tag this package was
- * published from), caches it under `~/.agentroom/app/X.Y.Z/`, and runs the repo's own
- * launcher (`scripts/launch.mjs` — install → build → start web + bridge → open the
- * browser). That keeps the npm artifact tiny and auditable, makes the GitHub tag the
- * single source of truth, and means `npx agentroom` does exactly what the README's
+ * AgentRoom source for the exact commit this package was published from, caches it under
+ * `~/.agentroom/app/X.Y.Z/`, and runs the repo's own launcher (`scripts/launch.mjs` —
+ * install → build → start web + bridge → open the browser). That keeps the npm artifact
+ * tiny and auditable, and means `npx agentroom` does exactly what the README's
  * `git clone && pnpm start` quickstart does — minus the clone.
  *
  * First run is honest work: it downloads the source (~a few MB), installs
@@ -69,6 +68,8 @@ const MIN_NODE = [22, 13, 0]
 const isWin = process.platform === 'win32'
 
 const log = (msg) => console.log(`[agentroom] ${msg}`)
+// stderr, so "this source was not verified" survives a piped/quiet stdout.
+const warn = (msg) => console.error(`[agentroom] WARNING: ${msg}`)
 const fail = (msg) => {
   console.error(`[agentroom] ${msg}`)
   process.exit(1)
@@ -125,9 +126,9 @@ function resolveSource() {
   const recorded = pkg.agentroom?.source
   if (recorded === undefined || recorded === null) {
     if (process.env.AGENTROOM_ALLOW_UNVERIFIED_SOURCE === '1') {
-      log(
-        'WARNING: AGENTROOM_ALLOW_UNVERIFIED_SOURCE=1 — downloading the mutable ' +
-          `v${VERSION} tag archive with NO integrity verification.`,
+      warn(
+        `AGENTROOM_ALLOW_UNVERIFIED_SOURCE=1 — downloading the mutable v${VERSION} tag ` +
+          'archive with NO integrity verification.',
       )
       return { url: TAG_TARBALL, sha256: null }
     }
@@ -150,12 +151,13 @@ function resolveSource() {
   return { url: `${REPO_ARCHIVE}/${recorded.commit}.tar.gz`, sha256: recorded.sha256 }
 }
 
-/** Suffix checks start at a dot, so `evil-github.com` / `githubXcom` cannot match. */
-function isGitHubHost(host) {
-  return (
-    host === 'github.com' || host.endsWith('.github.com') || host.endsWith('.githubusercontent.com')
-  )
-}
+// Exact hosts, not a suffix rule: `/archive/…` resolves in exactly one hop to codeload,
+// and suffix matching would admit `.github.com` (empty leading label) plus
+// raw/objects.githubusercontent.com, which serve arbitrary user-supplied content — the
+// digest makes that harmless, but AGENTROOM_ALLOW_UNVERIFIED_SOURCE=1 has no digest.
+// If GitHub ever moves archive downloads to another host this fails closed; the error
+// names the git quickstart, and the fix is a bin release.
+const GITHUB_ARCHIVE_HOSTS = new Set(['github.com', 'codeload.github.com'])
 
 /**
  * @param {{ sha256: string | null, gitHubOnly: boolean }} opts
@@ -177,6 +179,11 @@ async function download(url, dest, opts) {
     // just what we asked for: an https:// request that ends on plain http:// (GitHub's
     // archive redirects to codeload) would hand a network attacker the bytes we are about
     // to build and execute. res.url is the post-redirect URL.
+    //
+    // Only the LANDING url is checked — undici exposes no per-hop callback, so an
+    // intermediate http:// hop is invisible here. release.yml's own fetch of the same
+    // archive is stricter (`curl --proto-redir '=https'`, every hop); on this side the
+    // digest is what catches bytes that took a detour.
     let finalUrl = null
     try {
       finalUrl = new URL(res.url)
@@ -189,7 +196,7 @@ async function download(url, dest, opts) {
           `over ${finalUrl.protocol}. Git quickstart fallback: ${QUICKSTART}`,
       )
     }
-    if (opts.gitHubOnly && !isGitHubHost(finalUrl.hostname)) {
+    if (opts.gitHubOnly && !GITHUB_ARCHIVE_HOSTS.has(finalUrl.hostname)) {
       fail(
         `Download was redirected off GitHub (${url} → ${res.url}). Refusing it. ` +
           `Git quickstart fallback: ${QUICKSTART}`,
@@ -222,8 +229,11 @@ async function download(url, dest, opts) {
       fail(
         `Source integrity check FAILED — the download does not match the digest this ` +
           `release recorded.\n  expected sha256 ${opts.sha256}\n  actual   sha256 ${actual}\n` +
-          `Nothing was extracted and nothing was run. Do not retry blindly: use the git ` +
-          `quickstart (${QUICKSTART}) and report this at ` +
+          `Nothing was extracted and nothing was run. Either the source was tampered with, ` +
+          `or GitHub regenerated this archive with different compression (it did that once, ` +
+          `in 2023, moving every checksum — see ADR-0014): check whether EVERY published ` +
+          `version fails this way or only yours. Do not retry blindly. Use the git ` +
+          `quickstart meanwhile (${QUICKSTART}) and report it at ` +
           `https://github.com/neric-joel/Whatsapp-Agents/issues`,
       )
     }
@@ -331,6 +341,12 @@ async function main() {
     if (override && /^http:\/\//i.test(override)) {
       fail('AGENTROOM_SOURCE_TARBALL must be an https:// URL or a local path (not http://).')
     }
+    // Above the local-path/https split, so BOTH override branches say it: the recorded
+    // digest describes the recorded commit and cannot describe an operator's own tarball.
+    // Substituting the source is deliberate; doing it silently is not.
+    if (override) {
+      warn('AGENTROOM_SOURCE_TARBALL is set — this source is NOT integrity-verified.')
+    }
     if (override && !/^https:\/\//i.test(override)) {
       tarball = resolve(override)
       if (!existsSync(tarball)) fail(`AGENTROOM_SOURCE_TARBALL not found: ${tarball}`)
@@ -338,9 +354,6 @@ async function main() {
     } else {
       tarball = join(cacheRoot, `agentroom-v${VERSION}.tar.gz`)
       if (override) {
-        // Deliberate operator substitution: the recorded digest describes the recorded
-        // commit, so it cannot describe this. Say so rather than implying a check ran.
-        log('AGENTROOM_SOURCE_TARBALL is set — this download is NOT integrity-verified.')
         await download(override, tarball, { sha256: null, gitHubOnly: false })
       } else {
         const source = resolveSource()
