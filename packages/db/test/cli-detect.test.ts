@@ -4,8 +4,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
+import { buildWindowsCmdCommandLine } from '@agentroom/shared'
+
 import {
-  buildWindowsCmdCommandLine,
   detectKnownClis,
   KNOWN_CLIS,
   probeCommand,

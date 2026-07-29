@@ -129,9 +129,13 @@ every agent run.
 By default AgentRoom stores **no** secrets: a CLI's auth is deferred to that CLI's own
 config (cleaner, fewer secrets on disk). The optional per-profile `env` exists only for
 the rare CLI that genuinely requires an extra variable, and you opt into it explicitly.
-When AgentRoom spawns a child it always strips its own secrets from the environment;
-only the variables you put in a profile's `env` (plus the standard provider variables a
-CLI reads itself) are forwarded.
+When AgentRoom spawns a child it always strips its own secrets from the environment —
+including anything credential-shaped (`*_KEY`, `*_TOKEN`, `*SECRET*`, `CREDENTIAL_*`, …),
+so a provider API key sitting in the bridge's environment is **not** handed to your CLI.
+What a child gets is the base OS variables, the non-secret provider *config* variables a
+CLI reads itself (`ANTHROPIC_BASE_URL`, `AWS_REGION`, …), and the variables you put in
+this profile's `env`. If your CLI needs an API key from AgentRoom, put it in this
+profile's `env` or bind a stored credential to the agent.
 
 ## 4. Verify + health states
 

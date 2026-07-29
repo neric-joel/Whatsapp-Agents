@@ -41,11 +41,13 @@ Security fixes target the `main` branch and the latest tagged release (currently
   `system_prompt` is delivered via **stdin**, never argv; the binary is resolved
   from trusted host configuration (a `*_BIN` env var, `PATH`, or your own
   Connections entry) — **never from agent data**; the child environment is reduced
-  to an allowlist — base OS vars plus the provider auth vars the CLIs need
-  (`ANTHROPIC_*`, `OPENAI_*`, `GEMINI_*`, …) — and nothing else from the bridge's
-  own environment is forwarded (the only secrets a child sees beyond that are ones
-  you explicitly bind: a BYO credential's single var, or a Connections profile's
-  own `env`); output is capped (10 MB → kill) and runs are bounded by a timeout
+  to an allowlist — base OS vars plus non-secret provider *config* the CLIs read
+  (`ANTHROPIC_BASE_URL`, `AWS_REGION`, …) — while credential-shaped names
+  (`*_KEY`, `*_TOKEN`, `*SECRET*`, `*PASSWORD*`, `CREDENTIAL_*`, `BRIDGE_*`, …) are
+  denied outright, ahead of the allowlist, so nothing else from the bridge's own
+  environment is forwarded (the only secrets a child sees are ones you explicitly
+  bind: a BYO credential's single var, or a Connections profile's own `env`);
+  output is capped (10 MB → kill) and runs are bounded by a timeout
   with a force-kill of the process tree. (A destructive-command denylist exists in
   the tool-call path, but that path is dormant scaffolding today — no bundled
   adapter emits `tool_call_requested`; see #83.)

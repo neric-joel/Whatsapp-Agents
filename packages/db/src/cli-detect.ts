@@ -15,6 +15,8 @@ import { spawn } from 'node:child_process'
 import { existsSync, statSync } from 'node:fs'
 import { delimiter, isAbsolute, join } from 'node:path'
 
+import { buildWindowsCmdCommandLine, needsWindowsCmdCommandLine } from '@agentroom/shared'
+
 import type { CliKind } from './config.js'
 
 /** A known CLI AgentRoom can auto-detect and connect with sensible defaults. */
@@ -97,34 +99,6 @@ const isFile = (p: string): boolean => {
   }
 }
 
-const CMD_META_RE = /([()\][%!^"`<>&|;, *?])/g
-const CMD_SAFE_TOKEN_RE = /^[A-Za-z0-9_./:\\-]+$/
-
-function escapeCmdCommand(command: string): string {
-  return command.replace(CMD_META_RE, '^$1')
-}
-
-function escapeCmdArgument(arg: string): string {
-  let escaped = String(arg)
-  escaped = escaped.replace(/(?=(\\+?)?)\1"/g, '$1$1\\"')
-  escaped = escaped.replace(/(?=(\\+?)?)\1$/, '$1$1')
-  escaped = `"${escaped}"`
-  escaped = escaped.replace(CMD_META_RE, '^$1')
-  return escaped.replace(CMD_META_RE, '^$1')
-}
-
-export function buildWindowsCmdCommandLine(binPath: string, args: readonly string[]): string {
-  const argv = [escapeCmdCommand(binPath), ...args.map((arg) => escapeCmdArgument(arg))]
-  // `cmd /s /c` strips the first and last quote from the command string, so the
-  // outer quote pair is intentional. The escaped argv inside is what reaches the
-  // .cmd shim, including paths containing spaces.
-  return `"${argv.join(' ')}"`
-}
-
-function needsWindowsCmdCommandLine(binPath: string, args: readonly string[]): boolean {
-  return ![binPath, ...args].every((arg) => CMD_SAFE_TOKEN_RE.test(arg))
-}
-
 /**
  * Resolve a command to an absolute path against PATH (+ PATHEXT on Windows).
  * Mirrors the bridge's spawn-time `resolveBinaryPath` so the Connections screen
@@ -171,6 +145,8 @@ interface ProbeOutput {
  * tokens use Node's default cmd.exe arg escaping. Tokens with spaces or cmd
  * metacharacters use one escaped `/c` command string with `windowsVerbatimArguments`,
  * preserving paths like `C:\Program Files\...\x.cmd` without making args shell syntax.
+ * The escaping itself lives in `@agentroom/shared` so this probe and the bridge's
+ * spawn path cannot drift apart.
  */
 export function spawnTarget(
   bin: string,

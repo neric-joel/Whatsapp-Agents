@@ -5,13 +5,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import type { ContextPacketV1 } from '@agentroom/shared'
+import { buildWindowsCmdCommandLine, type ContextPacketV1 } from '@agentroom/shared'
 
 import { ClaudeCodeAdapter } from '../src/adapters/claude-code-adapter.js'
 import {
   BinaryNotFoundError,
   buildChildEnv,
-  buildWindowsCmdCommandLine,
   resolveBinaryPath,
   resolveSpawnTarget,
 } from '../src/lib/subprocess-security.js'
@@ -76,6 +75,7 @@ test('buildChildEnv strips secrets and forwards only allowlisted vars', () => {
     SUPABASE_URL: 'https://x.supabase.co',
     SOME_SECRET: 'nope',
     GITHUB_TOKEN: 'ghp_xxx',
+    ANTHROPIC_BASE_URL: 'https://proxy.example/v1',
     ANTHROPIC_API_KEY: 'sk-ant',
     OPENAI_API_KEY: 'sk-openai',
     RANDOM_APP_VAR: 'should-not-pass',
@@ -83,8 +83,12 @@ test('buildChildEnv strips secrets and forwards only allowlisted vars', () => {
 
   assert.equal(env['PATH'], '/usr/bin')
   assert.equal(env['HOME'], '/home/agent')
-  assert.equal(env['ANTHROPIC_API_KEY'], 'sk-ant')
-  assert.equal(env['OPENAI_API_KEY'], 'sk-openai')
+  // Provider CONFIG (endpoints, regions, model selectors) is still forwarded...
+  assert.equal(env['ANTHROPIC_BASE_URL'], 'https://proxy.example/v1')
+  // ...but a provider CREDENTIAL is not: `_KEY$` is denied before the allowlist, so a
+  // host-wide key in the bridge's own env no longer reaches every spawned CLI (C3).
+  assert.equal(env['ANTHROPIC_API_KEY'], undefined)
+  assert.equal(env['OPENAI_API_KEY'], undefined)
   assert.equal(env['SUPABASE_SERVICE_ROLE_KEY'], undefined)
   assert.equal(env['SUPABASE_URL'], undefined)
   assert.equal(env['SOME_SECRET'], undefined)
@@ -107,16 +111,57 @@ test('buildChildEnv honors BRIDGE_CHILD_ENV_ALLOW passthrough but never secrets'
   assert.equal(env['BRIDGE_SECRET_THING'], undefined)
 })
 
+// C3: the secret strip runs BEFORE the allowlist, so an operator cannot re-open a
+// credential var by naming it in BRIDGE_CHILD_ENV_ALLOW — including the master key
+// that decrypts every stored BYO credential.
+test('buildChildEnv denies *_KEY and CREDENTIAL_* even when named in BRIDGE_CHILD_ENV_ALLOW', () => {
+  const env = buildChildEnv({
+    PATH: '/usr/bin',
+    BRIDGE_CHILD_ENV_ALLOW:
+      'MY_CLI_HOME,ANTHROPIC_API_KEY,SOME_VENDOR_KEY,CREDENTIAL_ENCRYPTION_KEY,CREDENTIAL_STORE_PATH',
+    MY_CLI_HOME: '/opt/cli',
+    ANTHROPIC_API_KEY: 'sk-ant-host-wide',
+    SOME_VENDOR_KEY: 'vendor-secret',
+    CREDENTIAL_ENCRYPTION_KEY: 'the-master-key',
+    CREDENTIAL_STORE_PATH: '/var/credentials',
+  })
+
+  assert.equal(env['MY_CLI_HOME'], '/opt/cli', 'a non-secret allow entry still works')
+  assert.equal(env['ANTHROPIC_API_KEY'], undefined)
+  assert.equal(env['SOME_VENDOR_KEY'], undefined)
+  assert.equal(env['CREDENTIAL_ENCRYPTION_KEY'], undefined)
+  // ^CREDENTIAL_ denies the whole namespace, not just names ending in _KEY.
+  assert.equal(env['CREDENTIAL_STORE_PATH'], undefined)
+})
+
+test('buildChildEnv denies *_KEY / CREDENTIAL_* case-insensitively on Windows', () => {
+  const env = buildChildEnv(
+    {
+      bridge_child_env_allow: 'anthropic_api_key,Credential_Encryption_Key',
+      anthropic_api_key: 'sk-ant-host-wide',
+      Credential_Encryption_Key: 'the-master-key',
+    },
+    { platform: 'win32' },
+  )
+
+  assert.equal(env['anthropic_api_key'], undefined)
+  assert.equal(env['Credential_Encryption_Key'], undefined)
+})
+
 test('buildChildEnv inject seam (ADR-0010): exactly one resolved credential var, secrets still stripped', () => {
   const env = buildChildEnv(
     {
       PATH: '/usr/bin',
       SUPABASE_SERVICE_ROLE_KEY: 'service-role-must-stay-hidden',
       SOME_API_SECRET: 'env-secret-must-stay-hidden',
+      // A host-wide key with the SAME name the run wants to inject. It must be stripped
+      // from the environment, and the injected per-run value must be what the child sees.
+      OPENAI_API_KEY: 'sk-host-wide-must-stay-hidden',
     },
     { inject: { name: 'OPENAI_API_KEY', value: 'sk-resolved-byo-key' } },
   )
-  // The resolved BYO credential is injected into exactly its one var...
+  // The resolved BYO credential is injected into exactly its one var — the `_KEY$` deny
+  // applies to the environment scan, never to the inject seam, which runs after it.
   assert.equal(env['OPENAI_API_KEY'], 'sk-resolved-byo-key')
   // ...while process.env secrets are STILL stripped (injection doesn't widen the env).
   assert.equal(env['SUPABASE_SERVICE_ROLE_KEY'], undefined)
@@ -256,7 +301,18 @@ test(
     writeFileSync(script, 'process.stdout.write(JSON.stringify(process.argv.slice(2)))\n')
     writeFileSync(shim, '@echo off\r\nnode "%~dp0print-args.cjs" %*\r\n')
 
-    const args = ['--print', 'a&b', 'x|y', 'quote" & echo PWNED & "tail', '100%PATH%']
+    // The trailing cases carry runs of >=2 backslashes — the shapes the old
+    // atomic-lookahead escaper under-doubled, which merged adjacent arguments.
+    const args = [
+      '--print',
+      'a&b',
+      'x|y',
+      'quote" & echo PWNED & "tail',
+      '100%PATH%',
+      'a\\\\"b',
+      'x\\\\',
+      'C:\\a\\b\\\\',
+    ]
     const target = resolveSpawnTarget(shim, args, 'win32')
     const result = spawnSync(target.command, target.args, {
       encoding: 'utf8',
