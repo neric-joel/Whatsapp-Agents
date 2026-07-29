@@ -32,9 +32,10 @@ export async function GET(req: NextRequest) {
  *
  * Security: `system_prompt` is persisted as data and only ever reaches a CLI via
  * stdin (never argv) — see subprocess-security. `tool_permissions` is forced to
- * empty: a user-created agent gets no tool auto-approvals. (The approval gate is
- * dormant scaffolding — no bundled adapter emits `tool_call_requested`, see #83 —
- * but if wired, every tool would flow through it, never through this field.)
+ * empty: it is the map the bridge's approval gate reads to pre-approve a tool without
+ * a human, so a user-created agent starts with no grants and every tool it requests
+ * stops for approval. (The gate is dormant scaffolding — no bundled adapter emits
+ * `tool_call_requested`, see #83.)
  */
 export async function POST(req: NextRequest) {
   const csrf = assertSameOrigin(req)

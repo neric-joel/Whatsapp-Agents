@@ -49,9 +49,12 @@ Security fixes target the `main` branch and the latest tagged release (currently
   forwarded (the only secrets a child sees are ones you explicitly bind: a BYO
   credential's single var, or a Connections profile's own `env`);
   output is capped (10 MB → kill) and runs are bounded by a timeout
-  with a force-kill of the process tree. (A destructive-command denylist exists in
-  the tool-call path, but that path is dormant scaffolding today — no bundled
-  adapter emits `tool_call_requested`; see #83.)
+  with a force-kill of the process tree. (The tool-call path is dormant scaffolding
+  today — no bundled adapter emits `tool_call_requested`; see #83. When it is wired,
+  approval is decided server-side from the agent's `tool_permissions`, never from the
+  agent-emitted flag. The destructive-command denylist on that path is a **UX speed
+  bump, not a security boundary** — it substring-matches a free-form shell string and
+  anything determined gets past it; do not count it as a control.)
 - **Write-path boundary.** The browser never writes `agent_runs` or `messages`
   directly — every write goes Browser → Next.js route handler → local SQLite
   (`@agentroom/db`), and only the bridge claims and completes runs. Mutating API

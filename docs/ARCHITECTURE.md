@@ -176,8 +176,24 @@ a user-created agent gets **no** tool auto-approvals.
 > branch — exists as scaffolding but **does not fire in the shipped product**: no bundled
 > adapter (Claude Code, Codex, mock) emits the `tool_call_requested` event that triggers it.
 > It is intentionally **not advertised as an active feature** until an adapter produces real
-> tool-call requests (tracked in #83). The `tool_permissions`-forced-empty invariant above
-> still stands as a defense for when the gate is wired.
+> tool-call requests (tracked in #83).
+
+**How the gate decides (server-authoritative).** The requirement is derived in the bridge
+from the agent row, never from the event: `requiresHumanApproval()` in
+`bridge/src/workers/run-worker.ts` pre-approves a call only when `tool_permissions` holds
+the exact `tool_name` — or `category:<tool_category>` — with the literal value `true`.
+Anything else waits for a human: an absent key, a truthy-but-not-`true` value, a
+permissions blob that is not a plain object. The agent-emitted `requires_approval` flag is
+**not read at all**; it arrives on the same channel as the tool call, so honouring it would
+let an agent excuse itself from the check. This is why `tool_permissions`-forced-empty is
+load-bearing rather than decorative: with `{}`, every tool a user-created agent requests
+stops for approval.
+
+Before that, every string leaf of the call's `arguments` — under any key, at any nesting
+depth, inside objects and arrays alike — is run through `isDeniedCommand`. That list is a
+**speed bump, not a security boundary** (it substring-matches a free-form shell string and
+is trivially bypassed); the real controls are the subprocess sandbox, this approval gate,
+and the CLI's own permission mode. See the header of `packages/shared/src/denylist.ts`.
 
 ## Trust boundaries
 

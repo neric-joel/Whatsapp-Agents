@@ -2,7 +2,7 @@ import { getDb, intBool, jsonText, newId, nowIso } from '@agentroom/db'
 import type { AgentEvent } from '@agentroom/shared'
 import {
   detectChallenge,
-  isDeniedCommand,
+  findDeniedArgument,
   readDiscussionMetadata,
   runCanary,
 } from '@agentroom/shared'
@@ -34,6 +34,8 @@ interface ProcessRunDeps {
   signal?: AbortSignal
   /** Cancellation-watcher poll interval (ms). Lowered in tests to avoid real-time coupling. */
   cancelPollMs?: number
+  /** Tool-approval poll interval (ms). Lowered in tests to avoid real-time coupling. */
+  approvalPollMs?: number
 }
 
 type DiscussionMode = 'independent' | 'tag_turns'
@@ -43,6 +45,9 @@ const WORKER_ID = process.env.BRIDGE_WORKER_ID ?? 'bridge-local-1'
 /** Max distinct hand-offs honored per run — bounds fan-out amplification. */
 const MAX_HANDOFFS_PER_RUN = 4
 const CANCEL_POLL_MS = 1000
+/** Tool-approval wait: 15 polls × 2s ≈ 30s before the call times out unapproved. */
+const APPROVAL_POLL_MS = 2000
+const APPROVAL_POLL_ATTEMPTS = 15
 
 class RunCancelledError extends Error {
   constructor() {
@@ -76,6 +81,43 @@ interface AgentRunRow {
   deliberation_depth: number
   deliberation_root_id: string | null
   agents: AgentInfo | null
+}
+
+/**
+ * Server-side answer to "may this tool run without a human?". The only input is the
+ * agent row's `tool_permissions` — never the agent-emitted `requires_approval` flag.
+ *
+ * `agents.tool_permissions` is a TEXT column holding a JSON object (`packages/db`
+ * schema: `NOT NULL DEFAULT '{}'`, parsed to `Record<string, unknown>`), and every agent
+ * the product creates today carries `{}`: seeded agents ship empty and `POST /api/agents`
+ * forces it empty. It is read here as a flat allow-map — a key equal to the exact
+ * `tool_name`, or to `category:<tool_category>`, whose value is the literal boolean
+ * `true`, pre-approves that tool.
+ *
+ * Everything else requires approval: key absent, value truthy-but-not-`true`, a nameless
+ * tool, a permissions blob that is not a plain object. Fail closed — a permissions shape
+ * this function does not recognise must never widen what runs unattended.
+ */
+function requiresHumanApproval(
+  permissions: Record<string, unknown> | null | undefined,
+  toolName: string,
+  toolCategory: string | undefined,
+): boolean {
+  if (typeof permissions !== 'object' || permissions === null || Array.isArray(permissions)) {
+    return true
+  }
+  const preApproved = (key: string): boolean =>
+    Object.prototype.hasOwnProperty.call(permissions, key) && permissions[key] === true
+
+  if (typeof toolName === 'string' && toolName.length > 0 && preApproved(toolName)) return false
+  if (
+    typeof toolCategory === 'string' &&
+    toolCategory.length > 0 &&
+    preApproved(`category:${toolCategory}`)
+  ) {
+    return false
+  }
+  return true
 }
 
 export async function processRun(runId: string, deps: ProcessRunDeps = {}): Promise<void> {
@@ -258,15 +300,30 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
           throw new Error(event.message)
         } else if (event.type === 'tool_call_requested') {
           // NOTE (#83): no bundled adapter currently emits `tool_call_requested` — the
-          // Claude/Codex/mock parsers only produce visible_message/error/final_response. This
-          // branch (and the ToolCallCard approve/deny UI) is therefore dormant scaffolding for
-          // a future producer (e.g. parsing CLI `tool_use` stream events) and is intentionally
-          // not advertised as an active feature. Keep it correct so wiring a producer is enough.
-          const requiresApproval = event.requires_approval
+          // Claude/Codex/mock parsers only produce visible_message/error/final_response/
+          // memory_op/handoff_requested. This branch (and the ToolCallCard approve/deny UI)
+          // is therefore dormant scaffolding for a future producer (e.g. parsing CLI
+          // `tool_use` stream events) and is intentionally not advertised as an active
+          // feature. Keep it correct so wiring a producer is enough.
+          //
+          // The gate is SERVER-AUTHORITATIVE: `event.requires_approval` is deliberately
+          // never read. It arrives on the same agent-controlled channel as the tool call
+          // itself, so honouring it lets an agent excuse itself from the one check it is
+          // subject to. The requirement comes from the agent row instead, and defaults to
+          // "ask a human".
+          const requiresApproval = requiresHumanApproval(
+            agentInfo.tool_permissions,
+            event.tool_name,
+            event.tool_category,
+          )
+          // Scan EVERY string leaf of the arguments. The tool names its own parameters, so
+          // keying off `arguments.command` scanned the empty string for any tool that
+          // called it `cmd`/`script`/`argv`, or nested it inside an object or array.
+          const deniedArg = findDeniedArgument(event.arguments)
 
           const tc = db
             .prepare(
-              'INSERT INTO tool_calls (id, room_id, run_id, agent_id, tool_name, tool_category, input_args, status, requires_approval) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
+              'INSERT INTO tool_calls (id, room_id, run_id, agent_id, tool_name, tool_category, input_args, status, requires_approval, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
             )
             .get(
               newId(),
@@ -276,32 +333,27 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
               event.tool_name,
               event.tool_category ?? null,
               jsonText(event.arguments),
-              requiresApproval ? 'waiting_approval' : 'queued',
+              deniedArg !== null ? 'denied' : requiresApproval ? 'waiting_approval' : 'queued',
               intBool(requiresApproval),
+              deniedArg !== null ? 'Command blocked by denylist' : null,
             ) as { id: string } | undefined
 
-          if (tc) {
-            const commandArg = (event.arguments['command'] as string | undefined) ?? ''
-            if (isDeniedCommand(commandArg)) {
-              db.prepare("UPDATE tool_calls SET status = 'denied', error = ? WHERE id = ?").run(
-                'Command blocked by denylist',
-                tc.id,
-              )
-              log('warn', 'tool.denied', {
-                run_id: runId,
-                tool_name: event.tool_name,
-                reason: 'denylist',
-              })
-              throw new Error('Command blocked by denylist')
-            }
+          // Unconditional: a failed audit INSERT must not turn a denial into an execution.
+          if (deniedArg !== null) {
+            log('warn', 'tool.denied', {
+              run_id: runId,
+              tool_name: event.tool_name,
+              reason: 'denylist',
+            })
+            throw new Error('Command blocked by denylist')
           }
 
           if (tc && requiresApproval) {
             let finalStatus = 'failed'
             log('info', 'tool.approval.waiting', { run_id: runId, tool_name: event.tool_name })
-            for (let i = 0; i < 15; i++) {
+            for (let i = 0; i < APPROVAL_POLL_ATTEMPTS; i++) {
               if (controller.signal.aborted) throw new RunCancelledError()
-              await new Promise<void>((r) => setTimeout(r, 2000))
+              await new Promise<void>((r) => setTimeout(r, deps.approvalPollMs ?? APPROVAL_POLL_MS))
               const updated = db
                 .prepare('SELECT status FROM tool_calls WHERE id = ?')
                 .get(tc.id) as { status?: string } | undefined

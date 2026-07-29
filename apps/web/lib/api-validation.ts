@@ -235,9 +235,12 @@ export const createAgentSchema = z.object({
   system_prompt: z.string().max(8000).optional(),
   capabilities: z.string().max(500).optional(),
   reply_policy: z.enum(['always', 'reply_when_invoked', 'never']).optional(),
-  // Accepted for forward-compat but does NOT grant tool auto-approval: if the
-  // approval flow is ever wired (dormant scaffolding — no bundled adapter emits
-  // tool_call_requested, see #83), the bridge gates tools there, never via this field.
+  // This field IS the tool auto-approval grant the bridge reads: run-worker's
+  // requiresHumanApproval() pre-approves a tool only when this map holds the exact
+  // tool name (or `category:<tool_category>`) with the literal value `true`, and
+  // requires a human for everything else. The create route still forces it empty on
+  // POST, so a user-created agent starts with no grants. (The gate itself is dormant
+  // — no bundled adapter emits tool_call_requested, see #83.)
   tool_permissions: z.record(z.string(), z.unknown()).optional(),
   // BYO credential (ADR-0010) — the caller's own credential to fuel this agent. The
   // create route verifies it belongs to the caller; the secret never touches this row.

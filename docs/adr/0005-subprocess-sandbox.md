@@ -29,6 +29,11 @@ Spawn through a hardened path (`bridge/src/lib/subprocess-security.ts` +
 - **Resource limits:** per-run timeout, a combined stdout/stderr **output cap** (10 MB
   → kill), and `SIGTERM → grace → force-kill the process tree` on
   abort/timeout/cancel. A denylist blocks obviously destructive tool commands.
+  *(Overstated as written. That denylist substring-matches a free-form shell string and
+  is trivially bypassable — it is a UX speed bump, not a boundary, and the code says so:
+  read the header of `packages/shared/src/denylist.ts`. What actually gates a tool call
+  is the approval requirement the run worker derives from the agent's `tool_permissions`,
+  plus the CLI's own permission mode.)*
 
 ## Consequences
 
