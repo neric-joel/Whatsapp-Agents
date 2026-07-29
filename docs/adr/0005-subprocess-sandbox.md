@@ -23,7 +23,9 @@ Spawn through a hardened path (`bridge/src/lib/subprocess-security.ts` +
   rejected.
 - The child **environment is minimized** — secrets (`SUPABASE_*`, `*_TOKEN`,
   `*_SECRET`, `BRIDGE_*`) are never forwarded; extra passthrough is opt-in via
-  `BRIDGE_CHILD_ENV_ALLOW`.
+  `BRIDGE_CHILD_ENV_ALLOW`. *(Those names are the clause list as of this decision, and
+  it has since been widened. The authoritative deny is `SECRET_ENV_PATTERN` in
+  `bridge/src/lib/subprocess-security.ts` — read the regex, not this line.)*
 - **Resource limits:** per-run timeout, a combined stdout/stderr **output cap** (10 MB
   → kill), and `SIGTERM → grace → force-kill the process tree` on
   abort/timeout/cancel. A denylist blocks obviously destructive tool commands.
