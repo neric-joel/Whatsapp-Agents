@@ -1,5 +1,5 @@
 import { getDb } from '@agentroom/db'
-import type { RuntimeCredential } from '@agentroom/shared'
+import { registerSecret, type RuntimeCredential } from '@agentroom/shared'
 import {
   decryptSecret,
   getCredentialKey,
@@ -66,6 +66,11 @@ export async function resolveRuntimeProvider({
     // never crash the run and never leak a partial value.
     return null
   }
+
+  // Format-independent backstop: redact() strips this exact value from every string it
+  // sees from here on, so a key format no pattern anticipates still cannot reach a log,
+  // the error sink, or a persisted message.
+  registerSecret(secret)
 
   return {
     envVarName: map.envVar,
