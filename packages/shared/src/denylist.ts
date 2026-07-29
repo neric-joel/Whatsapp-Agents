@@ -47,15 +47,24 @@ const DENIED_REGEXES = [
   // no false positives to save — while requiring it to name a device would let
   // `mkfs.ext4 $DEV` through.
   /\bmkfs(?:\.[a-z0-9]+)?\b/i,
-  // Host power control, anchored to COMMAND POSITION (string start, or after a `;`/`&`/`|`
-  // /newline separator). These were bare substrings, which was survivable while only
-  // `arguments.command` was scanned; once the scan widened to the argument tree they denied
-  // ordinary prose — `git commit -m "fix graceful shutdown"`, "handle reboot loop", and
-  // (because `halt` matched inside `halting`) "write a haiku about the halting problem".
-  /(?:^|[\n;&|])\s*(?:sudo\s+)?(?:shutdown|reboot|halt|poweroff)\b/i,
-  // The same verbs as the OPERAND of a controller that is itself in command position —
-  // `systemctl poweroff`, `init 0` — which anchoring alone would otherwise let through.
-  /\b(?:systemctl|init|telinit)\s+(?:\d\b|poweroff|reboot|halt)\b/i,
+  // Host power control. Two things have to be true at once, because these words are also
+  // ordinary English and EVERY LEAF IS SCANNED AS ITS OWN STRING — position 0 is the normal
+  // case for a prose leaf, not an edge case, so an anchor alone is not enough:
+  //   1. command POSITION — string start, or after a separator (`;` `&` `|` newline, an
+  //      opening quote/paren, `$(`), optionally through wrapper commands (`sudo -i`,
+  //      `env X=1`, `nohup`, `time`) and an absolute path (`/sbin/shutdown`);
+  //   2. command SHAPE — followed by end-of-string, a separator, or a whitespace-separated
+  //      operand (`-h`, `/s`, `+5`, `19:00`, `now`).
+  // Requirement 2 is what allows `halt the rollout`, `shutdown runbook`, `reboot.sh`,
+  // `poweroff/reboot procedures` and `shutdown-hooks.md` — a following bare word, or `-`/`/`
+  // with no space, is prose — while still denying bare `halt` and `shutdown now`.
+  // Every quantifier here is bounded: the unbounded `\S*\/` this replaced rescanned to
+  // end-of-string at every separator, which was quadratic (362ms on a 32 KB leaf, 2.3ms now).
+  /(?:^|[\n;&|`("'])[ \t]*(?:(?:sudo|doas|env|nohup|time|exec|command)[ \t]+){0,3}(?:(?:-\w{1,32}|\w{1,32}=[^\s]{0,64})[ \t]+){0,4}(?:[^\s;&|"'`]{0,64}\/)?(?:shutdown|reboot|halt|poweroff)(?=[ \t]+(?:[-/+]|\d|now\b)|[ \t]*(?:$|[\n;&|`)"']))/i,
+  // The same verbs as the OPERAND of a controller in command position. Anchored like the
+  // rule above, and the runlevel must END the command: unanchored `\binit\s+\d` denied
+  // `git init 2>/dev/null`, `npm init 2` and `init 3 replicas`, each of which fails the run.
+  /(?:^|[\n;&|`("'])[ \t]*(?:(?:sudo|doas)[ \t]+){0,2}(?:[^\s;&|"'`]{0,64}\/)?(?:systemctl[ \t]+(?:-\S{1,32}[ \t]+){0,4}(?:poweroff|reboot|halt)\b|(?:tel)?init[ \t]+[0-6](?=[ \t]*(?:$|[\n;&|`)"'])))/i,
   /\bTRUNCATE\s+TABLE\b/i,
   /\bDELETE\s+FROM\b(?![\s\S]*\bWHERE\b)/i,
 ]
@@ -98,10 +107,14 @@ export interface ArgumentScanResult {
  *
  * NOT exhaustive, by construction. The walk is breadth-first and bounded to
  * MAX_SCAN_NODES nodes and MAX_SCAN_DEPTH levels; anything past a bound is skipped, NOT
- * denied, and reported via `truncated`. Breadth-first is the load-bearing choice: a
- * command that a tool would plausibly execute sits at a shallow key, so shallow leaves are
- * always scanned before a wide or deep subtree can exhaust the budget. (Depth-first
- * visited an object's last key first, so 10 000 filler keys after the payload hid it.)
+ * denied, and reported via `truncated`.
+ *
+ * Breadth-first is a better bet, not a guarantee. It means a shallow leaf is reached before
+ * a deeper one — which is where a command a tool would plausibly execute sits, and which
+ * depth-first got backwards (it visited an object's LAST key first, so 10 000 filler keys
+ * placed after a payload hid it). But ORDER WITHIN A LEVEL still decides: a denied command
+ * sitting after MAX_SCAN_NODES siblings at the same depth is still missed. That case is
+ * reported via `truncated`, never silently allowed.
  */
 export function scanArgumentsForDenied(args: unknown): ArgumentScanResult {
   const seen = new WeakSet<object>()

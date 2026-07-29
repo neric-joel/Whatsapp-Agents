@@ -34,19 +34,61 @@ test('a bare destructive verb in prose is not a destructive command', () => {
   }
 })
 
-test('power-control verbs in prose are not commands (denied only in command position)', () => {
-  // These became reachable the moment the scan widened past arguments.command: as bare
-  // substrings they denied any argument containing the word. `halt` was the worst — a
-  // 4-character substring that also fired inside `halting`.
+test('power-control verbs in prose are not commands (position AND shape are both required)', () => {
+  // Every leaf is scanned as its own string, so position 0 is the NORMAL case for a prose
+  // leaf — an anchor alone leaves `halt the rollout` denied, and a denial fails the run.
   for (const benign of [
+    // bare leaves at position 0
+    'halt the rollout',
+    'shutdown runbook',
+    'shutdown the beta programme',
+    'shutdown.md',
+    'reboot.sh',
+    'reboot loop root cause',
+    'poweroff.target',
+    'poweroff button behaviour',
+    'document the shutdown sequence',
+    'the reboot took four minutes',
+    'write a haiku about the halting problem',
+    'shutdowns are scheduled weekly',
+    // `-`/`/` with no whitespace is a compound word, not a flag or a path operand
+    'shutdown-hooks.md',
+    'reboot-loop analysis',
+    'poweroff/reboot procedures',
+    'shutdown/restart guide',
+    'halt-and-catch-fire',
+    // embedded after an opening quote (which IS a separator) — shape saves these
     'git commit -m "fix graceful shutdown"',
     'git commit -m "handle reboot loop"',
     'git commit -m "halt the rollout"',
-    'write a haiku about the halting problem',
-    'document the shutdown sequence',
-    'the reboot took four minutes',
+    // the wrapper-command prefix must not drag prose in
+    'time reboot took four minutes',
+    'command shutdown procedures',
+    'exec summary shutdown notes',
     'systemctl restart nginx',
     'systemctl status poweroff.target',
+    'systemctl 0',
+  ]) {
+    assert.equal(isDeniedCommand(benign), false, `should be allowed: ${benign}`)
+  }
+})
+
+test('an unanchored init/systemctl operand rule denied ordinary commands', () => {
+  // `\b(?:systemctl|init|telinit)\s+(?:\d\b|…)` fired on any digit operand, so these
+  // everyday commands were denied and failed the whole run.
+  for (const benign of [
+    'git init 2>/dev/null',
+    'git init 2>&1',
+    'npm init 2',
+    'terraform init 1',
+    'init 3 replicas',
+    'we need to init 2 workers',
+    'systemctl 3 status',
+    // the word boundary already protected these; pinned so it stays that way
+    'initialize the database',
+    'initial rollout plan',
+    'initiate the handover',
+    'the initialization halted midway',
   ]) {
     assert.equal(isDeniedCommand(benign), false, `should be allowed: ${benign}`)
   }
@@ -55,21 +97,59 @@ test('power-control verbs in prose are not commands (denied only in command posi
 test('power-control verbs IN command position are still denied', () => {
   for (const denied of [
     'shutdown -h now',
+    'shutdown now',
     'shutdown /s /t 0',
+    'shutdown +5',
+    'shutdown 19:00',
     'sudo reboot',
+    'sudo -i reboot',
     'poweroff',
+    'halt',
     '  halt',
     'ls && shutdown -r now',
     'echo hi; poweroff',
     'cat x | halt',
     'cd /tmp\nshutdown -h now',
+    'shutdown\necho done',
+    // absolute-path and wrapper forms — the ordinary way these actually appear, and all
+    // of them were ALLOWED by the first anchoring attempt
+    '/sbin/shutdown -h now',
+    '/usr/sbin/shutdown -h now',
+    'bash -c "shutdown -h now"',
+    "sh -c 'poweroff'",
+    '"poweroff"',
+    '$(shutdown -h now)',
+    '$(poweroff)',
+    '`reboot`',
+    'env X=1 shutdown -h now',
+    'X=1 shutdown -h now',
+    'nohup shutdown -h +1 &',
+    'time reboot',
+    'exec poweroff',
+    'sudo nohup shutdown -h now',
+    // controller forms
     'systemctl poweroff',
     'systemctl reboot',
+    'systemctl --no-block poweroff',
+    'sudo systemctl halt',
     'init 0',
+    'init 6',
     'telinit 6',
+    'echo x; init 0',
   ]) {
     assert.equal(isDeniedCommand(denied), true, `should be denied: ${denied}`)
   }
+})
+
+test('isDeniedCommand stays linear on adversarial leaves (bounded quantifiers)', () => {
+  // The first attempt used an unbounded `\S*\/` path prefix, which rescanned to
+  // end-of-string at every separator: quadratic, 362ms on a 32 KB leaf. With up to 5000
+  // leaves scanned per call that is a denial-of-service, not a slow test.
+  const evil = '('.repeat(4000) + 'shutdow'.repeat(4000)
+  const started = Date.now()
+  assert.equal(isDeniedCommand(evil), false)
+  const elapsed = Date.now() - started
+  assert.ok(elapsed < 1000, `adversarial leaf took ${elapsed}ms; expected well under 1s`)
 })
 
 test('destructive verbs WITH a real object are still denied', () => {

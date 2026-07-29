@@ -681,9 +681,14 @@ test('a tool literally NAMED "category:read" does not collide with a stale categ
 
   await processRun('run-1', { getAdapter: () => adapter, approvalPollMs: 1 })
 
-  // It matches by exact name, which is the documented contract — but it is a grant the
-  // operator wrote for that literal name, not a category wildcard reachable via a label.
+  // It matches by exact name, which is the documented contract — a grant the operator
+  // wrote for that literal name, not a category wildcard reachable via a label. Assert the
+  // APPROVAL OUTCOME, not just the recorded name: in a security test the outcome is the
+  // only assertion that distinguishes gated from auto-approved.
   assert.equal(toolCalls()[0]?.tool_name, 'category:read')
+  assert.equal(toolCalls()[0]?.requires_approval, 0, 'an exact-name grant still grants')
+  assert.equal(toolCalls()[0]?.status, 'succeeded')
+
   seedExtraRun('run-2')
   const relabelled = toolCallAdapter(
     { tool_name: 'rm_rf', tool_category: 'read', arguments: {} },

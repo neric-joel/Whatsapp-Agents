@@ -205,8 +205,10 @@ Before that, the call's `arguments` are walked and each string leaf is run throu
 and not exhaustive:** breadth-first, capped at 5 000 nodes and 12 levels
 (`packages/shared/src/denylist.ts`). Anything past a bound is skipped and **not** denied —
 the scan fails open — but it is never silent: the scan returns `truncated: true` and the
-run worker logs `tool.scan.truncated`. Breadth-first ordering means shallow leaves, where a
-command a tool would actually execute sits, are always scanned first.
+run worker logs `tool.scan.truncated`. Breadth-first ordering means shallower leaves are
+reached before deeper ones — but **ordering within a level still decides**: a denied command
+sitting after more than 5 000 sibling leaves at the same depth is missed (reported, not
+denied). "Shallow" is not a guarantee of coverage, only a better bet than depth-first.
 
 The denylist itself is a **speed bump, not a security boundary** (it substring-matches a
 free-form shell string and is trivially bypassed); the real controls are the subprocess
