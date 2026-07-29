@@ -71,6 +71,24 @@ test('power-control verbs in prose are not commands (position AND shape are both
     // `now` only counts as an operand at the real end of a command
     'halt now, then investigate',
     'echo "shutdown now"',
+    // a bare NUMBER is not a command prefix: `uniq -c` counts, TSV rows, numbered plans
+    '     12 reboot',
+    '12\treboot',
+    '1 reboot\n2 shutdown',
+    '2 reboot',
+    '2026 reboot',
+    '12345 reboot',
+    // a flag's dashes must be followed by a word char, or arrows/comments/dividers qualify
+    '-> reboot',
+    '--> reboot',
+    '-- reboot',
+    '--- reboot ---',
+    // a wrapper needs its own operand, or the bare word is just prose
+    'timeout shutdown',
+    'su reboot',
+    // a URL is an ordinary tool argument, not a path to a binary
+    'https://api.example.com/v1/shutdown',
+    'http://x.io/reboot',
   ]) {
     assert.equal(isDeniedCommand(benign), false, `should be allowed: ${benign}`)
   }
@@ -97,6 +115,13 @@ test('a bare verb in a config VALUE position is not a command', () => {
     'key: "shutdown"',
     '{"a": 1, "b": "reboot"}',
     "value='shutdown'",
+    // a call/argument paren introduces a value too, not a command
+    'print("reboot")',
+    'console.log("reboot")',
+    'app.get("/reboot", handler)',
+    "INSERT INTO actions (name) VALUES ('reboot')",
+    // pretty-printed JSON: the quote is preceded by newline+indent, not by `[` directly
+    '{\n  "actions": [\n    "reboot"\n  ]\n}',
     // the phrase forms, which must stay allowed
     '"graceful shutdown"',
     '"shutdown hooks"',
@@ -170,6 +195,17 @@ test('power-control verbs IN command position are still denied', () => {
     'su -c reboot',
     'timeout 5 reboot',
     'setsid reboot',
+    // `<verb> now` in an unambiguous command-execution context. Every one of these was
+    // allowed when `now` was narrowed to protect `echo "shutdown now"` — the loss was a
+    // whole family, not "one more spelling", and $( ) and backticks are not `bash -c` at all.
+    'bash -c "shutdown now"',
+    'bash -c "reboot now"',
+    'sh -c "shutdown now"',
+    'zsh -c "halt now"',
+    'bash -lc "shutdown now"',
+    'sudo bash -c "shutdown now"',
+    '$(shutdown now)',
+    '`shutdown now`',
     // separator forms that must survive the value-position lookbehind
     'shutdown now; echo bye',
     // controller forms
@@ -187,14 +223,32 @@ test('power-control verbs IN command position are still denied', () => {
 })
 
 test('isDeniedCommand stays linear on adversarial leaves (bounded quantifiers)', () => {
-  // The first attempt used an unbounded `\S*\/` path prefix, which rescanned to
-  // end-of-string at every separator: quadratic, 362ms on a 32 KB leaf. With up to 5000
-  // leaves scanned per call that is a denial-of-service, not a slow test.
-  const evil = '('.repeat(4000) + 'shutdow'.repeat(4000)
-  const started = Date.now()
-  assert.equal(isDeniedCommand(evil), false)
-  const elapsed = Date.now() - started
-  assert.ok(elapsed < 1000, `adversarial leaf took ${elapsed}ms; expected well under 1s`)
+  // Two separate quadratic bugs have shipped here, and BOTH were invisible to a guard that
+  // used the wrong filler character. Keep every shape below.
+  //
+  //   * an unbounded `\S*\/` path prefix rescanned to end-of-string at every separator
+  //     (362ms on a 32 KB leaf);
+  //   * a variable-length lookbehind placed BEFORE its character class was evaluated at every
+  //     input position, which is quadratic on a run of SPACES specifically — 6947ms on 64 KB.
+  //     Tabs ran that same pattern in 1.85ms and the paren/near-miss shape in 4.83ms, so a
+  //     guard built from either one passed while the real defect was 3500x over budget.
+  //
+  // Up to MAX_SCAN_NODES leaves are scanned per tool call, so a per-leaf cost in seconds is a
+  // denial of service, not a slow test.
+  const shapes: Array<[string, string]> = [
+    ['spaces', ' '.repeat(64 * 1024)],
+    ['tabs', '\t'.repeat(64 * 1024)],
+    ['newline+indent', '\n    '.repeat(13 * 1024)],
+    ['quotes', '"'.repeat(64 * 1024)],
+    ['parens + near-miss verb', '('.repeat(4000) + 'shutdow'.repeat(4000)],
+    ['flag spam', "'" + '-a b '.repeat(8000)],
+  ]
+  for (const [label, leaf] of shapes) {
+    const started = Date.now()
+    isDeniedCommand(leaf)
+    const elapsed = Date.now() - started
+    assert.ok(elapsed < 500, `${label} leaf took ${elapsed}ms; expected well under 500ms`)
+  }
 })
 
 test('destructive verbs WITH a real object are still denied', () => {

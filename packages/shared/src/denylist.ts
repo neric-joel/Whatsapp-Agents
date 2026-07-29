@@ -23,16 +23,26 @@
 //
 // KNOWN FALSE POSITIVES, kept deliberately. Each one denies a tool call and FAILS THE RUN,
 // so they are the cost side of the ledger and belong on the record next to the bypasses:
-//   • `reboot 2 servers`, `shutdown 5 nodes` — a digit operand at command position reads as
-//     a command. Kept so `shutdown 19:00` and `reboot 30` stay denied.
-//   • `(reboot) see appendix`, `See section "Shutdown"` — a bare verb inside a delimiter
-//     pair is indistinguishable from `sh -c 'poweroff'` without knowing the enclosing
-//     language.
+//   • `reboot 2 servers`, `shutdown 5 nodes` — a digit OPERAND after the verb reads as a
+//     command. Kept so `shutdown 19:00` and `reboot 30` stay denied. (A digit BEFORE the verb
+//     is not a prefix — see FLAG_OR_ARG — so `     12 reboot` from `uniq -c` is allowed.)
+//   • `scripts/reboot`, `./bin/halt`, `/etc/init.d/reboot` — a path ending in the verb is a
+//     real way to invoke it, so a repo path that happens to end the same way is denied. URLs
+//     are excluded (PATH_PREFIX rejects `:`), but relative paths cannot be.
+//   • `(reboot) see appendix`, `See section "Shutdown"` — a bare verb inside a delimiter pair
+//     is indistinguishable from `sh -c 'poweroff'` without knowing the enclosing language.
+//   • `-x foo reboot` — indistinguishable from `sudo -u root reboot`.
 //   • `| shutdown | …` in a markdown table — a leading `|` is indistinguishable from a
 //     pipeline separator.
-// And the matching known MISS, from the same trade: `bash -c "shutdown now"` is allowed,
-// because `now` only counts as an operand before end-of-string or a shell separator. That
-// is what keeps `echo "shutdown now"` and `halt now, then investigate` from failing a run.
+//
+// KNOWN MISSES from the same trades, so the cost is legible in both directions:
+//   • `<shell> -c "<verb> now"`, `$(<verb> now)` and `` `<verb> now` `` are RECOVERED by the
+//     third rule, but only in those unambiguous contexts. A `now` command ending at any other
+//     closing quote is still allowed — that is what keeps `echo "shutdown now"` and
+//     `halt now, then investigate` from failing a run.
+//   • A quote preceded by `=` or `:` is never command position, which gives up
+//     `--command="shutdown -h now"`, `run: "shutdown -h now"` and `{"cmd": "shutdown -h now"}`.
+//     Accepted: the same rule is what stops every config value from failing a run.
 
 const DENIED_SUBSTRINGS = [
   'rm -rf',
@@ -64,18 +74,42 @@ const DENIED_SUBSTRINGS = [
 // `poweroff/reboot procedures`, `shutdown-hooks.md` — a following bare word, or a `-`/`/`
 // with no space before it, is prose — while still denying bare `halt` and `shutdown now`.
 //
-// Every quantifier is bounded. The unbounded `\S*\/` path prefix this replaced rescanned to
-// end-of-string at every separator: quadratic, 362ms on a 32 KB leaf against 2.3ms now, and
-// up to MAX_SCAN_NODES leaves are scanned per call.
+// PERFORMANCE IS A CORRECTNESS PROPERTY HERE: up to MAX_SCAN_NODES leaves are scanned per
+// tool call, so a per-leaf cost in seconds is a denial of service. Two quadratic defects have
+// already shipped in these rules — an unbounded `\S*\/` path prefix that rescanned to
+// end-of-string at every separator (362ms on a 32 KB leaf), and a misplaced lookbehind (see
+// CMD_START). Every quantifier below is bounded; keep it that way, and keep the shapes in the
+// `stays linear on adversarial leaves` test, which is what makes a regression visible.
 const BACKTICK = '\x60'
-/** Command position: string start, a shell separator, or an opening quote/paren — but NOT
- *  a quote that follows JSON/YAML/attribute punctuation, which is a VALUE, not a command.
- *  Without the lookbehind, `{"action": "reboot"}` and `policy="reboot"` were denied. */
-const CMD_START = '(?:^|[\\n;&|]|(?<![-{[,:=][ \\t]*)[' + BACKTICK + '("\'])'
-const PATH_PREFIX = '(?:[^\\s;&|"\'' + BACKTICK + ']{0,64}\\/)?'
-const WRAPPER_CMD = '(?:sudo|doas|env|nohup|time|exec|command|su|timeout|setsid)'
-/** A flag (with an optional separate-word value), a VAR=VALUE assignment, or a small number. */
-const FLAG_OR_ARG = '(?:-\\S{1,32}(?:[ \\t]+[\\w.:@\\/-]{1,32})?|\\w{1,32}=[^\\s]{0,64}|\\d{1,4})'
+const POWER_VERB = '(?:shutdown|reboot|halt|poweroff)'
+/**
+ * Command position: string start, a shell separator, or an opening quote/paren — but NOT a
+ * quote/paren that follows JSON/YAML/attribute/call punctuation, which introduces a VALUE or
+ * an argument, not a command. Without that exclusion `{"action": "reboot"}`, `policy="reboot"`
+ * and `print("reboot")` are all denied, and a denial fails the whole run.
+ *
+ * PLACEMENT IS LOAD-BEARING. The lookbehind must come AFTER the character class, so it is
+ * evaluated once per quote. Written before the class it is evaluated at EVERY input position,
+ * which on a run of spaces is quadratic: measured 107 / 432 / 1733 / 6947 ms at 8 / 16 / 32 /
+ * 64 KB (4x per doubling) against 0.24 / 0.49 / 0.97 / 1.96 ms here (2x, linear).
+ */
+const CMD_START =
+  '(?:^|[\\n;&|]|[' + BACKTICK + '("\'](?<![-{[,:=(][ \\t]*\\n?[ \\t]{0,24}[' + BACKTICK + '("\']))'
+/** A path prefix on the command word (`/sbin/shutdown`). Excludes `:` so a URL is not read as
+ *  a path to a binary — `https://api.example.com/v1/shutdown` is an ordinary tool argument. */
+const PATH_PREFIX = '(?:[^\\s;&|"\'' + BACKTICK + ':]{0,64}\\/)?'
+/** Commands that run another command. `timeout` needs its duration and `su` needs a flag,
+ *  or bare `timeout shutdown` / `su reboot` (prose) would count as command position. */
+const WRAPPER_CMD =
+  '(?:timeout[ \\t]+\\d{1,5}[smhd]?|sudo|doas|env|nohup|time|exec|command|setsid|su(?=[ \\t]+-))'
+/**
+ * A flag (with an optional separate-word value) or a VAR=VALUE assignment. The dashes must be
+ * followed by a WORD character: `-\S` let `->`, `-->`, `--` and `--- reboot ---` count as
+ * flags, so mermaid arrows, SQL comments and text dividers all reached command position. A
+ * bare number is deliberately NOT a prefix — it made every `sort | uniq -c` count column and
+ * numbered list item (`     12 reboot`) a command, with an arbitrary cliff at the digit bound.
+ */
+const FLAG_OR_ARG = '(?:-{1,2}\\w[^\\s]{0,30}(?:[ \\t]+[\\w.:@\\/-]{1,32})?|\\w{1,32}=[^\\s]{0,64})'
 const CMD_PREFIX =
   '[ \\t]*(?:(?:' + PATH_PREFIX + WRAPPER_CMD + '|' + FLAG_OR_ARG + ')[ \\t]+){0,6}' + PATH_PREFIX
 /** End of the command: end-of-string, a shell separator, or a closing quote/paren. */
@@ -98,17 +132,30 @@ const DENIED_REGEXES = [
   // `mkfs.ext4 $DEV` through.
   /\bmkfs(?:\.[a-z0-9]+)?\b/i,
   // Host power control in command position — see the fragment definitions above.
-  new RegExp(CMD_START + CMD_PREFIX + '(?:shutdown|reboot|halt|poweroff)' + CMD_SHAPE, 'i'),
+  new RegExp(CMD_START + CMD_PREFIX + POWER_VERB + CMD_SHAPE, 'i'),
   // The same verbs as the OPERAND of a controller in command position. The runlevel must END
   // the command: an unanchored `\binit\s+\d` denied `git init 2>/dev/null`, `npm init 2` and
   // `init 3 replicas`, each of which fails the whole run.
   new RegExp(
     CMD_START +
       CMD_PREFIX +
-      '(?:systemctl[ \\t]+(?:-\\S{1,32}[ \\t]+){0,4}(?:poweroff|reboot|halt)\\b' +
+      '(?:systemctl[ \\t]+(?:-{1,2}\\w[^\\s]{0,30}[ \\t]+){0,4}(?:poweroff|reboot|halt)\\b' +
       '|(?:tel)?init[ \\t]+[0-6](?=' +
       CMD_END +
       '))',
+    'i',
+  ),
+  // `<verb> now` inside an UNAMBIGUOUS command-execution context. CMD_SHAPE deliberately
+  // refuses to treat a closing quote as the end of a `now` command, because `echo "shutdown
+  // now"` must not fail a run — but that also gave up `bash -c "shutdown now"`, every other
+  // shell/flag spelling of it, and `$(shutdown now)` / backticks, whose siblings with `-h` are
+  // denied. `$(`, a backtick, and `<shell> -c "` are not ambiguous: nothing else uses them.
+  new RegExp(
+    '(?:\\$\\(|' +
+      BACKTICK +
+      '|\\b(?:ba|z|k|da)?sh[ \\t]+-[a-z]{0,4}c[ \\t]+["\'])[ \\t]*' +
+      POWER_VERB +
+      '[ \\t]+now\\b',
     'i',
   ),
   /\bTRUNCATE\s+TABLE\b/i,
