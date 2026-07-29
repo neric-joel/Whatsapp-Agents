@@ -65,12 +65,17 @@ Security fixes target the `main` branch and the latest tagged release (currently
   `~/.agentroom` (`%APPDATA%\AgentRoom` on Windows) — SQLite + files. The API is
   unauthenticated **because** it is localhost-only — do not reverse-proxy it onto
   a network you don't trust.
-- **The `npx agentroom` bootstrapper** downloads the tagged release source from
-  GitHub over TLS and trusts its local cache (`~/.agentroom/app/` — on Windows
+- **The `npx agentroom` bootstrapper** downloads the release source from GitHub over
+  TLS, **pinned by content rather than by name**: the published package records the
+  commit it was cut from and the SHA-256 of that commit's source archive, the bin
+  fetches `/archive/<commit>.tar.gz` (a commit id cannot be force-moved the way a
+  `vX.Y.Z` tag can), and it refuses to extract — let alone build or run — bytes whose
+  digest does not match. A missing or malformed pin is a hard failure, not a skipped
+  check; the resolved redirect target must still be `https:` on a GitHub host. It then
+  trusts its local cache (`~/.agentroom/app/` — on Windows
   `%USERPROFILE%\.agentroom\app\`, a source cache separate from the
   `%APPDATA%\AgentRoom` data folder) the same way npm trusts its own cache:
-  anyone who can write those paths (or your shell env) already runs code as you.
-  Release tags are the trust root and are protected against moves/deletion
+  anyone who can write those paths (or your shell env) already runs code as you
   (ADR-0014).
 - **Third-party data egress.** Optional image text/OCR extraction sends image bytes to
   OpenAI. It is **off by default** (`ENABLE_IMAGE_TEXT_EXTRACTION=false`) and must be
@@ -103,6 +108,13 @@ an ancestor of `origin/main` (a `v*` tag can be created on any commit — tag *c
 not restricted server-side, only moves and deletions are), and everything that workflow
 executes — every action, and the gitleaks container image — is pinned by immutable digest
 rather than by a movable tag.
+
+**A release that cannot publish now fails.** The npm job used to downgrade a missing
+`NPM_TOKEN` to a notice and skip, so tags v1.0.0–v1.6.0 each produced a green run and a
+GitHub Release while publishing nothing to the registry the README sends users to. A
+`publish-preflight` job now requires the secret **before** the GitHub Release is created,
+and every step of the publish job is unconditional: an incomplete release is red, not
+green.
 
 **What that does not cover.** These release-time checks live in `release.yml` **at the
 tagged commit**, so they defend against a mistaken, stale, or unmerged tag — not against

@@ -6,7 +6,27 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
-_Nothing yet._
+### Security
+
+- **`npx agentroom` now pins the source it builds by content, not by name.** The bin
+  fetched `archive/refs/tags/v<version>.tar.gz` and checked only that the result *looked*
+  like AgentRoom before installing, building and executing it — so force-moving a released
+  tag changed what every future `npx agentroom@X.Y.Z` ran, while the npm artifact anyone
+  audits stayed byte-identical. `publish-npm` now records the released commit and the
+  SHA-256 of its GitHub source archive into the published `package.json`, and the bin
+  fetches `archive/<commit>.tar.gz` and refuses to extract bytes whose digest does not
+  match. An absent or malformed pin is a hard failure (`AGENTROOM_ALLOW_UNVERIFIED_SOURCE=1`
+  is the documented opt-out for running the bin from a checkout; there is none for a
+  mismatch). The primary download's resolved redirect target must now be `https:` on a
+  GitHub host — previously only the `AGENTROOM_SOURCE_TARBALL` override rejected `http://`,
+  and nothing looked at where a redirect actually landed. (ADR-0014, amended)
+- **A release that cannot publish to npm now fails instead of reporting success.** The
+  publish job downgraded a missing `NPM_TOKEN` to a `::notice` and skipped, so every tag
+  from v1.0.0 to v1.6.0 produced a green run and a GitHub Release while publishing nothing
+  — six versions, unnoticed, with the README pointing every reader at `npx agentroom`. The
+  skip branch is gone, and a new `publish-preflight` job requires the secret **before** the
+  GitHub Release is created, so the ordinary failure stops the run while nothing
+  user-visible exists.
 
 ## [1.6.0] - 2026-07-26
 

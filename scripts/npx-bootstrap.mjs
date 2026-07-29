@@ -14,16 +14,32 @@
  * dependencies, and builds the web app — expect a few minutes. Later runs reuse the
  * cache and start quickly (launch.mjs rebuilds unless AGENTROOM_SKIP_BUILD=1).
  *
+ * What it downloads is pinned, not named: `release.yml` writes the exact commit the npm
+ * artifact was cut from, plus the SHA-256 of that commit's GitHub source archive, into
+ * this package's own `package.json` (`agentroom.source`) at publish time. The bin fetches
+ * `/archive/<commit>.tar.gz` — a commit id cannot be force-moved the way a `vX.Y.Z` tag
+ * can — and refuses to extract bytes whose digest does not match. Nothing here trusts a
+ * tag any more.
+ *
  * Env:
  *   AGENTROOM_SOURCE_TARBALL  https:// URL or local path of a source tarball to use
- *                             instead of the GitHub tag archive (used by the release
- *                             clean-room test, where the next tag doesn't exist on
- *                             GitHub yet). Plain http:// is refused.
+ *                             instead of the recorded source (used for pre-tag testing,
+ *                             where the release doesn't exist on GitHub yet). Plain
+ *                             http:// is refused. The recorded digest describes the
+ *                             recorded commit, so it cannot apply to an operator-supplied
+ *                             tarball: this path is NOT integrity-verified and says so.
+ *   AGENTROOM_ALLOW_UNVERIFIED_SOURCE=1
+ *                             download the `v<version>` TAG archive with no digest check,
+ *                             when this copy of the bin has no recorded source (i.e. it is
+ *                             a git checkout, not a published artifact — in a checkout,
+ *                             prefer `pnpm start`). It is not an escape hatch for a digest
+ *                             MISMATCH: a mismatch always fails.
  *   AGENTROOM_APP_CACHE       override the cache dir (default ~/.agentroom/app).
  *   AGENTROOM_FORCE_FETCH=1   re-download even if the version is already cached.
  *   (launch.mjs env also applies: AGENTROOM_NO_OPEN, AGENTROOM_SKIP_BUILD, PORT.)
  */
 import { spawn, spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import {
   createWriteStream,
   existsSync,
@@ -42,8 +58,13 @@ import { fileURLToPath } from 'node:url'
 const HERE = dirname(fileURLToPath(import.meta.url))
 const pkg = JSON.parse(readFileSync(join(HERE, '..', 'package.json'), 'utf8'))
 const VERSION = pkg.version
-const REPO_TARBALL = `https://github.com/neric-joel/Whatsapp-Agents/archive/refs/tags/v${VERSION}.tar.gz`
+// Hard-coded origin+repo: the only value ever interpolated into a source URL is a
+// charset-validated commit id from this package's own manifest (see resolveSource).
+const REPO_ARCHIVE = 'https://github.com/neric-joel/Whatsapp-Agents/archive'
+const TAG_TARBALL = `${REPO_ARCHIVE}/refs/tags/v${VERSION}.tar.gz`
 const QUICKSTART = 'https://github.com/neric-joel/Whatsapp-Agents#quickstart'
+const COMMIT_RE = /^[0-9a-f]{40}$/
+const SHA256_RE = /^[0-9a-f]{64}$/
 const MIN_NODE = [22, 13, 0]
 const isWin = process.platform === 'win32'
 
@@ -92,7 +113,58 @@ function ensurePnpm(trustedCwd) {
   )
 }
 
-async function download(url, dest) {
+/**
+ * Where the source comes from, and what it must hash to.
+ *
+ * `agentroom.source` is written into the PUBLISHED package.json by release.yml's
+ * publish-npm job (it is never committed), which refuses to publish without it. So a
+ * published artifact always carries it and a git checkout never does — those are the two
+ * cases below, and neither of them is "skip the check quietly".
+ */
+function resolveSource() {
+  const recorded = pkg.agentroom?.source
+  if (recorded === undefined || recorded === null) {
+    if (process.env.AGENTROOM_ALLOW_UNVERIFIED_SOURCE === '1') {
+      log(
+        'WARNING: AGENTROOM_ALLOW_UNVERIFIED_SOURCE=1 — downloading the mutable ' +
+          `v${VERSION} tag archive with NO integrity verification.`,
+      )
+      return { url: TAG_TARBALL, sha256: null }
+    }
+    fail(
+      `This copy of the agentroom bin records no source commit or digest, so what it ` +
+        `would download, build and run cannot be verified. Every published release ` +
+        `records both, so this is almost certainly a git checkout — in a checkout run ` +
+        `\`pnpm start\` instead. To fetch the v${VERSION} tag archive anyway, ` +
+        `unverified, set AGENTROOM_ALLOW_UNVERIFIED_SOURCE=1.`,
+    )
+  }
+  // Malformed is tampering or a broken release, never a checkout — no opt-out here.
+  if (!COMMIT_RE.test(recorded?.commit ?? '') || !SHA256_RE.test(recorded?.sha256 ?? '')) {
+    fail(
+      `The recorded source pin in this package is malformed (commit=${recorded?.commit}, ` +
+        `sha256=${recorded?.sha256}). Refusing to download anything. Re-install ` +
+        `agentroom, or use the git quickstart: ${QUICKSTART}`,
+    )
+  }
+  return { url: `${REPO_ARCHIVE}/${recorded.commit}.tar.gz`, sha256: recorded.sha256 }
+}
+
+/** Suffix checks start at a dot, so `evil-github.com` / `githubXcom` cannot match. */
+function isGitHubHost(host) {
+  return (
+    host === 'github.com' || host.endsWith('.github.com') || host.endsWith('.githubusercontent.com')
+  )
+}
+
+/**
+ * @param {{ sha256: string | null, gitHubOnly: boolean }} opts
+ *   sha256      expected digest of the bytes, or null when the caller is an explicitly
+ *               operator-supplied source (AGENTROOM_SOURCE_TARBALL / the unverified opt-in).
+ *   gitHubOnly  the URL came from this file's own constants, so the redirect chain must
+ *               stay inside GitHub. False for an operator-supplied URL, which may be anywhere.
+ */
+async function download(url, dest, opts) {
   log(`Downloading AgentRoom v${VERSION} source…`)
   log(`  ${url}`)
   mkdirSync(dirname(dest), { recursive: true })
@@ -101,10 +173,32 @@ async function download(url, dest) {
   const part = `${dest}.${process.pid}.part`
   try {
     const res = await fetch(url, { redirect: 'follow' })
+    // `redirect: 'follow'` resolves the chain silently, so constrain where it LANDED, not
+    // just what we asked for: an https:// request that ends on plain http:// (GitHub's
+    // archive redirects to codeload) would hand a network attacker the bytes we are about
+    // to build and execute. res.url is the post-redirect URL.
+    let finalUrl = null
+    try {
+      finalUrl = new URL(res.url)
+    } catch {
+      fail(`Download redirected to a URL that cannot be parsed (${res.url}). Refusing it.`)
+    }
+    if (finalUrl.protocol !== 'https:') {
+      fail(
+        `Download was redirected off TLS (${url} → ${res.url}). Refusing to fetch source ` +
+          `over ${finalUrl.protocol}. Git quickstart fallback: ${QUICKSTART}`,
+      )
+    }
+    if (opts.gitHubOnly && !isGitHubHost(finalUrl.hostname)) {
+      fail(
+        `Download was redirected off GitHub (${url} → ${res.url}). Refusing it. ` +
+          `Git quickstart fallback: ${QUICKSTART}`,
+      )
+    }
     if (!res.ok || !res.body) {
       fail(
-        `Download failed (${res.status} ${res.statusText}). If the tag v${VERSION} is not on ` +
-          `GitHub yet, use the git quickstart instead: ${QUICKSTART}`,
+        `Download failed (${res.status} ${res.statusText}). If this release's source is ` +
+          `not on GitHub, use the git quickstart instead: ${QUICKSTART}`,
       )
     }
     const file = createWriteStream(part)
@@ -118,6 +212,22 @@ async function download(url, dest) {
         `Error: ${err?.cause?.code ?? err?.message ?? err}. ` +
         `You can always use the git quickstart instead: ${QUICKSTART}`,
     )
+  }
+  // Verify BEFORE the rename: unverified bytes must never land at the cache path that
+  // extract() reads, not even briefly.
+  if (opts.sha256) {
+    const actual = createHash('sha256').update(readFileSync(part)).digest('hex')
+    if (actual !== opts.sha256) {
+      rmSync(part, { force: true })
+      fail(
+        `Source integrity check FAILED — the download does not match the digest this ` +
+          `release recorded.\n  expected sha256 ${opts.sha256}\n  actual   sha256 ${actual}\n` +
+          `Nothing was extracted and nothing was run. Do not retry blindly: use the git ` +
+          `quickstart (${QUICKSTART}) and report this at ` +
+          `https://github.com/neric-joel/Whatsapp-Agents/issues`,
+      )
+    }
+    log(`Source integrity verified (sha256 ${opts.sha256}).`)
   }
   renameSync(part, dest)
 }
@@ -227,7 +337,15 @@ async function main() {
       log(`Using local source tarball ${tarball}`)
     } else {
       tarball = join(cacheRoot, `agentroom-v${VERSION}.tar.gz`)
-      await download(override ?? REPO_TARBALL, tarball)
+      if (override) {
+        // Deliberate operator substitution: the recorded digest describes the recorded
+        // commit, so it cannot describe this. Say so rather than implying a check ran.
+        log('AGENTROOM_SOURCE_TARBALL is set — this download is NOT integrity-verified.')
+        await download(override, tarball, { sha256: null, gitHubOnly: false })
+      } else {
+        const source = resolveSource()
+        await download(source.url, tarball, { sha256: source.sha256, gitHubOnly: true })
+      }
       downloaded = true
     }
     await extract(tarball, appDir)
