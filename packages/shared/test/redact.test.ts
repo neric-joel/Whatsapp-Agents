@@ -136,6 +136,22 @@ test('the SUPABASE_SERVICE_ROLE_KEY rule is idempotent, like its key=value neigh
 
   const once = redact('before SUPABASE_SERVICE_ROLE_KEY=abc.def-ghi after')
   assert.equal(redact(once), once, 'redacting twice must be a no-op for this rule')
+
+  // The stronger claim: a REAL Supabase service role key is itself a 3-segment JWT, so
+  // the top-of-file JWT rule fires first (within this SAME, single call to redact()) and
+  // turns the value into `[REDACTED:jwt]` before this rule ever sees it. Without this
+  // rule's guard, it would then re-match "SUPABASE_SERVICE_ROLE_KEY=[REDACTED:jwt]" whole
+  // — the pattern's own match spans the key name — and collapse it to a bare `[REDACTED]`
+  // on that first pass, destroying which env var leaked. The guard preserves both the env
+  // var name and the jwt marker in one pass.
+  const withRealJwt = redact(
+    'SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dGVzdHNpZ25hdHVyZQ',
+  )
+  assert.equal(
+    withRealJwt,
+    'SUPABASE_SERVICE_ROLE_KEY=[REDACTED:jwt]',
+    'first pass must keep which env var leaked, not collapse the JWT marker to a bare [REDACTED]',
+  )
 })
 
 // --- Existing behaviour must still hold ----------------------------------------------------
