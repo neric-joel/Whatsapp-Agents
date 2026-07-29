@@ -29,17 +29,38 @@ const HEX_KEY_RE = /^[0-9a-fA-F]{64}$/
 const BASE64_KEY_RE = /^[A-Za-z0-9+/]{43}=$/
 const BASE64URL_KEY_RE = /^[A-Za-z0-9_-]{43}$/
 
+const KEY_MISSING_ERROR = 'CREDENTIAL_ENCRYPTION_KEY is not set (required to use BYO credentials)'
+
 const KEY_FORMAT_ERROR =
   'CREDENTIAL_ENCRYPTION_KEY must decode to exactly 32 bytes (256-bit) via one of these EXACT ' +
   'forms: 64 hex characters, standard base64 (43 characters + "=" padding), or base64url ' +
   '(43 characters, no padding) — a passphrase is not a valid key. Generate one with: ' +
   'openssl rand -hex 32'
 
+/**
+ * Why the key is unusable. `'missing'` and `'malformed'` are deliberately NOT the same
+ * thing: an install carried over from before the entropy check (below) has a key that
+ * IS set, and telling its operator "not set" sends them to look at an env file that
+ * already contains the value. `message` is the actionable text and never contains any
+ * part of the key.
+ */
+export type CredentialKeyFailure = 'missing' | 'malformed'
+
+export class CredentialKeyError extends Error {
+  readonly reason: CredentialKeyFailure
+
+  constructor(reason: CredentialKeyFailure, message: string) {
+    super(message)
+    this.name = 'CredentialKeyError'
+    this.reason = reason
+  }
+}
+
 /** Parse + validate the 256-bit key from env. Accepts strict hex(64) or base64/base64url(32 bytes). */
 export function getCredentialKey(env: NodeJS.ProcessEnv = process.env): Buffer {
   const raw = env['CREDENTIAL_ENCRYPTION_KEY']
   if (!raw || raw.trim() === '') {
-    throw new Error('CREDENTIAL_ENCRYPTION_KEY is not set (required to use BYO credentials)')
+    throw new CredentialKeyError('missing', KEY_MISSING_ERROR)
   }
   const trimmed = raw.trim()
   let key: Buffer
@@ -50,23 +71,39 @@ export function getCredentialKey(env: NodeJS.ProcessEnv = process.env): Buffer {
   } else if (BASE64URL_KEY_RE.test(trimmed)) {
     key = Buffer.from(trimmed, 'base64url')
   } else {
-    throw new Error(KEY_FORMAT_ERROR)
+    throw new CredentialKeyError('malformed', KEY_FORMAT_ERROR)
   }
   // Belt-and-braces: every branch above already pins the decoded length to 32 bytes by
   // construction, but keep the check so a future regex edit fails closed, not open.
   if (key.length !== 32) {
-    throw new Error(KEY_FORMAT_ERROR)
+    throw new CredentialKeyError('malformed', KEY_FORMAT_ERROR)
   }
   return key
 }
 
-/** True if the env holds a usable 256-bit key (for boot validation / feature gating). */
-export function hasCredentialKey(env: NodeJS.ProcessEnv = process.env): boolean {
+/**
+ * The reason the key is unusable, or `null` when it is usable — the feature gate every
+ * caller should use instead of a boolean.
+ *
+ * This replaces a `hasCredentialKey()` predicate that collapsed both failures into
+ * `false`. Callers then had nothing left to report but their own guess, and both guessed
+ * "not set": the web API answered 503 "CREDENTIAL_ENCRYPTION_KEY is not set" for a key
+ * that was set but rejected, and the bridge fell back to host login with no log line at
+ * all. KEY_FORMAT_ERROR — the one message that says how to fix it — was unreachable
+ * through both paths. Returning the reason keeps the gate fail-closed (a malformed key
+ * is still never used) while making it diagnosable.
+ */
+export function credentialKeyFailure(
+  env: NodeJS.ProcessEnv = process.env,
+): { reason: CredentialKeyFailure; message: string } | null {
   try {
     getCredentialKey(env)
-    return true
-  } catch {
-    return false
+    return null
+  } catch (e) {
+    if (e instanceof CredentialKeyError) return { reason: e.reason, message: e.message }
+    // Unreachable today: getCredentialKey throws nothing else. Fail closed anyway
+    // rather than reporting a usable key because an unexpected error type appeared.
+    return { reason: 'malformed', message: KEY_FORMAT_ERROR }
   }
 }
 

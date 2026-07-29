@@ -3,7 +3,11 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { useToast } from '@/contexts/ToastContext'
-import { resolvePreviewImageUrl, signedDownloadUrl } from '@/lib/file-attachment-open'
+import {
+  canPreviewInline,
+  resolvePreviewImageUrl,
+  signedDownloadUrl,
+} from '@/lib/file-attachment-open'
 
 interface FileAttachment {
   id: string
@@ -62,8 +66,14 @@ export default function FileAttachmentCard({ file }: Props) {
     }
   }, [])
 
+  // ONE decision, read by both the click handler and the button label below. They were
+  // two separate `startsWith('image/')` expressions; if they ever drift apart you get a
+  // button labelled Preview that takes the Download path, or one labelled Download that
+  // opens a blob. Deriving both from a single `const` makes that drift impossible.
+  const previewable = canPreviewInline(file.mime_type)
+
   async function openFile() {
-    if (!file.mime_type.startsWith('image/')) {
+    if (!previewable) {
       // Must be the first thing this does, with no `await` before it: window.open
       // only keeps the click's transient activation if it runs synchronously inside
       // the same task as the click. A pre-flight fetch here (an earlier version of
@@ -119,7 +129,7 @@ export default function FileAttachmentCard({ file }: Props) {
           disabled={loading}
           className="rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 disabled:opacity-50"
         >
-          {file.mime_type.startsWith('image/') ? 'Preview' : 'Download'}
+          {previewable ? 'Preview' : 'Download'}
         </button>
       </div>
       {imgUrl && (

@@ -44,7 +44,7 @@ vi.mock('@/lib/permissions', () => ({
 
 import { GET } from '@/app/api/files/[fileId]/signed-download/route'
 
-import { resolvePreviewImageUrl } from '../file-attachment-open'
+import { canPreviewInline, resolvePreviewImageUrl } from '../file-attachment-open'
 
 const baseFileRow = {
   id: 'file-1',
@@ -124,6 +124,53 @@ describe('file-attachment-open (contract with the real signed-download route)', 
     db.fileGet.mockReturnValue(undefined)
 
     await expect(resolvePreviewImageUrl('missing-file')).rejects.toThrow()
+  })
+
+  // REGRESSION: an image/svg+xml attachment must never reach the blob-preview path.
+  // SVG is allowed at upload (isValidUploadMimeType) but excluded from inline serving
+  // (SAFE_INLINE_DOWNLOAD_MIME_TYPES), because the route's answer for it is an
+  // attachment under `Content-Security-Policy: default-src 'none'; sandbox`. A blob:
+  // URL made from the same bytes is a same-origin document with NO CSP, one
+  // right-click ("Open image in new tab") away from executing the SVG's script
+  // against this app's origin. The old gate was `mime_type.startsWith('image/')`,
+  // which includes SVG — this test fails against that code, because the object URL
+  // was minted successfully.
+  it('never mints a blob: URL for an image/svg+xml attachment — the type the route refuses to serve inline', async () => {
+    await writeStoredFile(
+      'rooms/room-1/file-1/diagram.svg',
+      '<svg xmlns="http://www.w3.org/2000/svg"><script>fetch("/api/connections")</script></svg>',
+    )
+    db.fileGet.mockReturnValue({
+      ...baseFileRow,
+      filename: 'diagram.svg',
+      mime_type: 'image/svg+xml',
+      storage_path: 'rooms/room-1/file-1/diagram.svg',
+    })
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL')
+
+    // The decision the card renders from, and the enforcement point that mints the URL,
+    // must agree — otherwise the button says one thing and does the other.
+    expect(canPreviewInline('image/svg+xml')).toBe(false)
+    await expect(resolvePreviewImageUrl('file-1')).rejects.toThrow(/not previewable/)
+    expect(createObjectURL).not.toHaveBeenCalled()
+
+    createObjectURL.mockRestore()
+  })
+
+  it('the Preview gate is the signed-download inline allowlist, not "starts with image/"', () => {
+    // Safe to render inline AND renderable in an <img>.
+    for (const type of ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'IMAGE/PNG']) {
+      expect(canPreviewInline(type)).toBe(true)
+    }
+    // On the inline allowlist but not an image — <img> cannot show it, so Download.
+    expect(canPreviewInline('text/plain')).toBe(false)
+    // `image/*` but NOT on the inline allowlist — the whole point of this fix.
+    for (const type of ['image/svg+xml', 'image/svg+xml; charset=utf-8', 'image/bmp']) {
+      expect(canPreviewInline(type)).toBe(false)
+    }
+    expect(canPreviewInline(null)).toBe(false)
+    expect(canPreviewInline(undefined)).toBe(false)
+    expect(canPreviewInline('')).toBe(false)
   })
 })
 

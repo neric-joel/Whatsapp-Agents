@@ -6,8 +6,90 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+A security-hardening sweep: ten tasks across redaction, credential handling, the child
+process environment, download headers, the tool-approval gate, file permissions, and the
+release pipeline. Two of them are breaking for an existing install, and both break
+**quietly** — nothing crashes, a feature just stops working. Read the BREAKING section
+before upgrading.
+
+### BREAKING
+
+- **`CREDENTIAL_ENCRYPTION_KEY` now accepts only a real 256-bit key.** Exactly three
+  forms: 64 hex characters, standard base64 (43 characters + `=` padding), or base64url
+  (43 characters, unpadded). A passphrase is rejected — Node's base64 decoder silently
+  discards out-of-alphabet characters, so a 43-44 character sentence used to decode to
+  "32 bytes" and was accepted as a 256-bit key while carrying ~40-60 bits of real entropy
+  (CWE-521). **An install using a passphrase does not crash.** BYO credentials simply stop
+  working: the web API answers `503` on `POST /api/credentials`, and the bridge falls back
+  to host login, so agent runs continue with whatever the CLI's own login provides.
+  **Action:** generate a real key (`openssl rand -hex 32`), set it in **both** `apps/web`
+  and `bridge` (the two values must match), and **re-enter every stored BYO credential** in
+  Settings → Providers — ciphertexts written under the old key cannot be decrypted under
+  the new one.
+- **Credential-shaped env vars are no longer forwarded to spawned agent CLIs.**
+  `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`,
+  `GOOGLE_APPLICATION_CREDENTIALS`, any name containing `APIKEY` or `CREDENTIAL`, and any
+  name ending `_KEY` are now stripped from the child environment. The deny runs **before**
+  the allowlist, so listing one in `BRIDGE_CHILD_ENV_ALLOW` does not re-enable it — that is
+  deliberate, not an oversight. Previously the `ANTHROPIC_*` / `OPENAI_*` / `GOOGLE_*`
+  provider-config pass-through handed every one of those keys to **every** child CLI,
+  including one you connected yourself pointing at any binary on disk. **If a CLI was
+  authenticating off a key exported in your shell, its agent runs will now fail auth.**
+  **Action:** run that CLI's own login, bind a stored credential to the agent (ADR-0010),
+  or put the key in that Connections profile's own `env` in `config.json` — all three scope
+  it to the one CLI that needs it instead of broadcasting it.
+
 ### Security
 
+- **Redaction now covers the API-key formats providers actually issue.** The patterns
+  recognized the retired `sk-` shape and little else, so a modern key reaching a log line,
+  a persisted message, or the error sink was written out in full — measured at a ~28%
+  full-key leak rate across the formats in use, now 0. Added: `sk-ant-*` (Anthropic),
+  `sk-proj-*` (OpenAI project keys), `github_pat_*`, Google `AIza…`, and Slack `xox*`
+  tokens. Two format-independent backstops sit behind the patterns, because a pattern list
+  is only ever current until the next provider ships a new prefix: a key-name-aware deep
+  redactor that redacts by the *field name* a value arrived under (walking nested objects
+  and arrays, not just top-level strings), and a process-local registry of known secret
+  values — every credential the bridge decrypts registers itself, and `redact()` then
+  strips that exact string from everything it sees for the rest of the process, whatever
+  shape it has.
+- **`Content-Disposition` filenames are RFC 5987/6266 encoded, and uploads reject quotes
+  and control characters.** A stored filename was interpolated raw into the header, so a
+  name containing `"` could open a second, attacker-chosen `filename*` parameter and make
+  the browser save a download under a different name and extension
+  (`chart.png` → `quarterly-report.pdf.exe`). The header now emits an ASCII-safe quoted
+  `filename=` fallback alongside a percent-encoded `filename*=UTF-8''…`; the encoder also
+  escapes `'`, which `encodeURIComponent` leaves raw and which is the ext-value delimiter.
+  This also fixes a permanent 500: a filename containing a raw CR/LF (or a lone UTF-16
+  surrogate) made `new Response(...)` throw, so the file could never be downloaded again.
+- **The tool-call approval gate is server-authoritative.** It previously trusted the agent's
+  own `requires_approval` and `tool_category` fields on the event it emitted — an agent
+  could mark its own destructive call pre-approved. Both agent-supplied fields are now
+  ignored and the classification is derived server-side, and the destructive-command scan
+  walks the entire argument tree instead of looking only at a top-level `command` key
+  (which any nesting, or a differently named argument, walked straight past). Scan
+  truncation is now a loud `warn` rather than a silent pass. The path remains **dormant** —
+  no bundled adapter emits `tool_call_requested`, so the gate still never fires in the
+  shipped product (as `docs/ARCHITECTURE.md` has said since 1.4.1); this hardens the
+  scaffolding ahead of a producer.
+- **App-data files are created owner-only.** The app-data directory and its `files/` folder
+  are created `0700`, and `config.json`, `agentroom.db` and its `-wal`/`-shm` sidecars
+  `0600`. The database holds
+  encrypted credentials and every message; the WAL sidecars hold the same pages before
+  checkpoint, so tightening only the main database file left the recent writes readable.
+  Existing files are tightened in place on next boot, so an upgrade fixes a permissive
+  install without any action.
+- **The release and PR workflows are pinned and re-verified.** Every GitHub Action and the
+  gitleaks container are pinned by immutable digest rather than a movable tag; the secret
+  scan and the dependency audit re-run **on the tagged commit** (they previously only
+  proved the branch that was merged, not the thing being released); and a tag that is not
+  an ancestor of `origin/main` is refused outright. `npx agentroom` now verifies a SHA-256
+  digest of the source archive it builds, pinned to a **commit** rather than a movable tag
+  — see the entry below for the full change.
+- **The gitleaks allowlist no longer exempts the entire test tree.** It carried a path rule
+  covering every test file, which is where a real leaked secret is most likely to be
+  committed by accident. It now allowlists two exact fixture values by anchored literal
+  regex, so anything else in a test file is scanned like the rest of the repo.
 - **`npx agentroom` now pins the source it builds by content, not by name.** The bin
   fetched `archive/refs/tags/v<version>.tar.gz` and checked only that the result *looked*
   like AgentRoom before installing, building and executing it — so force-moving a released
@@ -28,6 +110,22 @@ All notable changes to this project are documented here. The format is based on
   skip branch is gone, and a new `publish-preflight` job requires the secret **before** the
   GitHub Release is created, so the ordinary failure stops the run while nothing
   user-visible exists.
+
+### Fixed
+
+- **File attachment Preview and Download were completely broken; both work now.** The card
+  called `res.json()` on `signed-download`, which answers a success with the file's raw
+  bytes and only ever returns JSON on an *error* — so every click threw a parse error and
+  nothing opened. Three further faults surfaced while fixing it, each of which would have
+  kept the button dead on its own: Download did a pre-flight `fetch` before `window.open`,
+  which spends the click's transient activation and made Safari and Firefox treat every
+  download as a blocked pop-up; the mounted-ref guard was never reset to `true` on mount,
+  so React StrictMode's dev-mode double-invoke left it permanently `false` after the first
+  render and every Preview silently discarded its result; and the preview object URL was
+  never revoked when it was replaced or when the card unmounted. Preview is now gated on the
+  same inline-safe MIME allowlist the download route uses to choose `inline` vs
+  `attachment`, so an SVG attachment takes the Download path and keeps the route's
+  `default-src 'none'; sandbox` CSP instead of becoming a CSP-less same-origin `blob:` URL.
 
 ## [1.6.0] - 2026-07-26
 

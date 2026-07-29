@@ -1,10 +1,12 @@
 import { getDb } from '@agentroom/db'
 import { registerSecret, type RuntimeCredential } from '@agentroom/shared'
 import {
+  credentialKeyFailure,
   decryptSecret,
   getCredentialKey,
-  hasCredentialKey,
 } from '@agentroom/shared/credential-crypto'
+
+import { log } from './logger.js'
 
 /**
  * resolveRuntimeProvider — the Hermes analog (ADR-0010 / WS2). Given an agent's
@@ -40,7 +42,22 @@ export async function resolveRuntimeProvider({
   const map = adapterType ? ADAPTER_CREDENTIAL_ENV[adapterType] : undefined
   if (!map) return null // adapter takes no injected key (e.g. mock)
   if (!credentialId || !ownerUserId) return null // no bound credential → host login
-  if (!hasCredentialKey(env)) return null // feature disabled (no decryption key)
+
+  // Past this line the agent HAS a bound credential, so every `return null` below is a
+  // silent downgrade to host login — the run still succeeds (or fails auth inside the
+  // CLI) with nothing anywhere saying why. This used to be `if (!hasCredentialKey(env))
+  // return null` with no log at all, which is how an install whose key stopped being
+  // accepted looked exactly like an install that never had one.
+  const keyFailure = credentialKeyFailure(env)
+  if (keyFailure) {
+    log('warn', 'credential.key.unusable', {
+      reason: keyFailure.reason, // 'missing' | 'malformed' — never the key itself
+      detail: keyFailure.message,
+      credential_id: credentialId,
+      adapter_type: adapterType,
+    })
+    return null // fail closed: run on host login rather than with a key we can't trust
+  }
 
   // Owner-scoped load: the credential must belong to the agent's creator — the WHERE clause
   // enforces it (the local app has no RLS, so this query is the authorization boundary).
@@ -63,7 +80,17 @@ export async function resolveRuntimeProvider({
     )
   } catch {
     // Wrong/rotated key or tampered ciphertext — fail CLOSED (fall back to host login),
-    // never crash the run and never leak a partial value.
+    // never crash the run and never leak a partial value. Logged for the same reason as
+    // the key check above: this is exactly what a key rotation looks like from here, and
+    // the fix (re-enter the stored credential) is invisible without a line saying so.
+    // The caught error is deliberately not logged — GCM failures carry no useful detail
+    // and the value is a secret.
+    log('warn', 'credential.decrypt_failed', {
+      credential_id: credentialId,
+      adapter_type: adapterType,
+      detail:
+        'stored credential could not be decrypted with CREDENTIAL_ENCRYPTION_KEY (rotated key or tampered ciphertext); re-enter it in Settings → Providers',
+    })
     return null
   }
 

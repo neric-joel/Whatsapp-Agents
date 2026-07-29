@@ -252,7 +252,7 @@ files authoritative. **Never commit real secrets.**
 | `AGENTROOM_HOME` | no | `%APPDATA%\AgentRoom` (Windows) / `~/.agentroom` | Where local app-data lives (SQLite DB + uploaded files + `config.json`). Set to relocate it; must match the bridge |
 | `NEXT_PUBLIC_APP_URL` | no | — | App origin added to the CSRF/Origin allowlist and used for absolute URLs (set it behind a reverse proxy) |
 | `EXTRA_ALLOWED_ORIGINS` | no | — | Comma-separated extra origins allowed for mutating requests (reverse proxies). The app's own origin is always allowed |
-| `CREDENTIAL_ENCRYPTION_KEY` | conditional | — | **Server-only** 32-byte key (64-hex or base64) that encrypts BYO provider credentials before storage. **Required only to enable the BYO-credentials feature**; must match the bridge's value |
+| `CREDENTIAL_ENCRYPTION_KEY` | conditional | — | **Server-only** 32-byte key that encrypts BYO provider credentials before storage. Exactly three accepted forms — 64 hex characters, standard base64 (43 characters + `=` padding), or base64url (43 characters, unpadded); a passphrase is rejected. **Required only to enable the BYO-credentials feature**; must match the bridge's value |
 | `LOG_LEVEL` | no | `info` | `debug` \| `info` \| `warn` \| `error` |
 | `SENTRY_DSN` / `ERROR_TRACKING_DSN` | no | — | Opt-in error tracking; no-op (and no egress) when unset |
 
@@ -272,7 +272,7 @@ files authoritative. **Never commit real secrets.**
 | `ENABLE_IMAGE_TEXT_EXTRACTION` | no | `false` | Enable OpenAI image-text egress (**off by default**) |
 | `OPENAI_API_KEY` | conditional | — | Required only if image-text extraction is enabled |
 | `OPENAI_VISION_MODEL` | no | `gpt-4.1-mini` | Vision model for extraction |
-| `CREDENTIAL_ENCRYPTION_KEY` | conditional | — | 32-byte key (64-hex or base64) that decrypts user-stored BYO credentials at spawn. Required only for the BYO-credentials feature; must match the web app's value. Never logged |
+| `CREDENTIAL_ENCRYPTION_KEY` | conditional | — | 32-byte key that decrypts user-stored BYO credentials at spawn. Exactly three accepted forms — 64 hex characters, standard base64 (43 characters + `=` padding), or base64url (43 characters, unpadded); a passphrase is rejected. Required only for the BYO-credentials feature; must match the web app's value. Never logged |
 | `BRIDGE_CHILD_ENV_ALLOW` | no | — | Comma-separated extra env names forwarded to child CLIs. Secrets (names containing `SUPABASE`/`SERVICE_ROLE`/`SECRET`/`PASSWORD`/`CREDENTIAL`/`PRIVATE_KEY`/`APIKEY`, starting with `BRIDGE_`, ending with `_TOKEN`/`_KEY`, or exactly `TOKEN`) are stripped **before** this list is read, so naming one here does not forward it. Separately, provider **config** vars (`ANTHROPIC_*`, `CLAUDE_CODE_*`, `OPENAI_*`, `CODEX_*`, `AWS_*`, `AZURE_*`, `GOOGLE_*`, `GEMINI_*`, `VERTEX_*`) that do not match that secret pattern go to **every** child CLI without being listed here |
 | `LOG_LEVEL` | no | `info` | Log level |
 | `SENTRY_DSN` / `ERROR_TRACKING_DSN` | no | — | Opt-in error tracking |

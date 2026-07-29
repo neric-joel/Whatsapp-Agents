@@ -1,8 +1,8 @@
 import { getDb, intBool, newId } from '@agentroom/db'
 import {
+  credentialKeyFailure,
   encryptSecret,
   getCredentialKey,
-  hasCredentialKey,
 } from '@agentroom/shared/credential-crypto'
 import { NextRequest } from 'next/server'
 
@@ -77,10 +77,18 @@ export async function POST(req: NextRequest) {
   const limited = enforceRateLimit(`credential-create:${user.id}`, 20, 60_000)
   if (limited) return limited
 
-  if (!hasCredentialKey()) {
+  // Fails closed either way, but says WHICH way. This used to gate on a boolean and
+  // report "CREDENTIAL_ENCRYPTION_KEY is not set" for both cases — including the one an
+  // upgrade actually produces, where the key is set but no longer accepted, and the
+  // operator is sent to look at an env file that already has a value in it. The message
+  // is the format guidance itself; it never contains any part of the key.
+  const keyFailure = credentialKeyFailure()
+  if (keyFailure) {
     return apiError(
       'SERVICE_UNAVAILABLE',
-      'Provider credentials are disabled on this server (CREDENTIAL_ENCRYPTION_KEY is not set).',
+      keyFailure.reason === 'missing'
+        ? 'Provider credentials are disabled on this server (CREDENTIAL_ENCRYPTION_KEY is not set).'
+        : `Provider credentials are disabled on this server: ${keyFailure.message}`,
       503,
     )
   }
