@@ -40,9 +40,14 @@ describe('redact', () => {
     }
   })
 
-  it('redacts a whitespace-separated label and a Bearer value', () => {
+  it('redacts a space-separated label and a Bearer value', () => {
     expect(redact('api key: hunter2hunter2')).toBe('[REDACTED]')
-    expect(redact('authorization: Bearer hunter2hunter2')).toBe('[REDACTED]')
+    expect(redact('token: Bearer hunter2hunter2')).toBe('[REDACTED]')
+  })
+
+  it('does not mangle ordinary prose about HTTP auth', () => {
+    const line = 'To call the API, set the Authorization: Bearer <token> header.'
+    expect(redact(line)).toBe(line)
   })
 
   it('is idempotent', () => {

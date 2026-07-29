@@ -1,5 +1,8 @@
 // Secret/PII redaction shared by web + bridge (logs and DB-persisted strings).
-// Pure string -> string; order matters (JWT before generic base64).
+// `redact()` is string -> string and order matters (JWT before generic base64). It is
+// deterministic for a given registry state but NOT referentially transparent: the
+// known-secret registry below is module state that `registerSecret()` mutates. That is
+// inherent to a format-independent backstop — see the registry comment.
 //
 // Provider-key rules sit BETWEEN the JWT rule and the generic base64 rule on purpose:
 // a modern key body is base64url, so the base64 rule (which excludes `-`/`_`) would
@@ -15,7 +18,10 @@ const REDACT_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
   // and `sk-proj-…` never matched the old /sk-[a-zA-Z0-9]{20,}/ rule.
   { pattern: /\bsk-ant-[A-Za-z0-9_-]{20,}/g, replacement: '[REDACTED]' },
   { pattern: /\bsk-proj-[A-Za-z0-9_-]{20,}/g, replacement: '[REDACTED]' },
-  // Generic `sk-` catch-all: LAST of the sk- rules so the specific ones win.
+  // Generic `sk-` catch-all: LAST of the sk- rules so the specific ones win. The leading
+  // \b is load-bearing here (and on the rules around it): without it the rule fires inside
+  // ordinary hyphenated English — `task-management-and-scheduling-refactor` would redact
+  // from its embedded `sk-` onward.
   { pattern: /\bsk-[A-Za-z0-9_-]{20,}/g, replacement: '[REDACTED]' },
   { pattern: /\bgh[pousr]_[A-Za-z0-9]{16,}/g, replacement: '[REDACTED]' },
   { pattern: /\bgithub_pat_[A-Za-z0-9_]{20,}/g, replacement: '[REDACTED]' },
@@ -26,13 +32,18 @@ const REDACT_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
     replacement: '$1[REDACTED:base64]',
   },
   { pattern: /eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/g, replacement: '[REDACTED]' },
-  // Labelled secrets. Tolerates a whitespace-separated label ("api key: …") and an
-  // optional `Bearer ` scheme. BOTH lookaheads are load-bearing: the second keeps
-  // redaction idempotent, and the first stops `\S+` from backtracking onto the word
-  // `Bearer` when the value behind it was already redacted by an earlier rule.
+  // Labelled secrets. Widened to a space-separated label ("api key: …") and an optional
+  // `Bearer ` scheme. Deliberately NOT widened to `authorization`/`credential`: redact()
+  // also runs over agent replies persisted to `messages` and rendered in the UI, and those
+  // two words are ordinary prose whenever an agent discusses HTTP ("set the Authorization:
+  // Bearer <token> header"). They are covered as redactDeep KEY names instead — see
+  // SENSITIVE_KEY_NAME. `[ _-]` not `[\s_-]` so a label can never be joined across a
+  // newline. BOTH lookaheads are load-bearing: the second keeps redaction idempotent, and
+  // the first stops `\S+` from backtracking onto the word `Bearer` when the value behind it
+  // was already redacted by an earlier rule.
   {
     pattern:
-      /(?:password|passwd|secret|token|credential|api[\s_-]?key|authorization)\s*[:=]\s*(?!Bearer\s+\[REDACTED(?::[a-z]+)?\])(?!\[REDACTED(?::[a-z]+)?\])(?:Bearer\s+)?\S+/gi,
+      /(?:password|passwd|secret|token|api[ _-]?key)\s*[:=]\s*(?!Bearer\s+\[REDACTED(?::[a-z0-9]+)?\])(?!\[REDACTED(?::[a-z0-9]+)?\])(?:Bearer\s+)?\S+/gi,
     replacement: '[REDACTED]',
   },
   { pattern: /SUPABASE_SERVICE_ROLE_KEY\s*=\s*\S+/g, replacement: '[REDACTED]' },
@@ -43,9 +54,16 @@ const REDACT_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
 const SENSITIVE_KEY_NAME =
   /(secret|password|passwd|token|api[_-]?key|credential|authorization|cookie|private[_-]?key)/i
 
-// Format-independent backstop: exact values the process knows are secret (registered
-// where a credential is decrypted). Bounded and process-local — never persisted, never
-// logged, never exported.
+// Format-independent backstop: exact values this process knows are secret, registered
+// where a credential is decrypted.
+//
+// TRADE-OFF, stated explicitly: a decrypted secret used to be transient (decrypt → child
+// env → dropped); registering it retains the plaintext in process memory for as long as it
+// stays in the registry, which widens the heap-snapshot / core-dump surface. That is
+// accepted because it is the only redaction measure that survives a provider changing its
+// key format. The Set is module-private — never exported, logged, serialized or persisted
+// — is bounded, and can be emptied with clearRegisteredSecrets() on credential rotation or
+// deletion, or at worker teardown.
 const MIN_REGISTERED_SECRET_LENGTH = 8
 const MAX_REGISTERED_SECRETS = 64
 const knownSecrets = new Set<string>()
@@ -54,19 +72,34 @@ const knownSecrets = new Set<string>()
  * Register a value as a known secret so `redact()` strips it verbatim regardless of
  * format. Safe to call repeatedly with the same value. Values shorter than
  * {@link MIN_REGISTERED_SECRET_LENGTH} are ignored (they would redact ordinary prose),
- * and the registry evicts oldest-first so a long-lived process cannot grow unbounded.
+ * and the registry evicts least-recently-registered first so it cannot grow unbounded.
  */
 export function registerSecret(value: string): void {
   if (typeof value !== 'string') return
   const secret = value.trim()
   if (secret.length < MIN_REGISTERED_SECRET_LENGTH) return
-  if (knownSecrets.has(secret)) return
+  if (knownSecrets.has(secret)) {
+    // Re-register = refresh recency. registerSecret runs on EVERY credential resolution,
+    // so without the delete/re-add the most-used secret keeps its original insertion slot
+    // and is the first one evicted — silently dropping the control where it matters most.
+    knownSecrets.delete(secret)
+    knownSecrets.add(secret)
+    return
+  }
   while (knownSecrets.size >= MAX_REGISTERED_SECRETS) {
     const oldest = knownSecrets.values().next().value
     if (oldest === undefined) break
     knownSecrets.delete(oldest)
   }
   knownSecrets.add(secret)
+}
+
+/**
+ * Forget every registered secret. Call on credential rotation/deletion or worker teardown
+ * so a decrypted plaintext is not retained for the whole process lifetime.
+ */
+export function clearRegisteredSecrets(): void {
+  knownSecrets.clear()
 }
 
 export function redact(text: string): string {
@@ -89,7 +122,9 @@ export function redactDeep(value: unknown): unknown {
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
       // Key-name pass BEFORE the value pass: a secret under a telling name is redacted
       // whatever its shape, so `{ apiKey: <plaintext> }` cannot slip past on format.
-      out[k] = SENSITIVE_KEY_NAME.test(k) ? '[REDACTED]' : redactDeep(v)
+      // null/undefined are left alone — replacing them would assert a secret was present
+      // where there was none.
+      out[k] = SENSITIVE_KEY_NAME.test(k) && v != null ? '[REDACTED]' : redactDeep(v)
     }
     return out
   }
