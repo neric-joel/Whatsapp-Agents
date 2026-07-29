@@ -39,6 +39,17 @@ export function getDb(): Database.Database {
   // content) — tighten it here. Best-effort: see tightenPermissions in paths.ts.
   tightenPermissions(file, 0o600)
   db.pragma('journal_mode = WAL')
+  // The -wal/-shm sidecars hold committed data (this app runs two long-lived WAL
+  // connections — web + bridge — specifically so they can share the file, per the
+  // getDb() doc above, so an unclean shutdown leaving them on disk is not rare).
+  // On a FRESH db they don't exist yet until SQLite creates them just above, so they
+  // inherit the 0600 the main file already has by then — no gap. On an upgrade whose
+  // previous run ended without a clean close, they can still be sitting at whatever
+  // the umask left them (e.g. 0644) from before this hardening landed, and the WAL
+  // pragma above is a no-op against an already-WAL db, so they need tightening here
+  // too, every boot.
+  tightenPermissions(`${file}-wal`, 0o600)
+  tightenPermissions(`${file}-shm`, 0o600)
   db.pragma('foreign_keys = ON')
   db.pragma('busy_timeout = 5000')
   db.exec(SCHEMA_SQL)
