@@ -1,13 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { useToast } from '@/contexts/ToastContext'
-import {
-  confirmDownloadable,
-  resolvePreviewImageUrl,
-  signedDownloadUrl,
-} from '@/lib/file-attachment-open'
+import { resolvePreviewImageUrl, signedDownloadUrl } from '@/lib/file-attachment-open'
 
 interface FileAttachment {
   id: string
@@ -43,6 +39,7 @@ export default function FileAttachmentCard({ file }: Props) {
   const [imgUrl, setImgUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const { showToast } = useToast()
+  const mountedRef = useRef(true)
 
   // Revoke whenever imgUrl is replaced or the card unmounts — the object URL from
   // resolvePreviewImageUrl is otherwise never reclaimed by the browser.
@@ -52,17 +49,47 @@ export default function FileAttachmentCard({ file }: Props) {
     }
   }, [imgUrl])
 
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
   async function openFile() {
+    if (!file.mime_type.startsWith('image/')) {
+      // Must be the first thing this does, with no `await` before it: window.open
+      // only keeps the click's transient activation if it runs synchronously inside
+      // the same task as the click. A pre-flight fetch here (an earlier version of
+      // this file had one, to get a catchable error) sits between the click and this
+      // call and made Safari/Firefox treat every Download as a blocked pop-up. A
+      // blocked pop-up, or the file having been deleted (a 404 in the new tab), isn't
+      // caught here — that's the same limitation OutputsPanel's plain
+      // `<a target="_blank">` already lives with.
+      const opened = window.open(signedDownloadUrl(file.id), '_blank', 'noopener,noreferrer')
+      if (!opened) {
+        // Same reasoning as the repo's error-boundary allowlist in eslint.config.mjs:
+        // the structured logger (lib/logger.ts) is server-only, so the browser console
+        // is the only triage sink a client component has for "why did this fail".
+        // eslint-disable-next-line no-console
+        console.error('openFile failed', new Error('window.open returned null (pop-up blocked?)'))
+        showToast(`Couldn't open ${file.filename}.`, 'error')
+      }
+      return
+    }
+
     setLoading(true)
     try {
-      if (file.mime_type.startsWith('image/')) {
-        setImgUrl(await resolvePreviewImageUrl(file.id))
-      } else {
-        await confirmDownloadable(file.id)
-        const opened = window.open(signedDownloadUrl(file.id), '_blank', 'noopener,noreferrer')
-        if (!opened) throw new Error('pop-up blocked')
-      }
-    } catch {
+      const url = await resolvePreviewImageUrl(file.id)
+      // The card can unmount while this fetch is in flight (e.g. the message list
+      // re-renders it away). setImgUrl would then be a no-op, so the object URL would
+      // never reach the revoke-on-change effect above and leak for the rest of the
+      // page session — revoke it directly instead.
+      if (mountedRef.current) setImgUrl(url)
+      else URL.revokeObjectURL(url)
+    } catch (err) {
+      // Devtools is the only triage sink here too — see the note above.
+      // eslint-disable-next-line no-console
+      console.error('openFile failed', err)
       showToast(`Couldn't open ${file.filename}.`, 'error')
     } finally {
       setLoading(false)

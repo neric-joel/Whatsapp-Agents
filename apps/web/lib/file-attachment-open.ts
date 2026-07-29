@@ -17,25 +17,17 @@ export function signedDownloadUrl(fileId: string): string {
  * owns the returned URL and must `URL.revokeObjectURL` it once it's no longer shown
  * (replaced by a new one, or the component unmounts) — the browser never reclaims it
  * on its own.
+ *
+ * There is deliberately no equivalent pre-flight helper for Download: Download opens
+ * `signedDownloadUrl(fileId)` directly (see FileAttachmentCard.tsx) so the browser's
+ * own navigation observes the route's real `Content-Disposition`/CSP headers, and so
+ * `window.open` runs synchronously inside the click handler — an `await` in between,
+ * as an earlier version of this file had, loses the click's transient activation in
+ * Safari/Firefox and makes every Download silently pop-up-blocked.
  */
 export async function resolvePreviewImageUrl(fileId: string): Promise<string> {
   const res = await fetch(signedDownloadUrl(fileId))
   if (!res.ok) throw new Error(`signed-download responded ${res.status}`)
   const blob = await res.blob()
   return URL.createObjectURL(blob)
-}
-
-/**
- * Confirms the file is actually retrievable before the caller opens a new tab at
- * `signedDownloadUrl(fileId)`. Deliberately does not read the body as a Blob and hand
- * it back: a browser navigating straight to the route observes that response's real
- * `Content-Disposition: attachment` (and CSP/nosniff) headers, which a same-origin
- * Blob URL — stripped of the original response's headers — would not carry. This only
- * needs the status, so it cancels the unread body rather than holding the connection
- * open for bytes nobody will read.
- */
-export async function confirmDownloadable(fileId: string): Promise<void> {
-  const res = await fetch(signedDownloadUrl(fileId))
-  await res.body?.cancel()
-  if (!res.ok) throw new Error(`signed-download responded ${res.status}`)
 }

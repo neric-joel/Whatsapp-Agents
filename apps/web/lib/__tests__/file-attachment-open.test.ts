@@ -44,7 +44,7 @@ vi.mock('@/lib/permissions', () => ({
 
 import { GET } from '@/app/api/files/[fileId]/signed-download/route'
 
-import { confirmDownloadable, resolvePreviewImageUrl } from '../file-attachment-open'
+import { resolvePreviewImageUrl } from '../file-attachment-open'
 
 const baseFileRow = {
   id: 'file-1',
@@ -65,9 +65,9 @@ const baseFileRow = {
 /**
  * Routes `fetch()` calls made by the module under test to the real signed-download
  * `GET` handler. This is what makes the suite a CONTRACT test rather than a
- * structure-only one: `resolvePreviewImageUrl`/`confirmDownloadable` see the actual
- * Response the route produces (raw bytes + real headers), the same one a browser
- * would get — never a `{ ok, data: { signed_url } }` shape someone assumed it had.
+ * structure-only one: `resolvePreviewImageUrl` sees the actual Response the route
+ * produces (raw bytes + real headers), the same one a browser would get — never a
+ * `{ ok, data: { signed_url } }` shape someone assumed it had.
  */
 function stubFetchToRealRoute() {
   vi.stubGlobal(
@@ -124,25 +124,6 @@ describe('file-attachment-open (contract with the real signed-download route)', 
     db.fileGet.mockReturnValue(undefined)
 
     await expect(resolvePreviewImageUrl('missing-file')).rejects.toThrow()
-  })
-
-  it('confirmDownloadable resolves for a non-image attachment without ever treating the response as JSON', async () => {
-    await writeStoredFile('rooms/room-1/file-2/report.pdf', 'fake-pdf-bytes')
-    db.fileGet.mockReturnValue({
-      ...baseFileRow,
-      id: 'file-2',
-      filename: 'report.pdf',
-      mime_type: 'application/pdf',
-      storage_path: 'rooms/room-1/file-2/report.pdf',
-    })
-
-    await expect(confirmDownloadable('file-2')).resolves.toBeUndefined()
-  })
-
-  it('confirmDownloadable rejects when the real route answers not-found', async () => {
-    db.fileGet.mockReturnValue(undefined)
-
-    await expect(confirmDownloadable('missing-file')).rejects.toThrow()
   })
 })
 
