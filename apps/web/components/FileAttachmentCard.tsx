@@ -49,7 +49,14 @@ export default function FileAttachmentCard({ file }: Props) {
     }
   }, [imgUrl])
 
+  // Must reset to `true` in the effect body, not just `false` in its cleanup: React
+  // StrictMode (on by default for App Router since Next 13.5.1, and not overridden in
+  // next.config.mjs) dev-mode-only double-invokes this — mount, cleanup, mount again —
+  // to catch effects that don't tolerate a simulated remount. Without the reset here,
+  // that cleanup's `false` would stick permanently after the very first render, before
+  // any click, and every Preview would silently revoke instead of ever setting imgUrl.
   useEffect(() => {
+    mountedRef.current = true
     return () => {
       mountedRef.current = false
     }
