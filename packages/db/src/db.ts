@@ -4,7 +4,7 @@ import { dirname } from 'node:path'
 import Database from 'better-sqlite3'
 
 import { newId } from './ids.js'
-import { dbPath, ensureAppDirs } from './paths.js'
+import { dbPath, ensureAppDirs, tightenPermissions } from './paths.js'
 import { SCHEMA_SQL } from './schema.js'
 
 /**
@@ -26,7 +26,7 @@ export function getDb(): Database.Database {
   if (_db) return _db
 
   const file = dbPath()
-  mkdirSync(dirname(file), { recursive: true })
+  mkdirSync(dirname(file), { recursive: true, mode: 0o700 })
   try {
     ensureAppDirs()
   } catch {
@@ -34,6 +34,10 @@ export function getDb(): Database.Database {
   }
 
   const db = new Database(file)
+  // better-sqlite3 creates the file at 0644 by default, and an already-existing db
+  // from before this hardening landed may still be 0644 (it holds all room/message
+  // content) — tighten it here. Best-effort: see tightenPermissions in paths.ts.
+  tightenPermissions(file, 0o600)
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
   db.pragma('busy_timeout = 5000')

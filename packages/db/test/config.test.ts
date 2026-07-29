@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, before, beforeEach, test } from 'node:test'
@@ -17,6 +17,11 @@ const {
   deleteProfile,
   configPath,
 } = await import('../src/index.js')
+
+// `mode` only carries POSIX permission-bit meaning on POSIX; on Windows chmod merely
+// toggles the read-only attribute, so mode assertions are skipped there rather than
+// failing. Matches bridge/test/subprocess-killtree.test.ts.
+const isPosix = process.platform !== 'win32'
 
 before(() => {})
 after(() => rmSync(tmp, { recursive: true, force: true }))
@@ -173,3 +178,27 @@ test('readConfig tolerates a corrupt file and drops malformed entries', () => {
   assert.equal(clis[0]!.kind, 'generic') // defaulted
   assert.equal(clis[0]!.enabled, true) // defaulted
 })
+
+test(
+  'writeConfig writes a freshly-created config.json at 0600, not the umask default (0644)',
+  { skip: isPosix ? false : 'POSIX file-mode bits are not meaningful on Windows' },
+  () => {
+    writeConfig({ version: 1, clis: [] })
+    assert.equal(statSync(configPath()).mode & 0o777, 0o600)
+  },
+)
+
+test(
+  'readConfig tightens an already-existing, over-permissive config.json (upgrade path)',
+  { skip: isPosix ? false : 'POSIX file-mode bits are not meaningful on Windows' },
+  () => {
+    writeConfig({ version: 1, clis: [] })
+    chmodSync(configPath(), 0o644)
+    // Sanity: confirm the precondition actually loosened before re-asserting the fix.
+    assert.equal(statSync(configPath()).mode & 0o777, 0o644)
+
+    readConfig()
+
+    assert.equal(statSync(configPath()).mode & 0o777, 0o600)
+  },
+)

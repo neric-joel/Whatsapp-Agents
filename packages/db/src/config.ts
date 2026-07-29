@@ -14,7 +14,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
 import { newId } from './ids.js'
-import { configPath } from './paths.js'
+import { configPath, tightenPermissions } from './paths.js'
 
 /** How the bridge should talk to a CLI's stdout (which output parser to use). */
 export type CliKind = 'claude-code' | 'codex-cli' | 'generic'
@@ -103,8 +103,16 @@ function normalize(raw: unknown): AppConfig {
   return { version: CONFIG_VERSION, clis: out }
 }
 
-/** Read config.json. Returns an empty config if the file is missing or corrupt. */
+/**
+ * Read config.json. Returns an empty config if the file is missing or corrupt.
+ * `env` can hold a plaintext provider secret (the connections API accepts an
+ * arbitrary per-profile env map), so on every read we also best-effort tighten an
+ * already-existing file that predates this hardening (e.g. left 0644 by an older
+ * install) — see `tightenPermissions`. That call is cheap relative to the read+parse
+ * below, so there's no need to gate it to "once per process".
+ */
 export function readConfig(): AppConfig {
+  tightenPermissions(configPath(), 0o600)
   try {
     const text = readFileSync(configPath(), 'utf8')
     return normalize(JSON.parse(text))
@@ -113,16 +121,21 @@ export function readConfig(): AppConfig {
   }
 }
 
-/** Write config.json atomically (write temp + rename), creating the dir if needed. */
+/**
+ * Write config.json atomically (write temp + rename), creating the dir if needed.
+ * The temp file is created 0600 — `renameSync` preserves the source file's mode, so
+ * setting it on the destination AFTER the rename would leave a race window where
+ * config.json is briefly at the umask default; setting it on the temp file instead
+ * means the file is never observably more permissive than 0600.
+ */
 export function writeConfig(config: AppConfig): void {
   const path = configPath()
-  mkdirSync(dirname(path), { recursive: true })
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
   const tmp = join(dirname(path), `.config.${newId()}.tmp`)
-  writeFileSync(
-    tmp,
-    JSON.stringify({ version: CONFIG_VERSION, clis: config.clis }, null, 2),
-    'utf8',
-  )
+  writeFileSync(tmp, JSON.stringify({ version: CONFIG_VERSION, clis: config.clis }, null, 2), {
+    encoding: 'utf8',
+    mode: 0o600,
+  })
   renameSync(tmp, path)
 }
 
