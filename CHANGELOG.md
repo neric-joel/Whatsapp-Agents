@@ -51,8 +51,9 @@ before upgrading.
   redactor that redacts by the *field name* a value arrived under (walking nested objects
   and arrays, not just top-level strings), and a process-local registry of known secret
   values — every credential the bridge decrypts registers itself, and `redact()` then
-  strips that exact string from everything it sees for the rest of the process, whatever
-  shape it has.
+  strips that exact string from everything it sees, whatever shape it has. The registry
+  holds the 64 most recently used values (least-recently-used eviction) and can be cleared
+  outright, so it is a live backstop rather than an unbounded process-lifetime store.
 - **`Content-Disposition` filenames are RFC 5987/6266 encoded, and uploads reject quotes
   and control characters.** A stored filename was interpolated raw into the header, so a
   name containing `"` could open a second, attacker-chosen `filename*` parameter and make
@@ -78,7 +79,8 @@ before upgrading.
   encrypted credentials and every message; the WAL sidecars hold the same pages before
   checkpoint, so tightening only the main database file left the recent writes readable.
   Existing files are tightened in place on next boot, so an upgrade fixes a permissive
-  install without any action.
+  install without any action. These are POSIX mode bits — on Windows they are a no-op, and
+  the per-user ACLs on `%APPDATA%` already scope the app-data directory.
 - **The release and PR workflows are pinned and re-verified.** Every GitHub Action and the
   gitleaks container are pinned by immutable digest rather than a movable tag; the secret
   scan and the dependency audit re-run **on the tagged commit** (they previously only
@@ -136,6 +138,20 @@ before upgrading.
   the route's actual raw bytes rather than an assumed JSON envelope. Both shipped versions
   of the bug fail it, and it also pins the object-URL lifecycle: revoked on unmount, and
   revoked rather than leaked when it resolves after unmount.
+- **The browser's error channels are now a gate, not just the rendered output.** No e2e
+  spec asserted on `console.error` or uncaught page errors, so a route could satisfy every
+  existing assertion while throwing on each load. `e2e/zz-console-hygiene.spec.ts` walks the
+  room list and the connections/settings routes and fails on any `console.error`, uncaught
+  page error, or 4xx/5xx response. Aborted requests are
+  classified separately by their failure reason: Next's App Router cancels in-flight RSC
+  prefetches (`?_rsc=`) on navigation, and counting those as failures would make the spec
+  permanently red for correct behaviour.
+- **CI builds before it typechecks.** `apps/web/tsconfig.json` includes
+  `.next/types/**/*.ts`, which `next build` generates — the per-route validators that
+  reject a route file exporting anything beyond the handler names Next recognizes. Without
+  a build that glob matches nothing, and TypeScript does not error on an empty include, so
+  typechecking first cannot catch that class of error at all. It was not masking a failure
+  on this tree, but it was a hole in the gate rather than a matter of taste.
 
 ## [1.6.0] - 2026-07-26
 

@@ -50,10 +50,12 @@ export async function resolveRuntimeProvider({
   // accepted looked exactly like an install that never had one.
   const keyFailure = credentialKeyFailure(env)
   if (keyFailure) {
+    // No credential_id: `redactDeep` blanks any field whose NAME matches /credential/i,
+    // so it would always print `[REDACTED]` and identify nothing. reason + adapter_type
+    // are what an operator can act on.
     log('warn', 'credential.key.unusable', {
       reason: keyFailure.reason, // 'missing' | 'malformed' — never the key itself
       detail: keyFailure.message,
-      credential_id: credentialId,
       adapter_type: adapterType,
     })
     return null // fail closed: run on host login rather than with a key we can't trust
@@ -85,8 +87,8 @@ export async function resolveRuntimeProvider({
     // the fix (re-enter the stored credential) is invisible without a line saying so.
     // The caught error is deliberately not logged — GCM failures carry no useful detail
     // and the value is a secret.
+    // credential_id omitted for the same reason as above — redactDeep blanks it by name.
     log('warn', 'credential.decrypt_failed', {
-      credential_id: credentialId,
       adapter_type: adapterType,
       detail:
         'stored credential could not be decrypted with CREDENTIAL_ENCRYPTION_KEY (rotated key or tampered ciphertext); re-enter it in Settings → Providers',

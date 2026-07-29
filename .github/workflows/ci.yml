@@ -25,9 +25,16 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Build BEFORE typecheck. `apps/web/tsconfig.json` includes `.next/types/**/*.ts`,
+      # which `next build` generates — the per-route validators that check a route file
+      # exports nothing beyond the handler names Next recognizes. Without a build that
+      # glob matches nothing (TypeScript does not error on an empty include), so a bad
+      # route export is a TS2344 only in the post-build order. Typechecking first cannot
+      # catch that class at all; it does not currently mask a failure, but it is a hole
+      # in the gate rather than a preference.
+      - run: pnpm --filter web build
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm exec knip
       - run: pnpm test:coverage
-      - run: pnpm --filter web build
