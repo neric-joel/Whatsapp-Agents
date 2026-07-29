@@ -1,15 +1,23 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { chmodSync, mkdtempSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, before, test } from 'node:test'
 
+import Database from 'better-sqlite3'
+
 // Point the DB at a throwaway file BEFORE importing the module (getDb reads the
 // path lazily, so setting it here is enough).
 const tmp = mkdtempSync(join(tmpdir(), 'agentroom-db-'))
-process.env['AGENTROOM_DB_PATH'] = join(tmp, 'test.db')
+const dbFile = join(tmp, 'test.db')
+process.env['AGENTROOM_DB_PATH'] = dbFile
 
 const { getDb, closeDb, LOCAL_USER_ID, newId } = await import('../src/index.js')
+
+// `mode` only carries POSIX permission-bit meaning on POSIX; on Windows chmod merely
+// toggles the read-only attribute, so mode assertions are skipped there rather than
+// failing. Matches bridge/test/subprocess-killtree.test.ts.
+const isPosix = process.platform !== 'win32'
 
 before(() => {
   getDb()
@@ -110,3 +118,58 @@ test('updated_at trigger bumps on UPDATE', () => {
   assert.equal(after.n, 'Renamed Room')
   assert.ok(after.u > before, 'updated_at trigger must bump to a strictly later time on UPDATE')
 })
+
+test(
+  'getDb tightens an already-existing, over-permissive db file to 0600 at boot (upgrade path)',
+  { skip: isPosix ? false : 'POSIX file-mode bits are not meaningful on Windows' },
+  () => {
+    // The `before` hook already opened this file once, so it exists — loosen it to
+    // simulate an install from before this hardening landed (better-sqlite3's own
+    // default is 0644), then re-open and confirm the boot-time tighten fires.
+    closeDb()
+    chmodSync(dbFile, 0o644)
+    // Sanity: confirm the precondition actually loosened before re-asserting the fix.
+    assert.equal(statSync(dbFile).mode & 0o777, 0o644)
+
+    getDb()
+
+    assert.equal(statSync(dbFile).mode & 0o777, 0o600)
+  },
+)
+
+test(
+  'getDb tightens already-existing, over-permissive WAL sidecars (-wal/-shm) left by an unclean shutdown',
+  { skip: isPosix ? false : 'POSIX file-mode bits are not meaningful on Windows' },
+  () => {
+    // Simulate a pre-fix install that crashed mid-session: a WAL connection that was
+    // NEVER cleanly closed leaves `-wal`/`-shm` sidecars on disk holding committed room/
+    // message/credential data. This app's own getDb() doc says web + bridge each hold a
+    // long-lived WAL connection specifically so they can share the file, so this is the
+    // realistic case, not a rare one. Opening a raw connection here and deliberately
+    // never calling .close() on it reproduces that — going through closeDb() would
+    // perform a clean checkpoint/shutdown instead, which is not what we're testing.
+    const crashedFile = join(tmp, 'crashed.db')
+    const raw = new Database(crashedFile)
+    raw.pragma('journal_mode = WAL')
+    raw.exec('CREATE TABLE t (a INTEGER)')
+    raw.prepare('INSERT INTO t VALUES (1)').run()
+    // Deliberately no raw.close() — see comment above.
+
+    chmodSync(crashedFile, 0o644)
+    chmodSync(`${crashedFile}-wal`, 0o644)
+    chmodSync(`${crashedFile}-shm`, 0o644)
+    // Sanity: confirm the precondition actually loosened before re-asserting the fix.
+    assert.equal(statSync(crashedFile).mode & 0o777, 0o644)
+    assert.equal(statSync(`${crashedFile}-wal`).mode & 0o777, 0o644)
+    assert.equal(statSync(`${crashedFile}-shm`).mode & 0o777, 0o644)
+
+    closeDb() // release the module's singleton so the next getDb() call reopens
+    process.env['AGENTROOM_DB_PATH'] = crashedFile
+
+    getDb()
+
+    assert.equal(statSync(crashedFile).mode & 0o777, 0o600)
+    assert.equal(statSync(`${crashedFile}-wal`).mode & 0o777, 0o600)
+    assert.equal(statSync(`${crashedFile}-shm`).mode & 0o777, 0o600)
+  },
+)

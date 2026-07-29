@@ -93,6 +93,20 @@ export function seedMessage(db: Db, roomId: string, o: Row = {}): string {
   })
 }
 
+/** Insert a file (defaults: a tiny text file with no extracted text). Returns the id. */
+export function seedFile(db: Db, roomId: string, o: Row = {}): string {
+  const id = (o['id'] as string) ?? newId()
+  return insertRow(db, 'files', {
+    id,
+    room_id: roomId,
+    filename: 'file.txt',
+    mime_type: 'text/plain',
+    size_bytes: 0,
+    storage_path: `${id}/file.txt`,
+    ...o,
+  })
+}
+
 /** Insert an agent_run (defaults: queued). Returns the id. */
 export function seedRun(db: Db, roomId: string, agentId: string, o: Row = {}): string {
   const id = (o['id'] as string) ?? newId()

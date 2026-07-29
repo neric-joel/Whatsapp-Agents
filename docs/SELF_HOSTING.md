@@ -91,10 +91,15 @@ timeout/abort — but the model still has direct consequences:
    the "run only where you trust the participants" rule.
 
 2. **Provider auth is the CLI's own job — AgentRoom never stores it.** The bridge passes
-   through an allowlisted set of provider env vars (`ANTHROPIC_*`, `OPENAI_*`, `CODEX_*`,
-   …) to the child CLI; the CLIs authenticate to their own providers exactly as they do
-   in your terminal. You are never asked to paste a provider API key into AgentRoom.
-   (The optional BYO-credentials feature is the one exception — see
+   through non-secret provider *config* (`ANTHROPIC_BASE_URL`, `AWS_REGION`, …) to the
+   child CLI, but denies credential-shaped names ahead of that allowlist — anything
+   containing `SECRET`, `PASSWORD`, `CREDENTIAL`, `APIKEY`, `PRIVATE_KEY`, `SUPABASE` or
+   `SERVICE_ROLE`, starting with `BRIDGE_`, ending with `_KEY` or `_TOKEN`, or named
+   exactly `TOKEN` — so a
+   provider API key exported in your own shell is **not** inherited by the CLIs. They
+   authenticate from the login they already stored on this machine. You are never asked to
+   paste a provider API key into AgentRoom. (Two deliberate exceptions: a Connections
+   profile's own `env`, and the optional BYO-credentials feature — see
    `CREDENTIAL_ENCRYPTION_KEY` in [ARCHITECTURE.md](ARCHITECTURE.md#environment-variables)
    and [ADR-0010](adr/0010-byo-credentials.md).)
 

@@ -34,6 +34,7 @@ let h: TestDb
 function seedWorld(
   opts: {
     room?: Record<string, unknown>
+    agent?: Record<string, unknown>
     run?: Record<string, unknown>
     triggerMsg?: Record<string, unknown> | null
   } = {},
@@ -57,6 +58,7 @@ function seedWorld(
     system_prompt: null,
     tool_permissions: '{}',
     is_active: 1,
+    ...opts.agent,
   })
   // The acting agent is a member of the room (so the worker can build its packet).
   seedMember(h.db, 'room-1', {
@@ -550,4 +552,222 @@ test('cancellation mid-run → run marked cancelled, child aborted, not re-throw
   assert.equal(agentReplies().length, 0)
   assert.equal(snapshotCounters().runs_cancelled, 1)
   assert.equal(snapshotCounters().runs_failed, 0)
+})
+
+// ---------------------------------------------------------------------------
+// Tool-call gate (#83). The branch is dormant — no bundled adapter emits
+// `tool_call_requested` — so these drive it through an injected adapter. Two
+// properties matter, and both used to be broken in a way a green suite could not see:
+//
+//   * The approval requirement must be derived SERVER-SIDE from the agent row's
+//     `tool_permissions`. It used to be `event.requires_approval`, taken verbatim from
+//     the agent-emitted event: an agent that said `requires_approval: false` skipped
+//     `waiting_approval` and was written straight to `succeeded`.
+//   * The denylist must see the whole argument object. It used to read
+//     `arguments['command']` only, so a tool that named its parameter anything else —
+//     or nested it — was scanned against the empty string.
+// ---------------------------------------------------------------------------
+
+interface ToolCallRow {
+  tool_name: string
+  tool_category: string | null
+  status: string
+  requires_approval: number
+  error: string | null
+}
+
+/** Every tool_calls row for a run, in insertion order. */
+function toolCalls(runId = 'run-1'): ToolCallRow[] {
+  return h.db
+    .prepare(
+      'SELECT tool_name, tool_category, status, requires_approval, error FROM tool_calls WHERE run_id = ? ORDER BY created_at, id',
+    )
+    .all(runId) as ToolCallRow[]
+}
+
+/** An adapter that requests one tool call and then finishes normally. */
+function toolCallAdapter(
+  toolCall: { tool_name: string; tool_category?: string; arguments: Record<string, unknown> },
+  requiresApproval: boolean,
+): AgentAdapter {
+  return fakeAdapter(async function* (packet) {
+    yield {
+      type: 'tool_call_requested',
+      run_id: packet.run_id,
+      ...toolCall,
+      requires_approval: requiresApproval,
+    }
+    yield {
+      type: 'final_response',
+      run_id: packet.run_id,
+      response: { schema_version: 1, run_id: packet.run_id, content: 'done', content_type: 'text' },
+    }
+  })
+}
+
+/** Queue an extra run in the world seeded by seedWorld(). */
+function seedExtraRun(id: string): void {
+  seedRun(h.db, 'room-1', 'agent-1', {
+    id,
+    status: 'queued',
+    trigger_msg_id: 'trigger-1',
+    round_index: 0,
+    discussion_mode: 'independent',
+    deliberation_depth: 0,
+    deliberation_root_id: null,
+  })
+}
+
+test('agent-declared requires_approval:false does NOT self-approve a tool the agent row never granted', async () => {
+  // tool_permissions '{}' — the shipped default for every agent (seeded agents ship
+  // empty; POST /api/agents forces it empty). The agent claims no approval is needed.
+  seedWorld({ agent: { tool_permissions: '{}' } })
+  const adapter = toolCallAdapter(
+    { tool_name: 'shell', tool_category: 'exec', arguments: { command: 'ls -la' } },
+    false,
+  )
+
+  await processRun('run-1', { getAdapter: () => adapter, approvalPollMs: 1 })
+
+  const calls = toolCalls()
+  assert.equal(calls.length, 1)
+  // The load-bearing assertion: no human approved this, so it must never have run.
+  assert.notEqual(calls[0]?.status, 'succeeded')
+  assert.equal(calls[0]?.requires_approval, 1, 'gate is server-derived, not agent-declared')
+  // Nobody approved within the wait window, so the call times out unapproved.
+  assert.equal(calls[0]?.status, 'failed')
+  assert.equal(calls[0]?.error, 'approval timeout')
+  // The gate is about the tool, not the run: the reply still lands.
+  assert.equal(runRow().status, 'completed')
+})
+
+test('a tool the agent row DOES pre-approve runs without waiting (the gate is not just "always ask")', async () => {
+  seedWorld({ agent: { tool_permissions: JSON.stringify({ read_file: true }) } })
+  // The agent asks to be gated; the server-side grant is what decides, in both directions.
+  const adapter = toolCallAdapter(
+    { tool_name: 'read_file', arguments: { path: 'README.md' } },
+    true,
+  )
+
+  await processRun('run-1', { getAdapter: () => adapter, approvalPollMs: 1 })
+
+  assert.equal(toolCalls()[0]?.status, 'succeeded')
+  assert.equal(toolCalls()[0]?.requires_approval, 0)
+})
+
+test('tool_category is agent-asserted, so it can never grant: recorded, never trusted', async () => {
+  // The category branch was removed precisely because tool_category rides the same
+  // agent-controlled event as the call. With a `category:read` key present, an agent
+  // labelling `wipe_disk` as category `read` used to come back succeeded/0.
+  seedWorld({ agent: { tool_permissions: JSON.stringify({ 'category:read': true }) } })
+  const adapter = toolCallAdapter(
+    { tool_name: 'wipe_disk', tool_category: 'read', arguments: {} },
+    false,
+  )
+
+  await processRun('run-1', { getAdapter: () => adapter, approvalPollMs: 1 })
+
+  assert.equal(toolCalls()[0]?.requires_approval, 1, 'a category label must not self-grant')
+  assert.notEqual(toolCalls()[0]?.status, 'succeeded')
+  // Still persisted for the audit trail / approve-deny UI — displayed, not trusted.
+  assert.equal(toolCalls()[0]?.tool_category, 'read')
+})
+
+test('a tool literally NAMED "category:read" does not collide with a stale category key', async () => {
+  // With the name check as the only path, a `category:`-prefixed key is just an ordinary
+  // (dead) map entry. This pins that a tool cannot rename itself into one.
+  seedWorld({ agent: { tool_permissions: JSON.stringify({ 'category:read': true }) } })
+  // The agent asks to be gated (`true`), so `requires_approval: 0` below can only come from
+  // the server honouring the exact-name grant — not from trusting the agent's flag.
+  const adapter = toolCallAdapter({ tool_name: 'category:read', arguments: {} }, true)
+
+  await processRun('run-1', { getAdapter: () => adapter, approvalPollMs: 1 })
+
+  // It matches by exact name, which is the documented contract — a grant the operator
+  // wrote for that literal name, not a category wildcard reachable via a label. Assert the
+  // APPROVAL OUTCOME, not just the recorded name: in a security test the outcome is the
+  // only assertion that distinguishes gated from auto-approved.
+  assert.equal(toolCalls()[0]?.tool_name, 'category:read')
+  assert.equal(toolCalls()[0]?.requires_approval, 0, 'an exact-name grant still grants')
+  assert.equal(toolCalls()[0]?.status, 'succeeded')
+
+  seedExtraRun('run-2')
+  const relabelled = toolCallAdapter(
+    { tool_name: 'rm_rf', tool_category: 'read', arguments: {} },
+    false,
+  )
+  await processRun('run-2', { getAdapter: () => relabelled, approvalPollMs: 1 })
+  assert.equal(toolCalls('run-2')[0]?.requires_approval, 1)
+  assert.notEqual(toolCalls('run-2')[0]?.status, 'succeeded')
+})
+
+test('a malformed tool_permissions blob fails closed instead of hot-retrying the run', async () => {
+  // The JSON.parse used to sit above the claim transaction: a bad blob threw before the
+  // run was claimed, so it was never marked failed and the poller re-picked it forever.
+  seedWorld({ agent: { tool_permissions: '{not json' } })
+  const adapter = toolCallAdapter({ tool_name: 'shell', arguments: { command: 'ls' } }, false)
+
+  await processRun('run-1', { getAdapter: () => adapter, approvalPollMs: 1 })
+
+  // The run reaches a terminal state (no silent requeue) and the tool is still gated.
+  assert.equal(runRow().status, 'completed')
+  assert.equal(toolCalls()[0]?.requires_approval, 1)
+  assert.notEqual(toolCalls()[0]?.status, 'succeeded')
+})
+
+test('a truthy-but-not-true permission value does not pre-approve (fail closed)', async () => {
+  // 'yes', 1 and {} are all truthy. Only the literal boolean true grants.
+  seedWorld({ agent: { tool_permissions: JSON.stringify({ shell: 'yes' }) } })
+  const adapter = toolCallAdapter({ tool_name: 'shell', arguments: { command: 'ls' } }, false)
+
+  await processRun('run-1', { getAdapter: () => adapter, approvalPollMs: 1 })
+
+  assert.equal(toolCalls()[0]?.requires_approval, 1)
+  assert.notEqual(toolCalls()[0]?.status, 'succeeded')
+})
+
+test('the denylist scans every argument leaf, not just arguments.command', async () => {
+  seedWorld()
+
+  // Each shape puts the same denied string somewhere the old single-key read could not
+  // see. Every one of these was previously scanned as '' and waved through.
+  const shapes: Array<[string, Record<string, unknown>]> = [
+    ['cmd', { cmd: 'rm -rf /' }],
+    ['script', { script: 'rm -rf /' }],
+    ['args', { args: 'rm -rf /' }],
+    ['nested-object', { options: { shell: { run: 'rm -rf /' } } }],
+    ['nested-array', { argv: ['bash', '-lc', 'rm -rf /'] }],
+  ]
+
+  for (const [label, args] of shapes) {
+    const runId = `run-deny-${label}`
+    seedExtraRun(runId)
+    const adapter = toolCallAdapter({ tool_name: 'shell', arguments: args }, true)
+
+    await assert.rejects(
+      processRun(runId, { getAdapter: () => adapter, approvalPollMs: 1 }),
+      /blocked by denylist/,
+      `denied command under "${label}" must be caught`,
+    )
+
+    const calls = toolCalls(runId)
+    assert.equal(calls.length, 1, `${label}: the attempt is recorded`)
+    assert.equal(calls[0]?.status, 'denied', `${label}: must be denied`)
+    assert.equal(calls[0]?.error, 'Command blocked by denylist')
+    assert.equal(runRow(runId).status, 'failed', `${label}: the run fails`)
+  }
+})
+
+test('a benign command under a non-standard argument name is not denied', async () => {
+  // The widened scan must not turn every argument into a false positive.
+  seedWorld()
+  const adapter = toolCallAdapter(
+    { tool_name: 'git', arguments: { argv: ['commit', '-m', 'drop legacy flag'] } },
+    true,
+  )
+
+  await processRun('run-1', { getAdapter: () => adapter, approvalPollMs: 1 })
+
+  assert.notEqual(toolCalls()[0]?.status, 'denied')
+  assert.equal(runRow().status, 'completed')
 })

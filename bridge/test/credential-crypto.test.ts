@@ -2,10 +2,10 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import {
+  credentialKeyFailure,
   decryptSecret,
   encryptSecret,
   getCredentialKey,
-  hasCredentialKey,
 } from '@agentroom/shared/credential-crypto'
 
 // A deterministic 32-byte test key (hex). Real keys come from CREDENTIAL_ENCRYPTION_KEY.
@@ -48,9 +48,80 @@ test('key validation: requires a 32-byte hex or base64 key', () => {
     () => getCredentialKey({ CREDENTIAL_ENCRYPTION_KEY: 'tooshort' } as NodeJS.ProcessEnv),
     /32 bytes/,
   )
-  assert.equal(hasCredentialKey({} as NodeJS.ProcessEnv), false)
-  assert.equal(hasCredentialKey({ CREDENTIAL_ENCRYPTION_KEY: KEY_HEX } as NodeJS.ProcessEnv), true)
-  // base64 form also accepted
+  assert.equal(
+    credentialKeyFailure({ CREDENTIAL_ENCRYPTION_KEY: KEY_HEX } as NodeJS.ProcessEnv),
+    null,
+  )
+  // strict standard base64 (43 chars + '=' padding) also accepted
   const b64 = Buffer.from(KEY_HEX, 'hex').toString('base64')
-  assert.equal(hasCredentialKey({ CREDENTIAL_ENCRYPTION_KEY: b64 } as NodeJS.ProcessEnv), true)
+  assert.equal(credentialKeyFailure({ CREDENTIAL_ENCRYPTION_KEY: b64 } as NodeJS.ProcessEnv), null)
+})
+
+test('strict base64url (43 chars, unpadded) is accepted', () => {
+  const b64url = Buffer.from(KEY_HEX, 'hex').toString('base64url')
+  assert.equal(
+    credentialKeyFailure({ CREDENTIAL_ENCRYPTION_KEY: b64url } as NodeJS.ProcessEnv),
+    null,
+  )
+  const parsed = getCredentialKey({ CREDENTIAL_ENCRYPTION_KEY: b64url } as NodeJS.ProcessEnv)
+  assert.equal(parsed.toString('hex'), KEY_HEX)
+})
+
+// The BREAKING change of this sweep degrades silently: an install carried over with a
+// passphrase-shaped key does not crash, it just stops being able to use BYO
+// credentials. Both call sites used to gate on a boolean and so could only report
+// "not set" — for a key that IS set. The reason must be distinguishable, and the
+// actionable format text must be reachable through it.
+test('an unusable key reports WHICH way it is unusable, with the actionable message', () => {
+  const missing = credentialKeyFailure({} as NodeJS.ProcessEnv)
+  assert.equal(missing?.reason, 'missing')
+  assert.match(missing?.message ?? '', /not set/)
+
+  const passphrase = 'my-super-secret-agentroom-master-passphrase!'
+  const malformed = credentialKeyFailure({
+    CREDENTIAL_ENCRYPTION_KEY: passphrase,
+  } as NodeJS.ProcessEnv)
+  assert.equal(malformed?.reason, 'malformed')
+  // The one message that says how to fix it — previously unreachable through both paths.
+  assert.match(malformed?.message ?? '', /openssl rand -hex 32/)
+  // ...and it never echoes the rejected value back into a response or a log line.
+  assert.ok(!(malformed?.message ?? '').includes(passphrase))
+})
+
+// REGRESSION (CWE-521 / findings.md C2): Node's base64 decoder silently drops
+// out-of-alphabet characters, so a 43-44 character passphrase like this one decodes
+// to exactly 32 bytes under the OLD lenient `Buffer.from(x, 'base64')` fallback and
+// was wrongly accepted as a "256-bit key" — carrying only ~40-60 bits of real entropy.
+// This test MUST fail against the pre-fix code (confirmed by stashing the fix and
+// re-running: the old code returns a 32-byte key with no throw).
+test('a passphrase that happens to decode to 32 bytes under lenient base64 is REJECTED', () => {
+  const passphrase = 'my-super-secret-agentroom-master-passphrase!'
+  // Sanity-check the premise: Node's lenient decoder really does produce 32 bytes here.
+  assert.equal(Buffer.from(passphrase, 'base64').length, 32)
+  assert.throws(
+    () => getCredentialKey({ CREDENTIAL_ENCRYPTION_KEY: passphrase } as NodeJS.ProcessEnv),
+    /openssl rand -hex 32/,
+  )
+  // Still fails CLOSED through the feature gate the callers use — a passphrase is never
+  // coerced into a weak key just because the gate now reports a reason.
+  assert.equal(
+    credentialKeyFailure({ CREDENTIAL_ENCRYPTION_KEY: passphrase } as NodeJS.ProcessEnv)?.reason,
+    'malformed',
+  )
+})
+
+test('a 63-char hex string is rejected with an actionable message (not silently re-parsed as base64)', () => {
+  const hex63 = KEY_HEX.slice(1) // 63 chars
+  assert.throws(
+    () => getCredentialKey({ CREDENTIAL_ENCRYPTION_KEY: hex63 } as NodeJS.ProcessEnv),
+    /openssl rand -hex 32/,
+  )
+})
+
+test('a 65-char hex string is rejected with an actionable message', () => {
+  const hex65 = KEY_HEX + '0'
+  assert.throws(
+    () => getCredentialKey({ CREDENTIAL_ENCRYPTION_KEY: hex65 } as NodeJS.ProcessEnv),
+    /openssl rand -hex 32/,
+  )
 })

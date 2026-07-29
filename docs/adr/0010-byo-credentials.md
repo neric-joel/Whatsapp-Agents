@@ -11,10 +11,14 @@
 ## Context
 
 Agents are created with `provider`/`adapter_type` but there is no in-product way for a user
-to supply a credential — real CLIs authenticate via host login + `*_BIN`, and `buildChildEnv`
-reads provider keys only from the bridge's global `process.env`. The product's core is
+to supply a credential — real CLIs authenticate via host login + `*_BIN`, and at the time
+`buildChildEnv` had no injection seam, so a provider key could only reach a child by being
+forwarded from the bridge's global `process.env`. The product's core is
 connecting different CLIs into chat rooms, so a user must be able to bring their own
 CLI/provider + key. Mirrors Hermes Agent's per-user auth store resolved at runtime.
+*(That forwarding route is now closed: `SECRET_ENV_PATTERN` strips credential-shaped names
+from `process.env` before a child sees them, and the `inject` seam decided below is the
+only way a provider key reaches one.)*
 
 ## Decision
 

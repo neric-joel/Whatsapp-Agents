@@ -6,7 +6,7 @@ import { filesDir, getDb, rowToFile } from '@agentroom/db'
 import { apiError } from '@/lib/api-error'
 import { internalError } from '@/lib/api-security'
 import { getAuthenticatedUser } from '@/lib/auth'
-import { isSafeInlineMimeType } from '@/lib/download-disposition'
+import { contentDispositionHeader, isSafeInlineMimeType } from '@/lib/download-disposition'
 import { requireRoomMember } from '@/lib/permissions'
 
 interface RouteParams {
@@ -51,7 +51,7 @@ export async function GET(req: Request, props: RouteParams) {
   return new Response(new Uint8Array(buf), {
     headers: {
       'Content-Type': file.mime_type,
-      'Content-Disposition': `${disposition}; filename="${file.filename}"`,
+      'Content-Disposition': contentDispositionHeader(disposition, file.filename),
       'Content-Security-Policy': "default-src 'none'; sandbox",
       'X-Content-Type-Options': 'nosniff',
       'Cache-Control': 'private, max-age=3600',

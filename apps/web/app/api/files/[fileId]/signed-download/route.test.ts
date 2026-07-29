@@ -38,6 +38,7 @@ vi.mock('@/lib/permissions', () => ({
   requireRoomMember: vi.fn(() => Promise.resolve()),
 }))
 
+import { splitDispositionParams } from '@/lib/__tests__/disposition-params'
 import { SAFE_INLINE_DOWNLOAD_MIME_TYPES } from '@/lib/download-disposition'
 
 import { GET } from './route'
@@ -78,7 +79,9 @@ describe('GET /api/files/[fileId]/signed-download', () => {
 
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toBe('image/svg+xml')
-    expect(res.headers.get('Content-Disposition')).toBe('attachment; filename="diagram.svg"')
+    expect(res.headers.get('Content-Disposition')).toBe(
+      `attachment; filename="diagram.svg"; filename*=UTF-8''diagram.svg`,
+    )
     expect(res.headers.get('Content-Security-Policy')).toBe("default-src 'none'; sandbox")
     expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff')
   })
@@ -87,6 +90,64 @@ describe('GET /api/files/[fileId]/signed-download', () => {
     expect(SAFE_INLINE_DOWNLOAD_MIME_TYPES).toContain('image/png')
     expect(SAFE_INLINE_DOWNLOAD_MIME_TYPES).toContain('text/plain')
     expect(SAFE_INLINE_DOWNLOAD_MIME_TYPES).not.toContain('image/svg+xml')
+  })
+
+  it('still serves an allowlisted inline MIME type inline, unaffected by the disposition-header fix', async () => {
+    await writeStoredFile('rooms/room-1/file-2/photo.png', 'binary-ish')
+    db.fileGet.mockReturnValue({
+      ...baseFileRow,
+      id: 'file-2',
+      filename: 'photo.png',
+      mime_type: 'image/png',
+      storage_path: 'rooms/room-1/file-2/photo.png',
+    })
+
+    const res = await GET(new Request('http://localhost:3000/api/files/file-2/signed-download'), {
+      params: Promise.resolve({ fileId: 'file-2' }),
+    })
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Content-Disposition')).toBe(
+      `inline; filename="photo.png"; filename*=UTF-8''photo.png`,
+    )
+  })
+
+  it('does not let a stored filename with a quote smuggle a second, attacker-controlled filename* — chart.png saved to disk as quarterly-report.pdf.exe', async () => {
+    // The concrete attack from the brief: a real PNG named so that its stored
+    // `filename` closes the quoted `filename=` parameter early and appends a
+    // `filename*` that a browser would prefer, saving the download under a
+    // completely different, attacker-chosen name.
+    const poisonedName = `chart.png"; filename*=UTF-8''quarterly-report.pdf.exe; z="`
+    await writeStoredFile('rooms/room-1/file-3/chart.png', 'fake-png-bytes')
+    db.fileGet.mockReturnValue({
+      ...baseFileRow,
+      id: 'file-3',
+      filename: poisonedName,
+      mime_type: 'image/png',
+      storage_path: 'rooms/room-1/file-3/chart.png',
+    })
+
+    const res = await GET(new Request('http://localhost:3000/api/files/file-3/signed-download'), {
+      params: Promise.resolve({ fileId: 'file-3' }),
+    })
+
+    expect(res.status).toBe(200)
+    const disposition = res.headers.get('Content-Disposition') ?? ''
+    const params = splitDispositionParams(disposition)
+    const starParams = params.filter((p) => p.startsWith("filename*=UTF-8''"))
+    // Exactly one real filename* parameter — the DB row's poisoned filename does
+    // land in the header text, but only inertly, inside the quoted fallback.
+    expect(starParams).toHaveLength(1)
+    // And that one real parameter is the fully encoded original string, never
+    // the raw attacker-chosen filename the row tried to smuggle in. `'` and `*`
+    // in the payload are RFC 5987 ext-value-significant, so the real encoder
+    // escapes them too, on top of encodeURIComponent.
+    const expectedStar = encodeURIComponent(poisonedName).replace(
+      /['()*!]/g,
+      (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase(),
+    )
+    expect(starParams[0]).toBe(`filename*=UTF-8''${expectedStar}`)
+    expect(starParams[0]).not.toBe("filename*=UTF-8''quarterly-report.pdf.exe")
   })
 })
 

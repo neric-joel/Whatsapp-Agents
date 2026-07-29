@@ -6,7 +6,152 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
-_Nothing yet._
+A security-hardening sweep: ten tasks across redaction, credential handling, the child
+process environment, download headers, the tool-approval gate, file permissions, and the
+release pipeline. Two of them are breaking for an existing install, and both break
+**quietly** — nothing crashes, a feature just stops working. Read the BREAKING section
+before upgrading.
+
+### BREAKING
+
+- **`CREDENTIAL_ENCRYPTION_KEY` now accepts only a real 256-bit key.** Exactly three
+  forms: 64 hex characters, standard base64 (43 characters + `=` padding), or base64url
+  (43 characters, unpadded). A passphrase is rejected — Node's base64 decoder silently
+  discards out-of-alphabet characters, so a 43-44 character sentence used to decode to
+  "32 bytes" and was accepted as a 256-bit key while carrying ~40-60 bits of real entropy
+  (CWE-521). **An install using a passphrase does not crash.** BYO credentials simply stop
+  working: the web API answers `503` on `POST /api/credentials`, and the bridge falls back
+  to host login, so agent runs continue with whatever the CLI's own login provides.
+  **Action:** generate a real key (`openssl rand -hex 32`), set it in **both** `apps/web`
+  and `bridge` (the two values must match), and **re-enter every stored BYO credential** in
+  Settings → Providers — ciphertexts written under the old key cannot be decrypted under
+  the new one.
+- **Credential-shaped env vars are no longer forwarded to spawned agent CLIs.**
+  `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`,
+  `GOOGLE_APPLICATION_CREDENTIALS`, any name containing `APIKEY` or `CREDENTIAL`, and any
+  name ending `_KEY` are now stripped from the child environment. The deny runs **before**
+  the allowlist, so listing one in `BRIDGE_CHILD_ENV_ALLOW` does not re-enable it — that is
+  deliberate, not an oversight. Previously the `ANTHROPIC_*` / `OPENAI_*` / `GOOGLE_*`
+  provider-config pass-through handed every one of those keys to **every** child CLI,
+  including one you connected yourself pointing at any binary on disk. **If a CLI was
+  authenticating off a key exported in your shell, its agent runs will now fail auth.**
+  **Action:** run that CLI's own login, bind a stored credential to the agent (ADR-0010),
+  or put the key in that Connections profile's own `env` in `config.json` — all three scope
+  it to the one CLI that needs it instead of broadcasting it.
+
+### Security
+
+- **Redaction now covers the API-key formats providers actually issue.** The patterns
+  recognized the retired `sk-` shape and little else, so a modern key reaching a log line,
+  a persisted message, or the error sink was written out in full — measured at a ~28%
+  full-key leak rate across the formats in use, now 0. Added: `sk-ant-*` (Anthropic),
+  `sk-proj-*` (OpenAI project keys), `github_pat_*`, Google `AIza…`, and Slack `xox*`
+  tokens. Two format-independent backstops sit behind the patterns, because a pattern list
+  is only ever current until the next provider ships a new prefix: a key-name-aware deep
+  redactor that redacts by the *field name* a value arrived under (walking nested objects
+  and arrays, not just top-level strings), and a process-local registry of known secret
+  values — every credential the bridge decrypts registers itself, and `redact()` then
+  strips that exact string from everything it sees, whatever shape it has. The registry
+  holds the 64 most recently used values (least-recently-used eviction) and can be cleared
+  outright, so it is a live backstop rather than an unbounded process-lifetime store.
+- **`Content-Disposition` filenames are RFC 5987/6266 encoded, and uploads reject quotes
+  and control characters.** A stored filename was interpolated raw into the header, so a
+  name containing `"` could open a second, attacker-chosen `filename*` parameter and make
+  the browser save a download under a different name and extension
+  (`chart.png` → `quarterly-report.pdf.exe`). The header now emits an ASCII-safe quoted
+  `filename=` fallback alongside a percent-encoded `filename*=UTF-8''…`; the encoder also
+  escapes `'`, which `encodeURIComponent` leaves raw and which is the ext-value delimiter.
+  This also fixes a permanent 500: a filename containing a raw CR/LF (or a lone UTF-16
+  surrogate) made `new Response(...)` throw, so the file could never be downloaded again.
+- **The tool-call approval gate is server-authoritative.** It previously trusted the agent's
+  own `requires_approval` and `tool_category` fields on the event it emitted — an agent
+  could mark its own destructive call pre-approved. Both agent-supplied fields are now
+  ignored and the classification is derived server-side, and the destructive-command scan
+  walks the entire argument tree instead of looking only at a top-level `command` key
+  (which any nesting, or a differently named argument, walked straight past). Scan
+  truncation is now a loud `warn` rather than a silent pass. The path remains **dormant** —
+  no bundled adapter emits `tool_call_requested`, so the gate still never fires in the
+  shipped product (as `docs/ARCHITECTURE.md` has said since 1.4.1); this hardens the
+  scaffolding ahead of a producer.
+- **App-data files are created owner-only.** The app-data directory and its `files/` folder
+  are created `0700`, and `config.json`, `agentroom.db` and its `-wal`/`-shm` sidecars
+  `0600`. The database holds
+  encrypted credentials and every message; the WAL sidecars hold the same pages before
+  checkpoint, so tightening only the main database file left the recent writes readable.
+  Existing files are tightened in place on next boot, so an upgrade fixes a permissive
+  install without any action. These are POSIX mode bits — on Windows they are a no-op, and
+  the per-user ACLs on `%APPDATA%` already scope the app-data directory.
+- **The release and PR workflows are pinned and re-verified.** Every GitHub Action and the
+  gitleaks container are pinned by immutable digest rather than a movable tag; the secret
+  scan and the dependency audit re-run **on the tagged commit** (they previously only
+  proved the branch that was merged, not the thing being released); and a tag that is not
+  an ancestor of `origin/main` is refused outright. `npx agentroom` now verifies a SHA-256
+  digest of the source archive it builds, pinned to a **commit** rather than a movable tag
+  — see the entry below for the full change.
+- **The gitleaks allowlist no longer exempts the entire test tree.** It carried a path rule
+  covering every test file, which is where a real leaked secret is most likely to be
+  committed by accident. It now allowlists two exact fixture values by anchored literal
+  regex, so anything else in a test file is scanned like the rest of the repo.
+- **`npx agentroom` now pins the source it builds by content, not by name.** The bin
+  fetched `archive/refs/tags/v<version>.tar.gz` and checked only that the result *looked*
+  like AgentRoom before installing, building and executing it — so force-moving a released
+  tag changed what every future `npx agentroom@X.Y.Z` ran, while the npm artifact anyone
+  audits stayed byte-identical. `publish-npm` now records the released commit and the
+  SHA-256 of its GitHub source archive into the published `package.json`, and the bin
+  fetches `archive/<commit>.tar.gz` and refuses to extract bytes whose digest does not
+  match. An absent or malformed pin is a hard failure (`AGENTROOM_ALLOW_UNVERIFIED_SOURCE=1`
+  is the documented opt-out for running the bin from a checkout; there is none for a
+  mismatch). The primary download's resolved redirect target must now be `https:` on
+  `github.com` or `codeload.github.com` — previously only the `AGENTROOM_SOURCE_TARBALL`
+  override rejected `http://`, and nothing looked at where a redirect actually landed.
+  Both opt-outs now warn on stderr rather than passing quietly. (ADR-0014, amended)
+- **A release that cannot publish to npm now fails instead of reporting success.** The
+  publish job downgraded a missing `NPM_TOKEN` to a `::notice` and skipped, so every tag
+  from v1.0.0 to v1.6.0 produced a green run and a GitHub Release while publishing nothing
+  — six versions, unnoticed, with the README pointing every reader at `npx agentroom`. The
+  skip branch is gone, and a new `publish-preflight` job requires the secret **before** the
+  GitHub Release is created, so the ordinary failure stops the run while nothing
+  user-visible exists.
+
+### Fixed
+
+- **File attachment Preview and Download were completely broken; both work now.** The card
+  called `res.json()` on `signed-download`, which answers a success with the file's raw
+  bytes and only ever returns JSON on an *error* — so every click threw a parse error and
+  nothing opened. Three further faults surfaced while fixing it, each of which would have
+  kept the button dead on its own: Download did a pre-flight `fetch` before `window.open`,
+  which spends the click's transient activation and made Safari and Firefox treat every
+  download as a blocked pop-up; the mounted-ref guard was never reset to `true` on mount,
+  so React StrictMode's dev-mode double-invoke left it permanently `false` after the first
+  render and every Preview silently discarded its result; and the preview object URL was
+  never revoked when it was replaced or when the card unmounted. Preview is now gated on the
+  same inline-safe MIME allowlist the download route uses to choose `inline` vs
+  `attachment`, so an SVG attachment takes the Download path and keeps the route's
+  `default-src 'none'; sandbox` CSP instead of becoming a CSP-less same-origin `blob:` URL.
+- **Both of those Preview failures are now regression-tested at the DOM level.** They were
+  invisible to the suite for a structural reason: `apps/web` runs every test under
+  `environment: 'node'`, so nothing rendered, and a "the button does nothing" bug has no
+  logic-level symptom. `apps/web/components/__tests__/FileAttachmentCard.test.tsx` renders
+  the card under `React.StrictMode` in jsdom (opted into per-file with the
+  `// @vitest-environment jsdom` pragma — the suite default stays `node`), clicks the
+  button, and routes `fetch` to the real `signed-download` `GET` handler so the response is
+  the route's actual raw bytes rather than an assumed JSON envelope. Both shipped versions
+  of the bug fail it, and it also pins the object-URL lifecycle: revoked on unmount, and
+  revoked rather than leaked when it resolves after unmount.
+- **The browser's error channels are now a gate, not just the rendered output.** No e2e
+  spec asserted on `console.error` or uncaught page errors, so a route could satisfy every
+  existing assertion while throwing on each load. `e2e/zz-console-hygiene.spec.ts` walks the
+  room list and the connections/settings routes and fails on any `console.error`, uncaught
+  page error, or 4xx/5xx response. Aborted requests are
+  classified separately by their failure reason: Next's App Router cancels in-flight RSC
+  prefetches (`?_rsc=`) on navigation, and counting those as failures would make the spec
+  permanently red for correct behaviour.
+- **CI builds before it typechecks.** `apps/web/tsconfig.json` includes
+  `.next/types/**/*.ts`, which `next build` generates — the per-route validators that
+  reject a route file exporting anything beyond the handler names Next recognizes. Without
+  a build that glob matches nothing, and TypeScript does not error on an empty include, so
+  typechecking first cannot catch that class of error at all. It was not masking a failure
+  on this tree, but it was a hole in the gate rather than a matter of taste.
 
 ## [1.6.0] - 2026-07-26
 

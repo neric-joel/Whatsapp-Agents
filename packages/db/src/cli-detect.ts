@@ -15,6 +15,8 @@ import { spawn } from 'node:child_process'
 import { existsSync, statSync } from 'node:fs'
 import { delimiter, isAbsolute, join } from 'node:path'
 
+import { buildWindowsCmdCommandLine, needsWindowsCmdCommandLine } from '@agentroom/shared'
+
 import type { CliKind } from './config.js'
 
 /** A known CLI AgentRoom can auto-detect and connect with sensible defaults. */
@@ -41,7 +43,7 @@ export const KNOWN_CLIS: KnownCli[] = [
     defaultArgs: ['--print', '--output-format', 'json'],
     kind: 'claude-code',
     authHint:
-      'Uses your existing Claude Code login (Claude subscription or ANTHROPIC_API_KEY). If replies fail with an auth error, run `claude login` in your terminal.',
+      'Uses the login Claude Code already stored on this machine. A provider API key exported in your shell is NOT passed through — run `claude login` in your terminal, or bind a stored credential to the agent.',
   },
   {
     key: 'codex',
@@ -51,7 +53,7 @@ export const KNOWN_CLIS: KnownCli[] = [
     defaultArgs: ['exec', '--json', '-'],
     kind: 'codex-cli',
     authHint:
-      'Uses your existing Codex login (ChatGPT sign-in or OPENAI_API_KEY). If replies fail with an auth error, run `codex login` in your terminal.',
+      'Uses the login Codex already stored on this machine. A provider API key exported in your shell is NOT passed through — run `codex login` in your terminal, or bind a stored credential to the agent.',
   },
   {
     key: 'gemini',
@@ -65,7 +67,7 @@ export const KNOWN_CLIS: KnownCli[] = [
     defaultArgs: ['--prompt', 'Reply to the conversation above.'],
     kind: 'generic',
     authHint:
-      'Uses your existing Gemini CLI login (run `gemini` once to authenticate, or set GEMINI_API_KEY).',
+      'Uses the login Gemini CLI already stored on this machine — run `gemini` once to authenticate. A provider API key exported in your shell is NOT passed through; put it in this CLI profile env instead.',
   },
 ]
 
@@ -95,34 +97,6 @@ const isFile = (p: string): boolean => {
   } catch {
     return false
   }
-}
-
-const CMD_META_RE = /([()\][%!^"`<>&|;, *?])/g
-const CMD_SAFE_TOKEN_RE = /^[A-Za-z0-9_./:\\-]+$/
-
-function escapeCmdCommand(command: string): string {
-  return command.replace(CMD_META_RE, '^$1')
-}
-
-function escapeCmdArgument(arg: string): string {
-  let escaped = String(arg)
-  escaped = escaped.replace(/(?=(\\+?)?)\1"/g, '$1$1\\"')
-  escaped = escaped.replace(/(?=(\\+?)?)\1$/, '$1$1')
-  escaped = `"${escaped}"`
-  escaped = escaped.replace(CMD_META_RE, '^$1')
-  return escaped.replace(CMD_META_RE, '^$1')
-}
-
-export function buildWindowsCmdCommandLine(binPath: string, args: readonly string[]): string {
-  const argv = [escapeCmdCommand(binPath), ...args.map((arg) => escapeCmdArgument(arg))]
-  // `cmd /s /c` strips the first and last quote from the command string, so the
-  // outer quote pair is intentional. The escaped argv inside is what reaches the
-  // .cmd shim, including paths containing spaces.
-  return `"${argv.join(' ')}"`
-}
-
-function needsWindowsCmdCommandLine(binPath: string, args: readonly string[]): boolean {
-  return ![binPath, ...args].every((arg) => CMD_SAFE_TOKEN_RE.test(arg))
 }
 
 /**
@@ -171,6 +145,8 @@ interface ProbeOutput {
  * tokens use Node's default cmd.exe arg escaping. Tokens with spaces or cmd
  * metacharacters use one escaped `/c` command string with `windowsVerbatimArguments`,
  * preserving paths like `C:\Program Files\...\x.cmd` without making args shell syntax.
+ * The escaping itself lives in `@agentroom/shared` so this probe and the bridge's
+ * spawn path cannot drift apart.
  */
 export function spawnTarget(
   bin: string,

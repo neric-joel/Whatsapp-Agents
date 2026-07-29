@@ -2,19 +2,29 @@ name: Release
 
 # Fires ONLY when a human pushes a semver tag (e.g. `v1.5.0`). It never tags or
 # releases on its own — pushing the tag is the explicit, human gate. On a tag it
-# re-runs the full quality gate, publishes a GitHub Release with auto-generated
+# re-runs the full quality gate AND the security gate (`pnpm audit`, gitleaks —
+# security.yml never runs on a tag push), refuses to release a commit that is not
+# an ancestor of `origin/main`, publishes a GitHub Release with auto-generated
 # notes, and publishes the `agentroom` npx bootstrapper to npm **with provenance**
-# (ADR-0014). The npm job needs the `NPM_TOKEN` repo secret; when it is absent the
-# job skips with a visible notice instead of failing, so the GitHub Release is
-# never blocked. AgentRoom is a local-only app — there are no container images.
+# (ADR-0014). AgentRoom is a local-only app — there are no container images.
+#
+# A release that cannot publish FAILS. `publish-preflight` requires the `NPM_TOKEN`
+# secret and runs BEFORE `release`, so a missing secret stops the run while nothing
+# user-visible exists yet. This used to be a `::notice` that skipped the publish and
+# let the GitHub Release through: every tag v1.0.0…v1.6.0 therefore produced a green
+# run and a Release page while publishing nothing to npm, unnoticed for six versions.
 #
 # To cut a release (human):
 #   git tag v1.5.0 && git push origin v1.5.0
-# To publish npm after adding NPM_TOKEN later: re-run the publish-npm job on the
-# tag's existing workflow run (Actions UI → the run → Re-run job; via CLI,
-# `gh run rerun <run-id> --failed` or rerun by the numeric job id). NEVER delete
-# and re-push a released tag — the bin published from it targets that tag's
-# content; cut a new patch version instead.
+# Preflight removes the missing-token case, but `publish-npm` can still fail AFTER
+# the GitHub Release exists (registry outage, the archive fetch failing, an expired
+# token) — that half-state is reachable, and this is how to finish it: fix the cause,
+# then re-run just the failed job on the tag's existing run —
+#   gh run rerun <run-id> --failed
+# (Actions UI → the run → Re-run failed jobs). `release` is idempotent-by-skip: it
+# will not be re-run, so the Release page is left as-is.
+# NEVER delete and re-push a released tag — the ruleset blocks it, and the bin
+# published from it pins that tag's COMMIT; cut a new patch version instead.
 
 on:
   push:
@@ -34,10 +44,16 @@ jobs:
     env:
       NEXT_PUBLIC_APP_URL: http://localhost:3000
     steps:
-      - uses: actions/checkout@v7
-      # Unconditional (does NOT depend on NPM_TOKEN): a tag whose source
-      # self-identifies as a different version must never release — and the tag
-      # ruleset makes a mis-tagged release permanently unfixable.
+      # Actions are pinned to full commit SHAs, not tags: this job holds no secrets,
+      # but `release` and `publish-npm` both depend on it and publish-npm never re-runs
+      # the suite — a moved tag here could report a failing gate as green.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # gitleaks below scans the full history, as security.yml does
+      # Duplicated here, in the earliest job, as well as in publish-npm: a tag whose
+      # source self-identifies as a different version must never release, and the tag
+      # ruleset makes a mis-tagged release permanently unfixable — so catch it before
+      # anything else in this workflow runs.
       - name: Verify tag matches package.json version
         run: |
           PKG_V="$(node -p "require('./package.json').version")"
@@ -45,12 +61,28 @@ jobs:
             echo "::error::package.json version ${PKG_V} does not match tag ${GITHUB_REF_NAME}"
             exit 1
           fi
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      # Re-prove the security gate ON THE TAGGED COMMIT. security.yml runs gitleaks and
+      # `pnpm audit` on PRs/pushes to main only — never on a tag push — so without these
+      # two steps a release trusts merge-time state it never re-checks. Mirrors
+      # security.yml's secret-scan job (GITHUB_WORKSPACE, not `${{ }}`, inside `run:`).
+      #
+      # The image is digest-pinned (v8.30.1), not `:latest`, for the same reason the
+      # actions above are: this step runs as root with the workspace mounted, before
+      # install/test/build in this job, so a moved tag could both report the secret scan
+      # green and alter what the rest of the gate then checks. Keep this digest in
+      # lockstep with security.yml's gitleaks step.
+      - name: gitleaks (secret scan, full history)
+        run: |
+          docker run --rm -v "${GITHUB_WORKSPACE}:/repo" \
+            ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
+            detect --source=/repo --redact --no-banner -v
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --audit-level high
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm format:check
@@ -58,8 +90,31 @@ jobs:
       - run: pnpm test:coverage
       - run: pnpm --filter web build
 
+  # Fails the run BEFORE `release` creates anything, when the release could not publish
+  # to npm anyway. Ordering is the point: `publish-npm` failing after `release` leaves a
+  # Release page for a version that is not on the registry, and the registry is where the
+  # README sends users. This job takes no checkout and never materialises the token —
+  # only the boolean `secrets.NPM_TOKEN != ''` crosses into it.
+  #
+  # If the owner switches to npm Trusted Publishing (OIDC), delete this job, its entry in
+  # `release.needs`, and publish-npm's `NODE_AUTH_TOKEN`: there is no token to require.
+  # Intended side effect: a fork that pushes a `v*` tag now gets a red run here instead of
+  # a green one with a GitHub Release, because forks do not inherit the secret.
+  publish-preflight:
+    runs-on: ubuntu-latest
+    permissions: {} # no checkout, no API calls — it needs no token scopes at all
+    steps:
+      - name: Require NPM_TOKEN before anything is released
+        env:
+          HAS_NPM_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
+        run: |
+          if [ "$HAS_NPM_TOKEN" != "true" ]; then
+            echo "::error title=NPM_TOKEN is not configured::A release publishes the agentroom bootstrapper to npm, and the README sends every user to 'npx agentroom'. Without the NPM_TOKEN repo secret this tag would create a GitHub Release and publish nothing — which is how v1.0.0 through v1.6.0 shipped to no one. Add the NPM_TOKEN secret (or switch to npm Trusted Publishing and delete this job), then re-run this workflow on the tag."
+            exit 1
+          fi
+
   release:
-    needs: [verify]
+    needs: [verify, publish-preflight]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -70,9 +125,32 @@ jobs:
             echo "::error::Tag ${GITHUB_REF_NAME} is not a valid release tag (expected vMAJOR.MINOR.PATCH)"
             exit 1
           fi
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0 # full history so release notes can diff from the previous tag
+          fetch-depth: 0 # full history: release notes diff from the previous tag, and the ancestry check below needs real history
+      # Tag creation is not restricted server-side (the ruleset covers update/deletion/
+      # non-fast-forward only), so a `v*` tag can be pushed onto ANY commit, including one
+      # that never went through a PR. Refuse to release such a commit.
+      - name: Verify tagged commit is an ancestor of origin/main
+        run: |
+          if ! git fetch --no-tags --quiet origin +refs/heads/main:refs/remotes/origin/main; then
+            echo "::error::Could not fetch origin/main, so tag ${GITHUB_REF_NAME} cannot be proven to come from reviewed history. Refusing to release. Re-run this job once the fetch succeeds."
+            exit 1
+          fi
+          # `|| rc=$?`, not `; rc=$?`: the runner's default shell is `bash -e`, which would
+          # abort the step at the failing command before the assignment ran — failing closed
+          # but printing nothing. merge-base exits 1 for "not an ancestor" and >1 (128) for a
+          # real git error; conflating them sends an operator hunting the wrong problem.
+          rc=0
+          git merge-base --is-ancestor "${GITHUB_SHA}" refs/remotes/origin/main || rc=$?
+          if [ "$rc" -gt 1 ]; then
+            echo "::error::git merge-base failed (exit ${rc}) — ancestry of ${GITHUB_SHA} could not be determined, so it cannot be proven to come from reviewed history. This is a git/checkout problem (missing object or incomplete history), not a rejected tag. Refusing to release."
+            exit 1
+          fi
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} points at ${GITHUB_SHA}, which is not an ancestor of origin/main — it never reached main, so it was never reviewed. Do NOT move or delete this tag (the ruleset blocks both). Merge the change to main, then cut the next patch version from the merged commit."
+            exit 1
+          fi
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -83,9 +161,9 @@ jobs:
             --verify-tag
 
   # Publishes the tiny `agentroom` npx bootstrapper (bin + README + LICENSE — no app
-  # code; see ADR-0014) with npm provenance. Gated on the same human-pushed tag and
-  # a green `verify`. Skips (visibly, without failing the release) when NPM_TOKEN is
-  # not configured.
+  # code; see ADR-0014) with npm provenance. Gated on the same human-pushed tag and a
+  # green `verify`. Every step is unconditional: if this job cannot publish, the run is
+  # red and the release is incomplete, which is the only honest report.
   publish-npm:
     # Needs `release` too: if the GitHub Release fails, npm must not publish a
     # version whose release page doesn't exist (or describes different content).
@@ -95,34 +173,59 @@ jobs:
       contents: read
       id-token: write # OIDC for npm --provenance
     steps:
-      - name: Check NPM_TOKEN presence
-        id: token
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          if [ -z "$NPM_TOKEN" ]; then
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=npm publish skipped::NPM_TOKEN secret is not set. The GitHub Release is unaffected. Add the secret, then re-run this job on this tag (gh run rerun --job publish-npm) to publish."
-          else
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          fi
-      - uses: actions/checkout@v7
-        if: steps.token.outputs.present == 'true'
-      - uses: actions/setup-node@v7
-        if: steps.token.outputs.present == 'true'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
       - name: Verify tag matches package.json version
-        if: steps.token.outputs.present == 'true'
         run: |
           PKG_V="$(node -p "require('./package.json').version")"
           if [ "v${PKG_V}" != "${GITHUB_REF_NAME}" ]; then
             echo "::error::package.json version ${PKG_V} does not match tag ${GITHUB_REF_NAME}"
             exit 1
           fi
+      # The published bin refuses to run without this block, so it is written HERE and
+      # never committed: pinning the source to the commit being released (a commit id
+      # cannot be force-moved; a `vX.Y.Z` tag can) plus the digest of that commit's
+      # archive, which the bin checks before it extracts, builds and executes anything.
+      # `package.json` is always in the npm tarball regardless of `files:`.
+      - name: Record the source commit and archive digest the bin must verify
+        run: |
+          set -euo pipefail
+          # The bin fetches from a hard-coded repository constant. If that constant and
+          # this repository ever drift, the digest below would describe a DIFFERENT
+          # repository's archive than the one users download — refuse to publish.
+          if ! grep -qF "https://github.com/${GITHUB_REPOSITORY}/archive" scripts/npx-bootstrap.mjs; then
+            echo "::error::scripts/npx-bootstrap.mjs does not target ${GITHUB_REPOSITORY}; a digest recorded here would not describe what the bin downloads."
+            exit 1
+          fi
+          curl --fail --show-error --silent --location --proto '=https' --proto-redir '=https' \
+            --tlsv1.2 --retry 3 --output source.tar.gz \
+            "https://github.com/${GITHUB_REPOSITORY}/archive/${GITHUB_SHA}.tar.gz"
+          SOURCE_SHA256="$(sha256sum source.tar.gz | cut -d ' ' -f 1)"
+          rm -f source.tar.gz
+          SOURCE_SHA256="$SOURCE_SHA256" node -e '
+            const fs = require("node:fs")
+            const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"))
+            pkg.agentroom = { source: { commit: process.env.GITHUB_SHA, sha256: process.env.SOURCE_SHA256 } }
+            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\n")
+          '
+          echo "Recorded source commit ${GITHUB_SHA} sha256 ${SOURCE_SHA256}"
+      - name: Verify the recorded source pin before publishing
+        run: |
+          node -e '
+            const s = require("./package.json").agentroom?.source
+            if (!/^[0-9a-f]{40}$/.test(s?.commit ?? "") || !/^[0-9a-f]{64}$/.test(s?.sha256 ?? "")) {
+              console.error("::error::package.json carries no valid agentroom.source pin; the published bin would refuse to run. Not publishing.")
+              process.exit(1)
+            }
+            if (s.commit !== process.env.GITHUB_SHA) {
+              console.error(`::error::recorded commit ${s.commit} is not the commit being released (${process.env.GITHUB_SHA}). Not publishing.`)
+              process.exit(1)
+            }
+          '
       - name: Publish to npm (provenance)
-        if: steps.token.outputs.present == 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --provenance --access public

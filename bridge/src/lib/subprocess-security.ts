@@ -1,6 +1,8 @@
 import { existsSync, statSync } from 'node:fs'
 import { delimiter, isAbsolute, join } from 'node:path'
 
+import { buildWindowsCmdCommandLine, needsWindowsCmdCommandLine } from '@agentroom/shared'
+
 /**
  * Security helpers for spawning agent CLIs.
  *
@@ -11,9 +13,13 @@ import { delimiter, isAbsolute, join } from 'node:path'
  *      by cmd.exe / sh, so there is no command-injection surface.
  *   2. The binary is resolved to an absolute path from a trusted source (an
  *      explicit *_BIN env var, or a PATH lookup) — never from agent data.
- *   3. The child environment is allowlisted — secrets (anything matching
- *      SECRET_ENV_PATTERN below: *_SECRET / *_TOKEN / SERVICE_ROLE / SUPABASE /
- *      PRIVATE_KEY / bridge config) are never forwarded to a child process.
+ *   3. The child environment is allowlisted, and anything matching
+ *      SECRET_ENV_PATTERN is denied before the allowlist is consulted, so no secret
+ *      in the bridge's own environment reaches a child. That regex, defined below,
+ *      is the single source of truth for which names are secret — deliberately not
+ *      restated here, because every restatement is one more thing to drift. A
+ *      legitimate provider key reaches exactly one child through the per-run
+ *      `inject` seam instead (ADR-0010), never through the environment.
  */
 
 export class BinaryNotFoundError extends Error {
@@ -23,9 +29,24 @@ export class BinaryNotFoundError extends Error {
   }
 }
 
-/** Env var names that must NEVER reach a child process. */
+/**
+ * Env var names that must NEVER reach a child process. Tested BEFORE the allowlist, so
+ * a match is an unconditional deny that `BRIDGE_CHILD_ENV_ALLOW` cannot override.
+ *
+ * The credential clauses deliberately outrank PROVIDER_ENV_PATTERN below: an
+ * `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` sitting in the bridge's own environment is a
+ * host-wide credential that would otherwise be handed to EVERY spawned CLI, including a
+ * user-configured profile whose `bin` is any path on disk. Per-agent provider keys have
+ * their own path (the `inject` seam), and a CLI profile can still opt one in explicitly
+ * via its own `env`.
+ *
+ * `CREDENTIAL` and `APIKEY` are unanchored, like `SECRET` and `PASSWORD`, because the
+ * anchored forms missed real credentials: `^CREDENTIAL_` never matched
+ * `GOOGLE_APPLICATION_CREDENTIALS` (a path to a service-account file holding a private
+ * key), and `_KEY$` never matched `OPENAI_APIKEY`, which has no underscore.
+ */
 const SECRET_ENV_PATTERN =
-  /(SUPABASE|SERVICE_ROLE|SECRET|PASSWORD|PRIVATE_KEY|^BRIDGE_|_TOKEN$|^TOKEN$)/i
+  /(SUPABASE|SERVICE_ROLE|SECRET|PASSWORD|CREDENTIAL|PRIVATE_KEY|APIKEY|^BRIDGE_|_TOKEN$|^TOKEN$|_KEY$)/i
 
 /** Base, non-secret environment a CLI needs to run on Windows/POSIX. */
 const BASE_ENV_KEYS = [
@@ -61,14 +82,19 @@ const BASE_ENV_KEYS = [
   'SHELL',
 ]
 
-/** Provider auth the agent CLIs legitimately read from the environment. */
+/**
+ * Provider configuration the agent CLIs legitimately read from the environment —
+ * endpoints, regions, model and profile selectors (`ANTHROPIC_BASE_URL`,
+ * `AWS_REGION`, `OPENAI_VISION_MODEL`, …). SECRET_ENV_PATTERN is applied first, so a
+ * provider-prefixed name ending in `_KEY` is denied despite matching here.
+ */
 const PROVIDER_ENV_PATTERN =
   /^(ANTHROPIC_|CLAUDE_CODE_|OPENAI_|CODEX_|AWS_|AZURE_|GOOGLE_|GEMINI_|VERTEX_)/i
 
 /**
  * Build a minimal, allowlisted environment for a child agent CLI. Secrets are
- * stripped unconditionally; self-hosters can forward extra vars via
- * `BRIDGE_CHILD_ENV_ALLOW` (comma-separated names).
+ * stripped unconditionally — BEFORE the allowlist is consulted, so naming one in
+ * `BRIDGE_CHILD_ENV_ALLOW` (comma-separated names) does not forward it.
  */
 interface ChildEnvOptions {
   /**
@@ -87,8 +113,6 @@ interface ChildEnvOptions {
 }
 
 const ENV_NAME_RE = /^[A-Z][A-Z0-9_]*$/
-const CMD_META_RE = /([()\][%!^"`<>&|;, *?])/g
-const CMD_SAFE_TOKEN_RE = /^[A-Za-z0-9_./:\\-]+$/
 
 function normalizeEnvName(name: string, platform: NodeJS.Platform): string {
   return platform === 'win32' ? name.toUpperCase() : name
@@ -105,31 +129,6 @@ function envValue(
     if (key.toUpperCase() === normalized) return value
   }
   return undefined
-}
-
-function escapeCmdCommand(command: string): string {
-  return command.replace(CMD_META_RE, '^$1')
-}
-
-function escapeCmdArgument(arg: string): string {
-  let escaped = String(arg)
-  escaped = escaped.replace(/(?=(\\+?)?)\1"/g, '$1$1\\"')
-  escaped = escaped.replace(/(?=(\\+?)?)\1$/, '$1$1')
-  escaped = `"${escaped}"`
-  escaped = escaped.replace(CMD_META_RE, '^$1')
-  return escaped.replace(CMD_META_RE, '^$1')
-}
-
-export function buildWindowsCmdCommandLine(binPath: string, args: readonly string[]): string {
-  const argv = [escapeCmdCommand(binPath), ...args.map((arg) => escapeCmdArgument(arg))]
-  // With `cmd /s /c`, cmd.exe strips the first and last quote from the command
-  // string. The outer pair here is deliberate; the escaped inner argv survives as
-  // the literal .cmd invocation, including paths with spaces.
-  return `"${argv.join(' ')}"`
-}
-
-function needsWindowsCmdCommandLine(binPath: string, args: readonly string[]): boolean {
-  return ![binPath, ...args].every((arg) => CMD_SAFE_TOKEN_RE.test(arg))
 }
 
 export function buildChildEnv(

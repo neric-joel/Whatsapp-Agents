@@ -5,6 +5,7 @@ import { DM_Sans, JetBrains_Mono } from 'next/font/google'
 
 import AppShell from '@/components/AppShell'
 import { ToastProvider } from '@/contexts/ToastContext'
+import { jsonForScript } from '@/lib/json-for-script'
 import { APP_THEMES, DEFAULT_APP_THEME, THEME_STORAGE_KEY } from '@/lib/themes'
 
 // Self-hosted via next/font (downloaded at build, served from /_next). This removes the
@@ -23,12 +24,12 @@ export const metadata = { title: 'AgentRoom', description: 'AgentRoom' }
 
 const themeInitScript = `(() => {
   try {
-    const allowed = ${JSON.stringify(APP_THEMES.map((theme) => theme.id))};
-    const stored = window.localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)});
-    const theme = allowed.includes(stored) ? stored : ${JSON.stringify(DEFAULT_APP_THEME)};
+    const allowed = ${jsonForScript(APP_THEMES.map((theme) => theme.id))};
+    const stored = window.localStorage.getItem(${jsonForScript(THEME_STORAGE_KEY)});
+    const theme = allowed.includes(stored) ? stored : ${jsonForScript(DEFAULT_APP_THEME)};
     document.documentElement.dataset.agentroomTheme = theme;
   } catch {
-    document.documentElement.dataset.agentroomTheme = ${JSON.stringify(DEFAULT_APP_THEME)};
+    document.documentElement.dataset.agentroomTheme = ${jsonForScript(DEFAULT_APP_THEME)};
   }
 })();`
 

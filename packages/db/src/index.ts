@@ -1,6 +1,5 @@
 export type { CliProbeResult, CliProbeStatus, DetectedCli, KnownCli } from './cli-detect.js'
 export {
-  buildWindowsCmdCommandLine,
   detectKnownClis,
   KNOWN_CLIS,
   probeCommand,

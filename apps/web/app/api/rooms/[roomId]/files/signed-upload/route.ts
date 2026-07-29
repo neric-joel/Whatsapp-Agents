@@ -3,7 +3,11 @@ import { NextRequest } from 'next/server'
 
 import { apiError, apiSuccess } from '@/lib/api-error'
 import { assertSameOrigin, enforceRateLimit, internalError } from '@/lib/api-security'
-import { ALLOWED_UPLOAD_MIME_TYPES, MAX_UPLOAD_BYTES } from '@/lib/api-validation'
+import {
+  ALLOWED_UPLOAD_MIME_TYPES,
+  isValidUploadFilename,
+  MAX_UPLOAD_BYTES,
+} from '@/lib/api-validation'
 import { getAuthenticatedUser } from '@/lib/auth'
 import { requireRoomMember } from '@/lib/permissions'
 
@@ -50,21 +54,15 @@ export async function POST(req: NextRequest, props: RouteParams) {
     return apiError('VALIDATION_ERROR', 'Missing file in multipart body', 400)
   }
 
-  // Reject path separators / traversal in the supplied filename (same invariant the
-  // old JSON schema enforced via signedUploadSchema.filename).
+  // Reject path separators, traversal, quotes, and control characters in the
+  // supplied filename. Shared with signedUploadSchema.filename in
+  // lib/api-validation.ts (see isValidUploadFilename) so the two validators
+  // cannot drift apart.
   const filename = file.name
-  if (
-    !filename ||
-    filename.length > 255 ||
-    filename.includes('/') ||
-    filename.includes('\\') ||
-    filename.includes('\0') ||
-    filename === '.' ||
-    filename === '..'
-  ) {
+  if (!isValidUploadFilename(filename)) {
     return apiError(
       'VALIDATION_ERROR',
-      'filename must not contain path separators or traversal sequences',
+      'filename must not contain path separators, quotes, control characters, or traversal sequences',
       400,
     )
   }

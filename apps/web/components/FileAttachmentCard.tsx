@@ -1,6 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+
+import { useToast } from '@/contexts/ToastContext'
+import {
+  canPreviewInline,
+  resolvePreviewImageUrl,
+  signedDownloadUrl,
+} from '@/lib/file-attachment-open'
 
 interface FileAttachment {
   id: string
@@ -32,23 +39,75 @@ function mimeIcon(mime: string) {
   return 'FILE'
 }
 
-async function fetchSignedUrl(fileId: string) {
-  const res = await fetch(`/api/files/${fileId}/signed-download`)
-  const json = (await res.json()) as { ok: boolean; data?: { signed_url: string } }
-  if (!res.ok || !json.ok || !json.data) throw new Error('Failed to fetch signed URL')
-  return json.data.signed_url
-}
-
 export default function FileAttachmentCard({ file }: Props) {
   const [imgUrl, setImgUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const { showToast } = useToast()
+  const mountedRef = useRef(true)
+
+  // Revoke whenever imgUrl is replaced or the card unmounts — the object URL from
+  // resolvePreviewImageUrl is otherwise never reclaimed by the browser.
+  useEffect(() => {
+    return () => {
+      if (imgUrl) URL.revokeObjectURL(imgUrl)
+    }
+  }, [imgUrl])
+
+  // Must reset to `true` in the effect body, not just `false` in its cleanup: React
+  // StrictMode (on by default for App Router since Next 13.5.1, and not overridden in
+  // next.config.mjs) dev-mode-only double-invokes this — mount, cleanup, mount again —
+  // to catch effects that don't tolerate a simulated remount. Without the reset here,
+  // that cleanup's `false` would stick permanently after the very first render, before
+  // any click, and every Preview would silently revoke instead of ever setting imgUrl.
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  // ONE decision, read by both the click handler and the button label below. They were
+  // two separate `startsWith('image/')` expressions; if they ever drift apart you get a
+  // button labelled Preview that takes the Download path, or one labelled Download that
+  // opens a blob. Deriving both from a single `const` makes that drift impossible.
+  const previewable = canPreviewInline(file.mime_type)
 
   async function openFile() {
+    if (!previewable) {
+      // Must be the first thing this does, with no `await` before it: window.open
+      // only keeps the click's transient activation if it runs synchronously inside
+      // the same task as the click. A pre-flight fetch here (an earlier version of
+      // this file had one, to get a catchable error) sits between the click and this
+      // call and made Safari/Firefox treat every Download as a blocked pop-up. A
+      // blocked pop-up, or the file having been deleted (a 404 in the new tab), isn't
+      // caught here — that's the same limitation OutputsPanel's plain
+      // `<a target="_blank">` already lives with.
+      const opened = window.open(signedDownloadUrl(file.id), '_blank', 'noopener,noreferrer')
+      if (!opened) {
+        // Same reasoning as the repo's error-boundary allowlist in eslint.config.mjs:
+        // the structured logger (lib/logger.ts) is server-only, so the browser console
+        // is the only triage sink a client component has for "why did this fail".
+        // eslint-disable-next-line no-console
+        console.error('openFile failed', new Error('window.open returned null (pop-up blocked?)'))
+        showToast(`Couldn't open ${file.filename}.`, 'error')
+      }
+      return
+    }
+
     setLoading(true)
     try {
-      const signedUrl = await fetchSignedUrl(file.id)
-      if (file.mime_type.startsWith('image/')) setImgUrl(signedUrl)
-      else window.open(signedUrl, '_blank', 'noopener,noreferrer')
+      const url = await resolvePreviewImageUrl(file.id)
+      // The card can unmount while this fetch is in flight (e.g. the message list
+      // re-renders it away). setImgUrl would then be a no-op, so the object URL would
+      // never reach the revoke-on-change effect above and leak for the rest of the
+      // page session — revoke it directly instead.
+      if (mountedRef.current) setImgUrl(url)
+      else URL.revokeObjectURL(url)
+    } catch (err) {
+      // Devtools is the only triage sink here too — see the note above.
+      // eslint-disable-next-line no-console
+      console.error('openFile failed', err)
+      showToast(`Couldn't open ${file.filename}.`, 'error')
     } finally {
       setLoading(false)
     }
@@ -70,7 +129,7 @@ export default function FileAttachmentCard({ file }: Props) {
           disabled={loading}
           className="rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 disabled:opacity-50"
         >
-          {file.mime_type.startsWith('image/') ? 'Preview' : 'Download'}
+          {previewable ? 'Preview' : 'Download'}
         </button>
       </div>
       {imgUrl && (

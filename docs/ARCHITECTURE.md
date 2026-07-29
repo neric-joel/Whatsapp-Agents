@@ -176,8 +176,44 @@ a user-created agent gets **no** tool auto-approvals.
 > branch — exists as scaffolding but **does not fire in the shipped product**: no bundled
 > adapter (Claude Code, Codex, mock) emits the `tool_call_requested` event that triggers it.
 > It is intentionally **not advertised as an active feature** until an adapter produces real
-> tool-call requests (tracked in #83). The `tool_permissions`-forced-empty invariant above
-> still stands as a defense for when the gate is wired.
+> tool-call requests (tracked in #83).
+
+**How the gate decides (server-authoritative).** The requirement is derived in the bridge
+from the agent row, never from the event: `requiresHumanApproval()` in
+`bridge/src/workers/run-worker.ts` pre-approves a call only when `tool_permissions` holds
+the exact `tool_name` with the literal value `true`. Anything else waits for a human: an
+absent key, a truthy-but-not-`true` value, a permissions blob that is not a plain object or
+does not parse.
+
+Two fields on the event are deliberately **not read at all**, because both are written by
+the agent on the same channel as the call they would excuse:
+
+- `requires_approval` — an agent that sets it `false` would clear its own gate.
+- `tool_category` — a `category:` grant would be a wildcard an agent could enter by
+  labelling `wipe_disk` as category `read`. Grants bind to the tool NAME, which is what an
+  executor dispatches on. A category grant can only be reintroduced against a server-side
+  `tool_name → category` registry, which cannot exist until a producer does. The category
+  is still stored on the `tool_calls` row for audit and display.
+
+This is why `tool_permissions`-forced-empty is load-bearing rather than decorative: with
+`{}`, every tool any agent requests stops for approval. Nothing in the product can write a
+grant today — `POST /api/agents` hard-codes `{}`, `updateAgentSchema` omits the field so
+PATCH cannot set it, and seeds ship `{}` — so the only way to create one is direct SQL.
+
+Before that, the call's `arguments` are walked and each string leaf is run through
+`isDeniedCommand`, under any key and inside objects and arrays alike. **The walk is bounded
+and not exhaustive:** breadth-first, capped at 5 000 nodes and 12 levels
+(`packages/shared/src/denylist.ts`). Anything past a bound is skipped and **not** denied —
+the scan fails open — but it is never silent: the scan returns `truncated: true` and the
+run worker logs `tool.scan.truncated`. Breadth-first ordering means shallower leaves are
+reached before deeper ones — but **ordering within a level still decides**: a denied command
+is still found after 4 998 sibling leaves at the same depth and missed after 4 999 (reported,
+not denied). "Shallow" is not a guarantee of coverage, only a better bet than depth-first.
+
+The denylist itself is a **speed bump, not a security boundary** (it substring-matches a
+free-form shell string and is trivially bypassed); the real controls are the subprocess
+sandbox, this approval gate, and the CLI's own permission mode. See the header of
+`packages/shared/src/denylist.ts`.
 
 ## Trust boundaries
 
@@ -216,7 +252,7 @@ files authoritative. **Never commit real secrets.**
 | `AGENTROOM_HOME` | no | `%APPDATA%\AgentRoom` (Windows) / `~/.agentroom` | Where local app-data lives (SQLite DB + uploaded files + `config.json`). Set to relocate it; must match the bridge |
 | `NEXT_PUBLIC_APP_URL` | no | — | App origin added to the CSRF/Origin allowlist and used for absolute URLs (set it behind a reverse proxy) |
 | `EXTRA_ALLOWED_ORIGINS` | no | — | Comma-separated extra origins allowed for mutating requests (reverse proxies). The app's own origin is always allowed |
-| `CREDENTIAL_ENCRYPTION_KEY` | conditional | — | **Server-only** 32-byte key (64-hex or base64) that encrypts BYO provider credentials before storage. **Required only to enable the BYO-credentials feature**; must match the bridge's value |
+| `CREDENTIAL_ENCRYPTION_KEY` | conditional | — | **Server-only** 32-byte key that encrypts BYO provider credentials before storage. Exactly three accepted forms — 64 hex characters, standard base64 (43 characters + `=` padding), or base64url (43 characters, unpadded); a passphrase is rejected. **Required only to enable the BYO-credentials feature**; must match the bridge's value |
 | `LOG_LEVEL` | no | `info` | `debug` \| `info` \| `warn` \| `error` |
 | `SENTRY_DSN` / `ERROR_TRACKING_DSN` | no | — | Opt-in error tracking; no-op (and no egress) when unset |
 
@@ -236,8 +272,8 @@ files authoritative. **Never commit real secrets.**
 | `ENABLE_IMAGE_TEXT_EXTRACTION` | no | `false` | Enable OpenAI image-text egress (**off by default**) |
 | `OPENAI_API_KEY` | conditional | — | Required only if image-text extraction is enabled |
 | `OPENAI_VISION_MODEL` | no | `gpt-4.1-mini` | Vision model for extraction |
-| `CREDENTIAL_ENCRYPTION_KEY` | conditional | — | 32-byte key (64-hex or base64) that decrypts user-stored BYO credentials at spawn. Required only for the BYO-credentials feature; must match the web app's value. Never logged |
-| `BRIDGE_CHILD_ENV_ALLOW` | no | — | Comma-separated extra env names forwarded to child CLIs. Secrets (matching `SUPABASE`/`SERVICE_ROLE`/`SECRET`/`PASSWORD`/`PRIVATE_KEY`/`BRIDGE_*`/`*_TOKEN`/`TOKEN`) are **never** forwarded |
+| `CREDENTIAL_ENCRYPTION_KEY` | conditional | — | 32-byte key that decrypts user-stored BYO credentials at spawn. Exactly three accepted forms — 64 hex characters, standard base64 (43 characters + `=` padding), or base64url (43 characters, unpadded); a passphrase is rejected. Required only for the BYO-credentials feature; must match the web app's value. Never logged |
+| `BRIDGE_CHILD_ENV_ALLOW` | no | — | Comma-separated extra env names forwarded to child CLIs. Secrets (names containing `SUPABASE`/`SERVICE_ROLE`/`SECRET`/`PASSWORD`/`CREDENTIAL`/`PRIVATE_KEY`/`APIKEY`, starting with `BRIDGE_`, ending with `_TOKEN`/`_KEY`, or exactly `TOKEN`) are stripped **before** this list is read, so naming one here does not forward it. Separately, provider **config** vars (`ANTHROPIC_*`, `CLAUDE_CODE_*`, `OPENAI_*`, `CODEX_*`, `AWS_*`, `AZURE_*`, `GOOGLE_*`, `GEMINI_*`, `VERTEX_*`) that do not match that secret pattern go to **every** child CLI without being listed here |
 | `LOG_LEVEL` | no | `info` | Log level |
 | `SENTRY_DSN` / `ERROR_TRACKING_DSN` | no | — | Opt-in error tracking |
 

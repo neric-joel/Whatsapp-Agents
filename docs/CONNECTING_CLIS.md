@@ -10,13 +10,17 @@ authentication, the health states you'll see, and how a connected CLI joins a ro
 **AgentRoom never manages a CLI's login and never asks you for an API key.** A
 connection only records two things: *where the binary is* and *how to invoke it*. When
 an agent replies, AgentRoom runs that binary as a subprocess, and the binary uses
-whatever credentials it already stored on your machine — your `claude login`, your
-`codex` ChatGPT sign-in, an `ANTHROPIC_API_KEY` in your environment, etc.
+whatever credentials it already **stored on your machine** — your `claude login`, your
+`codex` ChatGPT sign-in, etc.
 
 That means:
 
 - You do **not** paste Claude or Codex keys into AgentRoom.
-- If a CLI works in your terminal, it works in AgentRoom.
+- If a CLI works in your terminal *on a stored login*, it works in AgentRoom. If it works
+  only because you exported a provider API key into your shell, it will **not** — the
+  bridge denies credential-shaped variables when it builds the child environment (see
+  [Where per-CLI env lives](#where-per-cli-env-lives--the-policy) below). Use the CLI's
+  own login, this profile's `env`, or a stored credential bound to the agent.
 - If a CLI isn't logged in, its reply fails with the CLI's own auth error (the run is
   marked **failed** with that message — never silently hung), and you fix it the normal
   way: run `claude login` / `codex login` in your terminal.
@@ -129,9 +133,16 @@ every agent run.
 By default AgentRoom stores **no** secrets: a CLI's auth is deferred to that CLI's own
 config (cleaner, fewer secrets on disk). The optional per-profile `env` exists only for
 the rare CLI that genuinely requires an extra variable, and you opt into it explicitly.
-When AgentRoom spawns a child it always strips its own secrets from the environment;
-only the variables you put in a profile's `env` (plus the standard provider variables a
-CLI reads itself) are forwarded.
+When AgentRoom spawns a child it always strips its own secrets from the environment. The
+deny is case-insensitive and applied *before* the allowlist, so it cannot be re-opened; it
+covers any name that **contains** `SUPABASE`, `SERVICE_ROLE`, `SECRET`, `PASSWORD`,
+`CREDENTIAL`, `PRIVATE_KEY` or `APIKEY`, **starts with** `BRIDGE_`, **ends with** `_TOKEN`
+or `_KEY`, or **is exactly** `TOKEN`. A provider API key sitting in the bridge's
+environment is therefore **not** handed to your CLI.
+What a child gets is the base OS variables, the non-secret provider *config* variables a
+CLI reads itself (`ANTHROPIC_BASE_URL`, `AWS_REGION`, …), and the variables you put in
+this profile's `env`. If your CLI needs an API key from AgentRoom, put it in this
+profile's `env` or bind a stored credential to the agent.
 
 ## 4. Verify + health states
 

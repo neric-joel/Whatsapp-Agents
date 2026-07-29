@@ -41,14 +41,20 @@ Security fixes target the `main` branch and the latest tagged release (currently
   `system_prompt` is delivered via **stdin**, never argv; the binary is resolved
   from trusted host configuration (a `*_BIN` env var, `PATH`, or your own
   Connections entry) — **never from agent data**; the child environment is reduced
-  to an allowlist — base OS vars plus the provider auth vars the CLIs need
-  (`ANTHROPIC_*`, `OPENAI_*`, `GEMINI_*`, …) — and nothing else from the bridge's
-  own environment is forwarded (the only secrets a child sees beyond that are ones
-  you explicitly bind: a BYO credential's single var, or a Connections profile's
-  own `env`); output is capped (10 MB → kill) and runs are bounded by a timeout
-  with a force-kill of the process tree. (A destructive-command denylist exists in
-  the tool-call path, but that path is dormant scaffolding today — no bundled
-  adapter emits `tool_call_requested`; see #83.)
+  to an allowlist — base OS vars plus non-secret provider *config* the CLIs read
+  (`ANTHROPIC_BASE_URL`, `AWS_REGION`, …) — while credential-shaped names
+  (`*_KEY`, `*APIKEY*`, `*_TOKEN`, `TOKEN`, `*SECRET*`, `*PASSWORD*`, `*CREDENTIAL*`,
+  `*PRIVATE_KEY*`, `*SUPABASE*`, `*SERVICE_ROLE*`, `BRIDGE_*`) are denied outright,
+  ahead of the allowlist, so nothing else from the bridge's own environment is
+  forwarded (the only secrets a child sees are ones you explicitly bind: a BYO
+  credential's single var, or a Connections profile's own `env`);
+  output is capped (10 MB → kill) and runs are bounded by a timeout
+  with a force-kill of the process tree. (The tool-call path is dormant scaffolding
+  today — no bundled adapter emits `tool_call_requested`; see #83. When it is wired,
+  approval is decided server-side from the agent's `tool_permissions` and the tool name,
+  never from agent-emitted fields. The destructive-command denylist on that path is a **UX speed
+  bump, not a security boundary** — it substring-matches a free-form shell string and
+  anything determined gets past it; do not count it as a control.)
 - **Write-path boundary.** The browser never writes `agent_runs` or `messages`
   directly — every write goes Browser → Next.js route handler → local SQLite
   (`@agentroom/db`), and only the bridge claims and completes runs. Mutating API
@@ -59,12 +65,22 @@ Security fixes target the `main` branch and the latest tagged release (currently
   `~/.agentroom` (`%APPDATA%\AgentRoom` on Windows) — SQLite + files. The API is
   unauthenticated **because** it is localhost-only — do not reverse-proxy it onto
   a network you don't trust.
-- **The `npx agentroom` bootstrapper** downloads the tagged release source from
-  GitHub over TLS and trusts its local cache (`~/.agentroom/app/` — on Windows
+- **The `npx agentroom` bootstrapper** downloads the release source from GitHub over
+  TLS, **pinned by content rather than by name**: the published package records the
+  commit it was cut from and the SHA-256 of that commit's source archive, the bin
+  fetches `/archive/<commit>.tar.gz` (a commit id cannot be force-moved the way a
+  `vX.Y.Z` tag can), and it refuses to extract — let alone build or run — bytes whose
+  digest does not match. A missing or malformed pin is a hard failure, not a skipped
+  check; the resolved redirect target must still be `https:` on `github.com` or
+  `codeload.github.com`. Two env vars deliberately opt out and both say so loudly on
+  stderr: `AGENTROOM_ALLOW_UNVERIFIED_SOURCE=1` (only when the pin is **absent** — i.e.
+  running the bin from a git checkout) and `AGENTROOM_SOURCE_TARBALL` (an
+  operator-supplied tarball, which no recorded digest can describe). Neither can suppress
+  a digest **mismatch** or a malformed pin. It then
+  trusts its local cache (`~/.agentroom/app/` — on Windows
   `%USERPROFILE%\.agentroom\app\`, a source cache separate from the
   `%APPDATA%\AgentRoom` data folder) the same way npm trusts its own cache:
-  anyone who can write those paths (or your shell env) already runs code as you.
-  Release tags are the trust root and are protected against moves/deletion
+  anyone who can write those paths (or your shell env) already runs code as you
   (ADR-0014).
 - **Third-party data egress.** Optional image text/OCR extraction sends image bytes to
   OpenAI. It is **off by default** (`ENABLE_IMAGE_TEXT_EXTRACTION=false`) and must be
@@ -76,4 +92,39 @@ Security fixes target the `main` branch and the latest tagged release (currently
 ## Hardening status
 
 AgentRoom went through a multi-phase, security-focused pre-1.0 hardening effort with
-adversarial review. `pnpm audit`, `gitleaks` (secret scan), and CodeQL run in CI on every PR.
+adversarial review.
+
+**What CI actually does — reporting vs. blocking.** `pnpm audit --audit-level high`,
+`gitleaks` (secret scan, full history), and CodeQL all run on every pull request, on
+pushes to `main`, and weekly ([`security.yml`](.github/workflows/security.yml)). None of
+them is `continue-on-error`, so a finding fails its own job — but a failed job **does not
+block a merge**: this repository has no required status checks configured, so on a PR
+these three are **reporting only**, and a red check is a signal a human has to act on, not
+a gate. There is nothing that mechanically stops a PR with a red security check from being
+merged.
+
+**On a release, two of them do block.** Pushing a `v*.*.*` tag runs
+[`release.yml`](.github/workflows/release.yml), whose `verify` job re-runs
+`pnpm audit --audit-level high` and `gitleaks` **on the tagged commit** — the GitHub
+Release and the npm publish both depend on that job, so a tagged commit that trips either
+one does not ship. CodeQL is **not** re-run on a tag and therefore blocks nothing at
+release time. The `release` job additionally refuses to release a tag whose commit is not
+an ancestor of `origin/main` (a `v*` tag can be created on any commit — tag *creation* is
+not restricted server-side, only moves and deletions are), and everything that workflow
+executes — every action, and the gitleaks container image — is pinned by immutable digest
+rather than by a movable tag.
+
+**A release that cannot publish now fails.** The npm job used to downgrade a missing
+`NPM_TOKEN` to a notice and skip, so tags v1.0.0–v1.6.0 each produced a green run and a
+GitHub Release while publishing nothing to the registry the README sends users to. A
+`publish-preflight` job now requires the secret **before** the GitHub Release is created,
+and every step of the publish job is unconditional: an incomplete release is red, not
+green.
+
+**What that does not cover.** These release-time checks live in `release.yml` **at the
+tagged commit**, so they defend against a mistaken, stale, or unmerged tag — not against
+someone with `contents: write`, who can push a branch whose `release.yml` has the ancestry
+check, the audit and gitleaks steps and the pins deleted, then tag that commit. Closing
+that requires a `creation` rule on the `protect-release-tags` ruleset, restricted to the
+release identity: a repository setting, not a file, and not something these checks can
+substitute for.

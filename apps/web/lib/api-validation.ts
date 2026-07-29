@@ -87,14 +87,52 @@ export const ALLOWED_UPLOAD_MIME_TYPES = [
   'application/zip',
 ] as const
 
+/**
+ * Characters an uploaded filename may never contain, on top of the `.`/`..`
+ * traversal rules below: `/` and `\` (path separators), `"` (lets an attacker
+ * close the quoted `filename=` parameter early and append a second,
+ * attacker-controlled `filename*` to the Content-Disposition header on download —
+ * see `lib/download-disposition.ts`), and any ASCII control character 0x00–0x1F
+ * or 0x7F (a raw CR/LF makes the download route's `new Response(...)` throw,
+ * permanently 500-ing that file). Checked with a charCode scan rather than a
+ * `\x00-\x1f` regex range so the intentional control-char check doesn't need to
+ * suppress eslint's `no-control-regex`. Shared by the signed-upload route's
+ * inline check and `signedUploadSchema` below so the two validators cannot drift
+ * apart — this repo has already shipped one duplicated-constant bug from exactly
+ * that.
+ */
+export function isValidUploadFilename(filename: string): boolean {
+  if (
+    filename.length === 0 ||
+    filename.length > 255 ||
+    filename === '.' ||
+    filename === '..' ||
+    filename.includes('/') ||
+    filename.includes('\\') ||
+    filename.includes('"')
+  ) {
+    return false
+  }
+  for (let i = 0; i < filename.length; i++) {
+    const code = filename.charCodeAt(i)
+    if (code <= 0x1f || code === 0x7f) return false
+  }
+  return true
+}
+
+// Not wired into any route — the signed-upload route validates the multipart
+// body inline (see the filename/mime_type/size checks in
+// app/api/rooms/[roomId]/files/signed-upload/route.ts), which is the live
+// validator. This schema is exercised only by its own test; keep it in sync by
+// hand if you change either one, since nothing enforces that automatically.
 export const signedUploadSchema = z.object({
   filename: z
     .string()
     .min(1)
     .max(255)
     .refine(
-      (s) => !s.includes('/') && !s.includes('\\') && !s.includes('\0') && s !== '.' && s !== '..',
-      'filename must not contain path separators or traversal sequences',
+      isValidUploadFilename,
+      'filename must not contain path separators, quotes, control characters, or traversal sequences',
     ),
   mime_type: z.enum(ALLOWED_UPLOAD_MIME_TYPES as unknown as [string, ...string[]]),
   size_bytes: z.number().int().positive().max(MAX_UPLOAD_BYTES),
@@ -197,9 +235,13 @@ export const createAgentSchema = z.object({
   system_prompt: z.string().max(8000).optional(),
   capabilities: z.string().max(500).optional(),
   reply_policy: z.enum(['always', 'reply_when_invoked', 'never']).optional(),
-  // Accepted for forward-compat but does NOT grant tool auto-approval: if the
-  // approval flow is ever wired (dormant scaffolding — no bundled adapter emits
-  // tool_call_requested, see #83), the bridge gates tools there, never via this field.
+  // This field IS the tool auto-approval grant the bridge reads: run-worker's
+  // requiresHumanApproval() pre-approves a tool only when this map holds the exact
+  // tool NAME with the literal value `true`, and requires a human for everything else
+  // (agent-supplied `requires_approval` and `tool_category` are never inputs). Accepted
+  // here only for shape validation — the create route hard-codes `{}`, and
+  // updateAgentSchema omits the field, so no request can set a grant. (The gate itself
+  // is dormant — no bundled adapter emits tool_call_requested, see #83.)
   tool_permissions: z.record(z.string(), z.unknown()).optional(),
   // BYO credential (ADR-0010) — the caller's own credential to fuel this agent. The
   // create route verifies it belongs to the caller; the secret never touches this row.
