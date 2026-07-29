@@ -82,4 +82,23 @@ Security fixes target the `main` branch and the latest tagged release (currently
 ## Hardening status
 
 AgentRoom went through a multi-phase, security-focused pre-1.0 hardening effort with
-adversarial review. `pnpm audit`, `gitleaks` (secret scan), and CodeQL run in CI on every PR.
+adversarial review.
+
+**What CI actually does — reporting vs. blocking.** `pnpm audit --audit-level high`,
+`gitleaks` (secret scan, full history), and CodeQL all run on every pull request, on
+pushes to `main`, and weekly ([`security.yml`](.github/workflows/security.yml)). None of
+them is `continue-on-error`, so a finding fails its own job — but a failed job **does not
+block a merge**: this repository has no required status checks configured, so on a PR
+these three are **reporting only**, and a red check is a signal a human has to act on, not
+a gate. There is nothing that mechanically stops a PR with a red security check from being
+merged.
+
+**On a release, two of them do block.** Pushing a `v*.*.*` tag runs
+[`release.yml`](.github/workflows/release.yml), whose `verify` job re-runs
+`pnpm audit --audit-level high` and `gitleaks` **on the tagged commit** — the GitHub
+Release and the npm publish both depend on that job, so a tagged commit that trips either
+one does not ship. CodeQL is **not** re-run on a tag and therefore blocks nothing at
+release time. The `release` job additionally refuses to release a tag whose commit is not
+an ancestor of `origin/main` (a `v*` tag can be created on any commit — tag *creation* is
+not restricted server-side, only moves and deletions are), and every action in that
+workflow is pinned to a full commit SHA rather than a movable tag.

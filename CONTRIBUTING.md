@@ -52,10 +52,15 @@ pnpm e2e            # Playwright (mock adapter; live journeys gated on E2E_LIVE)
 ```
 
 A change is not ready until typecheck, lint (0 errors), format, knip, and tests are
-green locally **and** the GitHub CI required checks are green on the PR. The `audit`
-job (`pnpm audit --audit-level high`) is **enforcing** — it was informational under
-decision D3 of [ADR-0009](docs/adr/0009-v1.0.1-deferred-gates.md) while a dev-toolchain
-advisory was outstanding (issue #78); that was resolved, so the allowance was retired.
+green locally **and** every CI check is green on the PR. Nothing on the GitHub side
+forces that second half: this repository has **no required status checks**, so a red
+check does not block the merge button — keeping a PR green is a contributor obligation,
+not a mechanism. (Security checks _do_ gate a **release** — see
+[Hardening status](SECURITY.md#hardening-status) for exactly which ones and where.) The
+`audit` job (`pnpm audit --audit-level high`) **fails its run** on a high advisory — it
+carried `continue-on-error` under decision D3 of
+[ADR-0009](docs/adr/0009-v1.0.1-deferred-gates.md) while a dev-toolchain advisory was
+outstanding (issue #78); that was resolved, so the allowance was retired.
 If a new high advisory lands in a transitive dependency, bump the direct dependency that
 pulls it, or add a targeted override in `pnpm-workspace.yaml` (pnpm 11 does not read
 overrides from `package.json`).
