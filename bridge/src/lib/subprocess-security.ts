@@ -31,15 +31,20 @@ export class BinaryNotFoundError extends Error {
  * Env var names that must NEVER reach a child process. Tested BEFORE the allowlist, so
  * a match is an unconditional deny that `BRIDGE_CHILD_ENV_ALLOW` cannot override.
  *
- * `_KEY$` and `^CREDENTIAL_` deliberately outrank PROVIDER_ENV_PATTERN below: an
+ * The credential clauses deliberately outrank PROVIDER_ENV_PATTERN below: an
  * `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` sitting in the bridge's own environment is a
  * host-wide credential that would otherwise be handed to EVERY spawned CLI, including a
  * user-configured profile whose `bin` is any path on disk. Per-agent provider keys have
  * their own path (the `inject` seam), and a CLI profile can still opt one in explicitly
  * via its own `env`.
+ *
+ * `CREDENTIAL` and `APIKEY` are unanchored, like `SECRET` and `PASSWORD`, because the
+ * anchored forms missed real credentials: `^CREDENTIAL_` never matched
+ * `GOOGLE_APPLICATION_CREDENTIALS` (a path to a service-account file holding a private
+ * key), and `_KEY$` never matched `OPENAI_APIKEY`, which has no underscore.
  */
 const SECRET_ENV_PATTERN =
-  /(SUPABASE|SERVICE_ROLE|SECRET|PASSWORD|PRIVATE_KEY|^BRIDGE_|^CREDENTIAL_|_TOKEN$|^TOKEN$|_KEY$)/i
+  /(SUPABASE|SERVICE_ROLE|SECRET|PASSWORD|CREDENTIAL|PRIVATE_KEY|APIKEY|^BRIDGE_|_TOKEN$|^TOKEN$|_KEY$)/i
 
 /** Base, non-secret environment a CLI needs to run on Windows/POSIX. */
 const BASE_ENV_KEYS = [

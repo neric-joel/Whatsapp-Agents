@@ -27,24 +27,50 @@ function escapeCmdCommand(command: string): string {
  * Quote one argument per the MSVCRT / CommandLineToArgvW rules, then caret-escape it.
  *
  * A backslash is only special in front of a `"` or the closing quote: a run of n
- * backslashes becomes 2n+1 there (the odd one escapes the quote) and 2n at the end.
+ * backslashes becomes 2n+1 there (the odd one escapes the quote) and 2n at the end, and
+ * stays n everywhere else. Getting the RUN LENGTH wrong is the whole bug class — an even
+ * count before a quote leaves that quote a live delimiter, so text migrates across
+ * argument boundaries.
  *
- * `(\\*)` MUST be greedy. The previous `(?=(\\+?)?)\1"` form was silently wrong because
- * ECMAScript lookaheads are ATOMIC: once the lookahead succeeded the engine never
- * backtracked to grow the lazy `\\+?`, so the group held at most ONE backslash and a run
- * of n left the first n-1 un-doubled. `a\\"b` emitted 4 backslashes where the algorithm
- * requires 5 — an even count leaves the `"` a live delimiter and flips the argument's
- * quoting state, and a trailing `x\\` emitted 3 instead of 4, escaping the closing quote
- * so the argument never terminates. `\\*` over a single-character class is linear, so
- * the greedy form carries no ReDoS risk.
+ * Written as an explicit single pass rather than a regex, for two independent reasons.
+ *
+ * 1. Correctness. The original `(?=(\\+?)?)\1"` form was silently wrong: ECMAScript
+ *    lookaheads are ATOMIC, so once the lookahead succeeded the engine never backtracked
+ *    to grow the lazy `\\+?`. The group held at most ONE backslash and a run of n left
+ *    the first n-1 un-doubled — `a\\"b` emitted 4 backslashes where the rules require 5,
+ *    and a trailing `x\\` emitted 3 instead of 4, escaping the closing quote so the
+ *    argument never terminated.
+ * 2. Complexity. The obvious regex repairs are quadratic, not linear as previously
+ *    claimed here: a greedy `\\*` gives back one character at a time and is re-tried at
+ *    every start offset, so a long backslash run that is followed by neither a quote nor
+ *    end-of-string backtracks O(n) times per offset. Measured on a 32767-character run
+ *    (the Windows command-line ceiling): two-pass `/(\\*)"/g` + `/(\\*)$/` 1441ms,
+ *    single-pass `/(\\*)("|$)/g` 1037ms, this loop 0.16ms. Not reachable today — argv is
+ *    host-configured and never agent-influenced (see resolveSpawnTarget's contract) — but
+ *    the loop removes the question instead of documenting it away.
+ *
+ * The caret passes below are single-character-class replacements with no quantifier, so
+ * they are linear.
  */
 function escapeCmdArgument(arg: string): string {
-  let escaped = String(arg)
-  escaped = escaped.replace(/(\\*)"/g, '$1$1\\"')
-  escaped = escaped.replace(/(\\*)$/, '$1$1')
-  escaped = `"${escaped}"`
-  escaped = escaped.replace(CMD_META_RE, '^$1')
-  return escaped.replace(CMD_META_RE, '^$1')
+  let quoted = '"'
+  let backslashes = 0
+  for (const ch of String(arg)) {
+    if (ch === '\\') {
+      backslashes++
+      continue
+    }
+    if (ch === '"') {
+      quoted += '\\'.repeat(backslashes * 2 + 1) + '"'
+      backslashes = 0
+      continue
+    }
+    quoted += '\\'.repeat(backslashes) + ch
+    backslashes = 0
+  }
+  quoted += '\\'.repeat(backslashes * 2) + '"'
+  const carets = quoted.replace(CMD_META_RE, '^$1')
+  return carets.replace(CMD_META_RE, '^$1')
 }
 
 /** Pack `binPath` + `args` into a single `cmd /c` command string. */

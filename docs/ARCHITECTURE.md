@@ -237,7 +237,7 @@ files authoritative. **Never commit real secrets.**
 | `OPENAI_API_KEY` | conditional | — | Required only if image-text extraction is enabled |
 | `OPENAI_VISION_MODEL` | no | `gpt-4.1-mini` | Vision model for extraction |
 | `CREDENTIAL_ENCRYPTION_KEY` | conditional | — | 32-byte key (64-hex or base64) that decrypts user-stored BYO credentials at spawn. Required only for the BYO-credentials feature; must match the web app's value. Never logged |
-| `BRIDGE_CHILD_ENV_ALLOW` | no | — | Comma-separated extra env names forwarded to child CLIs. Secrets (matching `SUPABASE`/`SERVICE_ROLE`/`SECRET`/`PASSWORD`/`PRIVATE_KEY`/`*_TOKEN`/`TOKEN`/`*_KEY`/`BRIDGE_*`/`CREDENTIAL_*`) are stripped **before** this list is read, so naming one here does not forward it. Separately, provider **config** vars (`ANTHROPIC_*`, `CLAUDE_CODE_*`, `OPENAI_*`, `CODEX_*`, `AWS_*`, `AZURE_*`, `GOOGLE_*`, `GEMINI_*`, `VERTEX_*`) that do not match that secret pattern go to **every** child CLI without being listed here |
+| `BRIDGE_CHILD_ENV_ALLOW` | no | — | Comma-separated extra env names forwarded to child CLIs. Secrets (names containing `SUPABASE`/`SERVICE_ROLE`/`SECRET`/`PASSWORD`/`CREDENTIAL`/`PRIVATE_KEY`/`APIKEY`, starting with `BRIDGE_`, ending with `_TOKEN`/`_KEY`, or exactly `TOKEN`) are stripped **before** this list is read, so naming one here does not forward it. Separately, provider **config** vars (`ANTHROPIC_*`, `CLAUDE_CODE_*`, `OPENAI_*`, `CODEX_*`, `AWS_*`, `AZURE_*`, `GOOGLE_*`, `GEMINI_*`, `VERTEX_*`) that do not match that secret pattern go to **every** child CLI without being listed here |
 | `LOG_LEVEL` | no | `info` | Log level |
 | `SENTRY_DSN` / `ERROR_TRACKING_DSN` | no | — | Opt-in error tracking |
 

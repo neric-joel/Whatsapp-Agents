@@ -134,6 +134,65 @@ test('buildChildEnv denies *_KEY and CREDENTIAL_* even when named in BRIDGE_CHIL
   assert.equal(env['CREDENTIAL_STORE_PATH'], undefined)
 })
 
+// The anchored first cut (`^CREDENTIAL_`, `_KEY$`) let two real credential shapes
+// through, both of which PROVIDER_ENV_PATTERN then forwarded to every child.
+test('buildChildEnv denies credential names the anchored clauses missed', () => {
+  const env = buildChildEnv({
+    PATH: '/usr/bin',
+    // `^CREDENTIAL_` never matched a name ENDING in CREDENTIALS. This one points at a
+    // GCP service-account file containing a private key.
+    GOOGLE_APPLICATION_CREDENTIALS: '/etc/gcp/sa.json',
+    GOOGLE_APPLICATION_CREDENTIALS_FILE: '/etc/gcp/sa.json',
+    // `_KEY$` requires the underscore; APIKEY has none.
+    OPENAI_APIKEY: 'sk-openai-no-underscore',
+  })
+
+  assert.equal(env['GOOGLE_APPLICATION_CREDENTIALS'], undefined)
+  assert.equal(env['GOOGLE_APPLICATION_CREDENTIALS_FILE'], undefined)
+  assert.equal(env['OPENAI_APIKEY'], undefined)
+})
+
+// The deny is unanchored and broad, so guard the other direction: it must not eat a
+// variable the CLIs need in order to start.
+test('buildChildEnv still forwards every base OS variable', () => {
+  const baseKeys = [
+    'PATH',
+    'PATHEXT',
+    'SystemRoot',
+    'windir',
+    'COMSPEC',
+    'TEMP',
+    'TMP',
+    'TMPDIR',
+    'HOME',
+    'HOMEPATH',
+    'HOMEDRIVE',
+    'USERPROFILE',
+    'USERNAME',
+    'APPDATA',
+    'LOCALAPPDATA',
+    'PROGRAMDATA',
+    'PROGRAMFILES',
+    'PROGRAMFILES(X86)',
+    'XDG_CONFIG_HOME',
+    'XDG_CACHE_HOME',
+    'XDG_DATA_HOME',
+    'LANG',
+    'LC_ALL',
+    'LC_CTYPE',
+    'TZ',
+    'TERM',
+    'NODE_EXTRA_CA_CERTS',
+    'SHELL',
+  ]
+  const source = Object.fromEntries(baseKeys.map((k) => [k, `value-of-${k}`]))
+  const env = buildChildEnv(source, { platform: 'linux' })
+
+  for (const key of baseKeys) {
+    assert.equal(env[key], `value-of-${key}`, `base env var ${key} was stripped`)
+  }
+})
+
 test('buildChildEnv denies *_KEY / CREDENTIAL_* case-insensitively on Windows', () => {
   const env = buildChildEnv(
     {

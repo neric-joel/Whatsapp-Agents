@@ -43,7 +43,7 @@ export const KNOWN_CLIS: KnownCli[] = [
     defaultArgs: ['--print', '--output-format', 'json'],
     kind: 'claude-code',
     authHint:
-      'Uses your existing Claude Code login (Claude subscription or ANTHROPIC_API_KEY). If replies fail with an auth error, run `claude login` in your terminal.',
+      'Uses the login Claude Code already stored on this machine. A provider API key exported in your shell is NOT passed through — run `claude login` in your terminal, or bind a stored credential to the agent.',
   },
   {
     key: 'codex',
@@ -53,7 +53,7 @@ export const KNOWN_CLIS: KnownCli[] = [
     defaultArgs: ['exec', '--json', '-'],
     kind: 'codex-cli',
     authHint:
-      'Uses your existing Codex login (ChatGPT sign-in or OPENAI_API_KEY). If replies fail with an auth error, run `codex login` in your terminal.',
+      'Uses the login Codex already stored on this machine. A provider API key exported in your shell is NOT passed through — run `codex login` in your terminal, or bind a stored credential to the agent.',
   },
   {
     key: 'gemini',
@@ -67,7 +67,7 @@ export const KNOWN_CLIS: KnownCli[] = [
     defaultArgs: ['--prompt', 'Reply to the conversation above.'],
     kind: 'generic',
     authHint:
-      'Uses your existing Gemini CLI login (run `gemini` once to authenticate, or set GEMINI_API_KEY).',
+      'Uses the login Gemini CLI already stored on this machine — run `gemini` once to authenticate. A provider API key exported in your shell is NOT passed through; put it in this CLI profile env instead.',
   },
 ]
 

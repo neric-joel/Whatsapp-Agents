@@ -43,10 +43,11 @@ Security fixes target the `main` branch and the latest tagged release (currently
   Connections entry) — **never from agent data**; the child environment is reduced
   to an allowlist — base OS vars plus non-secret provider *config* the CLIs read
   (`ANTHROPIC_BASE_URL`, `AWS_REGION`, …) — while credential-shaped names
-  (`*_KEY`, `*_TOKEN`, `*SECRET*`, `*PASSWORD*`, `CREDENTIAL_*`, `BRIDGE_*`, …) are
-  denied outright, ahead of the allowlist, so nothing else from the bridge's own
-  environment is forwarded (the only secrets a child sees are ones you explicitly
-  bind: a BYO credential's single var, or a Connections profile's own `env`);
+  (`*_KEY`, `*APIKEY*`, `*_TOKEN`, `*SECRET*`, `*PASSWORD*`, `*CREDENTIAL*`,
+  `*PRIVATE_KEY*`, `*SUPABASE*`, `*SERVICE_ROLE*`, `BRIDGE_*`) are denied outright,
+  ahead of the allowlist, so nothing else from the bridge's own environment is
+  forwarded (the only secrets a child sees are ones you explicitly bind: a BYO
+  credential's single var, or a Connections profile's own `env`);
   output is capped (10 MB → kill) and runs are bounded by a timeout
   with a force-kill of the process tree. (A destructive-command denylist exists in
   the tool-call path, but that path is dormant scaffolding today — no bundled
