@@ -383,10 +383,15 @@ describe('FileAttachmentCard (DOM, StrictMode, real signed-download route)', () 
     // renders an <img>, so a count-only assertion passes against it. The 14 bytes are
     // the stored file's, which is also what PNG.size_bytes claims — so this pins that
     // the blob really carries the route's body rather than a wrapper around it.
+    // Duck-typed, NOT `toBeInstanceOf(Blob)`: undici's `Response.blob()` returns a Blob
+    // from Node's realm while this jsdom environment's `Blob` global is a different
+    // constructor, so identity fails on Linux and passed on Windows only by luck — CI
+    // caught it. `size` + `type` are what actually discriminate: a `Response` has no
+    // `size` at all, and its `type` is a response type ('basic'/'cors'), never a MIME.
     expect(createObjectURLMock).toHaveBeenCalledTimes(1)
-    const blobArg = createObjectURLMock.mock.calls[0]?.[0]
-    expect(blobArg).toBeInstanceOf(Blob)
-    expect((blobArg as Blob).size).toBe(PNG.size_bytes)
+    const blobArg = createObjectURLMock.mock.calls[0]?.[0] as Blob | undefined
+    expect(blobArg?.size).toBe(PNG.size_bytes)
+    expect(blobArg?.type).toBe(PNG.mime_type)
 
     expect(button.disabled).toBe(false)
     expect(consoleErrorArgs).toEqual([])
