@@ -1,7 +1,8 @@
-// Destructive-command speed bump for the tool-approval path (used by the bridge's
-// tool-exec guard). Pure string/regex matching with no Node imports, so it lives in
-// @agentroom/shared and can be imported by either workspace without reaching across a
-// package boundary.
+// Destructive-command speed bump for the tool-approval path. Its only consumer is the
+// dormant `tool_call_requested` branch in the bridge run worker (#83) — there is no
+// tool-exec guard, and nothing executes a tool today. Pure string/regex matching with no
+// Node imports, so it lives in @agentroom/shared and can be imported by either workspace
+// without reaching across a package boundary.
 //
 // THIS IS NOT A SECURITY BOUNDARY, and nothing should be built as if it were.
 // `isDeniedCommand` NFKC-normalizes a free-form string, lowercases it, and looks for
@@ -16,19 +17,15 @@
 // The controls that actually hold are elsewhere: the subprocess sandbox (`shell: false`,
 // static argv, allowlisted child environment, output cap, process-tree kill — see
 // SECURITY.md), the server-derived approval gate in the bridge run worker (a tool the
-// agent's `tool_permissions` does not explicitly pre-approve stops for a human, and the
-// agent-supplied `requires_approval` flag is ignored), and the agent CLI's own permission
-// mode. Do not grant a capability on the strength of this list; grant it on those.
+// agent's `tool_permissions` does not name explicitly stops for a human; the agent-supplied
+// `requires_approval` and `tool_category` fields are both ignored), and the agent CLI's own
+// permission mode. Do not grant a capability on the strength of this list; grant it on those.
 
 const DENIED_SUBSTRINGS = [
   'rm -rf',
   'rm -r /',
   'sudo rm',
   'dd if=',
-  'shutdown',
-  'reboot',
-  'halt',
-  'poweroff',
   ':(){:|:&};:',
   '> /dev/sda',
   'chmod 777 /',
@@ -50,6 +47,15 @@ const DENIED_REGEXES = [
   // no false positives to save — while requiring it to name a device would let
   // `mkfs.ext4 $DEV` through.
   /\bmkfs(?:\.[a-z0-9]+)?\b/i,
+  // Host power control, anchored to COMMAND POSITION (string start, or after a `;`/`&`/`|`
+  // /newline separator). These were bare substrings, which was survivable while only
+  // `arguments.command` was scanned; once the scan widened to the argument tree they denied
+  // ordinary prose — `git commit -m "fix graceful shutdown"`, "handle reboot loop", and
+  // (because `halt` matched inside `halting`) "write a haiku about the halting problem".
+  /(?:^|[\n;&|])\s*(?:sudo\s+)?(?:shutdown|reboot|halt|poweroff)\b/i,
+  // The same verbs as the OPERAND of a controller that is itself in command position —
+  // `systemctl poweroff`, `init 0` — which anchoring alone would otherwise let through.
+  /\b(?:systemctl|init|telinit)\s+(?:\d\b|poweroff|reboot|halt)\b/i,
   /\bTRUNCATE\s+TABLE\b/i,
   /\bDELETE\s+FROM\b(?![\s\S]*\bWHERE\b)/i,
 ]
@@ -64,39 +70,70 @@ export function isDeniedCommand(command: string): boolean {
 }
 
 /** Bounds for the walk over agent-supplied `arguments`, which is untrusted JSON: it can
- *  be cyclic, arbitrarily deep, or enormous. Hitting a bound ENDS the scan rather than
- *  denying — this is a speed bump, not a boundary (see the header). */
+ *  be cyclic, arbitrarily deep, or enormous. */
 const MAX_SCAN_DEPTH = 12
 const MAX_SCAN_NODES = 5000
 
+export interface ArgumentScanResult {
+  /** A string leaf the denylist rejected, or `null` if none was found. */
+  denied: string | null
+  /**
+   * TRUE when the walk stopped early — depth or node budget exhausted — so part of the
+   * payload was never looked at. The scan FAILS OPEN here (`denied` stays `null` and the
+   * call is not blocked), which is the correct trade for a speed bump but must never be
+   * silent: the caller is expected to log it. A payload engineered to bury a command past
+   * a bound is exactly what this flag exists to surface.
+   */
+  truncated: boolean
+}
+
 /**
- * Scan every string leaf reachable from an agent-supplied argument value — object
- * values, array elements, and any nesting of the two — and return one the denylist
- * rejects, or `null`.
+ * Scan the string leaves reachable from an agent-supplied argument value — object
+ * values, array elements, and any nesting of the two — for a denied command.
  *
  * Argument NAMES are deliberately not consulted. A tool names its own parameters, so a
  * shell string can arrive as `command`, `cmd`, `script`, `argv[0]`, or
  * `options.exec.command`; checking a single well-known key scans nothing at all for
  * every tool that picked a different one.
+ *
+ * NOT exhaustive, by construction. The walk is breadth-first and bounded to
+ * MAX_SCAN_NODES nodes and MAX_SCAN_DEPTH levels; anything past a bound is skipped, NOT
+ * denied, and reported via `truncated`. Breadth-first is the load-bearing choice: a
+ * command that a tool would plausibly execute sits at a shallow key, so shallow leaves are
+ * always scanned before a wide or deep subtree can exhaust the budget. (Depth-first
+ * visited an object's last key first, so 10 000 filler keys after the payload hid it.)
  */
-export function findDeniedArgument(args: unknown): string | null {
+export function scanArgumentsForDenied(args: unknown): ArgumentScanResult {
   const seen = new WeakSet<object>()
-  const pending: Array<{ value: unknown; depth: number }> = [{ value: args, depth: 0 }]
-  let budget = MAX_SCAN_NODES
+  // A queue with a moving head rather than shift() — shift() is O(n) per call.
+  const queue: Array<{ value: unknown; depth: number }> = [{ value: args, depth: 0 }]
+  let head = 0
+  // Counts nodes ever ENQUEUED, so the queue itself can never exceed the cap. Bounding at
+  // dequeue instead would let one wide level push millions of entries before any check.
+  let enqueued = 1
+  let truncated = false
 
-  while (pending.length > 0 && budget > 0) {
-    budget -= 1
-    const { value, depth } = pending.pop() as { value: unknown; depth: number }
+  while (head < queue.length) {
+    const { value, depth } = queue[head++] as { value: unknown; depth: number }
     if (typeof value === 'string') {
-      if (isDeniedCommand(value)) return value
+      if (isDeniedCommand(value)) return { denied: value, truncated }
       continue
     }
-    if (value === null || typeof value !== 'object') continue
-    if (depth >= MAX_SCAN_DEPTH || seen.has(value)) continue
+    // A repeat visit is a cycle or shared reference, not truncation: it was already scanned.
+    if (value === null || typeof value !== 'object' || seen.has(value)) continue
+    if (depth >= MAX_SCAN_DEPTH) {
+      truncated = true
+      continue
+    }
     seen.add(value)
     for (const child of Array.isArray(value) ? value : Object.values(value)) {
-      pending.push({ value: child, depth: depth + 1 })
+      if (enqueued >= MAX_SCAN_NODES) {
+        truncated = true
+        break
+      }
+      queue.push({ value: child, depth: depth + 1 })
+      enqueued += 1
     }
   }
-  return null
+  return { denied: null, truncated }
 }

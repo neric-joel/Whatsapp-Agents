@@ -570,6 +570,7 @@ test('cancellation mid-run → run marked cancelled, child aborted, not re-throw
 
 interface ToolCallRow {
   tool_name: string
+  tool_category: string | null
   status: string
   requires_approval: number
   error: string | null
@@ -579,7 +580,7 @@ interface ToolCallRow {
 function toolCalls(runId = 'run-1'): ToolCallRow[] {
   return h.db
     .prepare(
-      'SELECT tool_name, status, requires_approval, error FROM tool_calls WHERE run_id = ? ORDER BY created_at, id',
+      'SELECT tool_name, tool_category, status, requires_approval, error FROM tool_calls WHERE run_id = ? ORDER BY created_at, id',
     )
     .all(runId) as ToolCallRow[]
 }
@@ -654,24 +655,57 @@ test('a tool the agent row DOES pre-approve runs without waiting (the gate is no
   assert.equal(toolCalls()[0]?.requires_approval, 0)
 })
 
-test('a category grant pre-approves by tool_category; an ungranted category still stops', async () => {
+test('tool_category is agent-asserted, so it can never grant: recorded, never trusted', async () => {
+  // The category branch was removed precisely because tool_category rides the same
+  // agent-controlled event as the call. With a `category:read` key present, an agent
+  // labelling `wipe_disk` as category `read` used to come back succeeded/0.
   seedWorld({ agent: { tool_permissions: JSON.stringify({ 'category:read': true }) } })
-  const granted = toolCallAdapter(
-    { tool_name: 'list_dir', tool_category: 'read', arguments: {} },
-    true,
-  )
-  await processRun('run-1', { getAdapter: () => granted, approvalPollMs: 1 })
-  assert.equal(toolCalls('run-1')[0]?.status, 'succeeded')
-
-  // Same agent, a tool whose category is NOT granted — the key must match exactly.
-  seedExtraRun('run-2')
-  const ungranted = toolCallAdapter(
-    { tool_name: 'write_file', tool_category: 'write', arguments: {} },
+  const adapter = toolCallAdapter(
+    { tool_name: 'wipe_disk', tool_category: 'read', arguments: {} },
     false,
   )
-  await processRun('run-2', { getAdapter: () => ungranted, approvalPollMs: 1 })
+
+  await processRun('run-1', { getAdapter: () => adapter, approvalPollMs: 1 })
+
+  assert.equal(toolCalls()[0]?.requires_approval, 1, 'a category label must not self-grant')
+  assert.notEqual(toolCalls()[0]?.status, 'succeeded')
+  // Still persisted for the audit trail / approve-deny UI — displayed, not trusted.
+  assert.equal(toolCalls()[0]?.tool_category, 'read')
+})
+
+test('a tool literally NAMED "category:read" does not collide with a stale category key', async () => {
+  // With the name check as the only path, a `category:`-prefixed key is just an ordinary
+  // (dead) map entry. This pins that a tool cannot rename itself into one.
+  seedWorld({ agent: { tool_permissions: JSON.stringify({ 'category:read': true }) } })
+  const adapter = toolCallAdapter({ tool_name: 'category:read', arguments: {} }, false)
+
+  await processRun('run-1', { getAdapter: () => adapter, approvalPollMs: 1 })
+
+  // It matches by exact name, which is the documented contract — but it is a grant the
+  // operator wrote for that literal name, not a category wildcard reachable via a label.
+  assert.equal(toolCalls()[0]?.tool_name, 'category:read')
+  seedExtraRun('run-2')
+  const relabelled = toolCallAdapter(
+    { tool_name: 'rm_rf', tool_category: 'read', arguments: {} },
+    false,
+  )
+  await processRun('run-2', { getAdapter: () => relabelled, approvalPollMs: 1 })
   assert.equal(toolCalls('run-2')[0]?.requires_approval, 1)
   assert.notEqual(toolCalls('run-2')[0]?.status, 'succeeded')
+})
+
+test('a malformed tool_permissions blob fails closed instead of hot-retrying the run', async () => {
+  // The JSON.parse used to sit above the claim transaction: a bad blob threw before the
+  // run was claimed, so it was never marked failed and the poller re-picked it forever.
+  seedWorld({ agent: { tool_permissions: '{not json' } })
+  const adapter = toolCallAdapter({ tool_name: 'shell', arguments: { command: 'ls' } }, false)
+
+  await processRun('run-1', { getAdapter: () => adapter, approvalPollMs: 1 })
+
+  // The run reaches a terminal state (no silent requeue) and the tool is still gated.
+  assert.equal(runRow().status, 'completed')
+  assert.equal(toolCalls()[0]?.requires_approval, 1)
+  assert.notEqual(toolCalls()[0]?.status, 'succeeded')
 })
 
 test('a truthy-but-not-true permission value does not pre-approve (fail closed)', async () => {

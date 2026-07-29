@@ -181,19 +181,37 @@ a user-created agent gets **no** tool auto-approvals.
 **How the gate decides (server-authoritative).** The requirement is derived in the bridge
 from the agent row, never from the event: `requiresHumanApproval()` in
 `bridge/src/workers/run-worker.ts` pre-approves a call only when `tool_permissions` holds
-the exact `tool_name` — or `category:<tool_category>` — with the literal value `true`.
-Anything else waits for a human: an absent key, a truthy-but-not-`true` value, a
-permissions blob that is not a plain object. The agent-emitted `requires_approval` flag is
-**not read at all**; it arrives on the same channel as the tool call, so honouring it would
-let an agent excuse itself from the check. This is why `tool_permissions`-forced-empty is
-load-bearing rather than decorative: with `{}`, every tool a user-created agent requests
-stops for approval.
+the exact `tool_name` with the literal value `true`. Anything else waits for a human: an
+absent key, a truthy-but-not-`true` value, a permissions blob that is not a plain object or
+does not parse.
 
-Before that, every string leaf of the call's `arguments` — under any key, at any nesting
-depth, inside objects and arrays alike — is run through `isDeniedCommand`. That list is a
-**speed bump, not a security boundary** (it substring-matches a free-form shell string and
-is trivially bypassed); the real controls are the subprocess sandbox, this approval gate,
-and the CLI's own permission mode. See the header of `packages/shared/src/denylist.ts`.
+Two fields on the event are deliberately **not read at all**, because both are written by
+the agent on the same channel as the call they would excuse:
+
+- `requires_approval` — an agent that sets it `false` would clear its own gate.
+- `tool_category` — a `category:` grant would be a wildcard an agent could enter by
+  labelling `wipe_disk` as category `read`. Grants bind to the tool NAME, which is what an
+  executor dispatches on. A category grant can only be reintroduced against a server-side
+  `tool_name → category` registry, which cannot exist until a producer does. The category
+  is still stored on the `tool_calls` row for audit and display.
+
+This is why `tool_permissions`-forced-empty is load-bearing rather than decorative: with
+`{}`, every tool any agent requests stops for approval. Nothing in the product can write a
+grant today — `POST /api/agents` hard-codes `{}`, `updateAgentSchema` omits the field so
+PATCH cannot set it, and seeds ship `{}` — so the only way to create one is direct SQL.
+
+Before that, the call's `arguments` are walked and each string leaf is run through
+`isDeniedCommand`, under any key and inside objects and arrays alike. **The walk is bounded
+and not exhaustive:** breadth-first, capped at 5 000 nodes and 12 levels
+(`packages/shared/src/denylist.ts`). Anything past a bound is skipped and **not** denied —
+the scan fails open — but it is never silent: the scan returns `truncated: true` and the
+run worker logs `tool.scan.truncated`. Breadth-first ordering means shallow leaves, where a
+command a tool would actually execute sits, are always scanned first.
+
+The denylist itself is a **speed bump, not a security boundary** (it substring-matches a
+free-form shell string and is trivially bypassed); the real controls are the subprocess
+sandbox, this approval gate, and the CLI's own permission mode. See the header of
+`packages/shared/src/denylist.ts`.
 
 ## Trust boundaries
 

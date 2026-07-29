@@ -2,9 +2,9 @@ import { getDb, intBool, jsonText, newId, nowIso } from '@agentroom/db'
 import type { AgentEvent } from '@agentroom/shared'
 import {
   detectChallenge,
-  findDeniedArgument,
   readDiscussionMetadata,
   runCanary,
+  scanArgumentsForDenied,
 } from '@agentroom/shared'
 
 import { getAdapter as defaultGetAdapter } from '../adapters/registry.js'
@@ -84,40 +84,65 @@ interface AgentRunRow {
 }
 
 /**
- * Server-side answer to "may this tool run without a human?". The only input is the
- * agent row's `tool_permissions` — never the agent-emitted `requires_approval` flag.
+ * Server-side answer to "may this tool run without a human?". The only inputs are the
+ * agent row's `tool_permissions` and the tool NAME — never the agent-emitted
+ * `requires_approval` flag, and never `tool_category`.
  *
  * `agents.tool_permissions` is a TEXT column holding a JSON object (`packages/db`
- * schema: `NOT NULL DEFAULT '{}'`, parsed to `Record<string, unknown>`), and every agent
- * the product creates today carries `{}`: seeded agents ship empty and `POST /api/agents`
- * forces it empty. It is read here as a flat allow-map — a key equal to the exact
- * `tool_name`, or to `category:<tool_category>`, whose value is the literal boolean
- * `true`, pre-approves that tool.
+ * schema: `NOT NULL DEFAULT '{}'`), and every agent the product creates today carries
+ * `{}`: seeded agents ship empty, `POST /api/agents` hard-codes `{}`, and
+ * `updateAgentSchema` omits the field so PATCH cannot set it either. It is read as a flat
+ * allow-map keyed by exact tool name, whose value must be the literal boolean `true`.
+ *
+ * WHY NAME ONLY. A grant has to bind to the thing an executor dispatches on. The name is
+ * that; `tool_category` is a free-text field on the agent-emitted event, so honouring a
+ * `category:` grant would let an agent label `wipe_disk` as category `read` and clear its
+ * own gate — the exact self-approval defect this function exists to close. A category
+ * grant can be reintroduced only against a SERVER-SIDE `tool_name → category` registry,
+ * which cannot exist until a producer does. `tool_category` is still recorded on the
+ * `tool_calls` row for audit and display; it is never an input to this decision.
  *
  * Everything else requires approval: key absent, value truthy-but-not-`true`, a nameless
- * tool, a permissions blob that is not a plain object. Fail closed — a permissions shape
- * this function does not recognise must never widen what runs unattended.
+ * tool, a permissions blob that is not a plain object (including one that failed to
+ * parse — see parseToolPermissions). Fail closed: a shape this function does not
+ * recognise must never widen what runs unattended.
  */
 function requiresHumanApproval(
   permissions: Record<string, unknown> | null | undefined,
   toolName: string,
-  toolCategory: string | undefined,
 ): boolean {
   if (typeof permissions !== 'object' || permissions === null || Array.isArray(permissions)) {
     return true
   }
-  const preApproved = (key: string): boolean =>
-    Object.prototype.hasOwnProperty.call(permissions, key) && permissions[key] === true
+  if (typeof toolName !== 'string' || toolName.length === 0) return true
+  return !(
+    Object.prototype.hasOwnProperty.call(permissions, toolName) && permissions[toolName] === true
+  )
+}
 
-  if (typeof toolName === 'string' && toolName.length > 0 && preApproved(toolName)) return false
-  if (
-    typeof toolCategory === 'string' &&
-    toolCategory.length > 0 &&
-    preApproved(`category:${toolCategory}`)
-  ) {
-    return false
+/**
+ * Parse the agent row's `tool_permissions` JSON, treating any malformed value as "no
+ * grants". Without the catch, a bad blob threw ABOVE the claim transaction: the run was
+ * never claimed and never marked failed, so it sat `queued` and the poller re-picked it
+ * every tick — a silent hot-retry loop. Failing to `{}` also makes requiresHumanApproval's
+ * fail-closed contract true for unparseable values, not just for parsed non-objects.
+ */
+function parseToolPermissions(
+  raw: string | null | undefined,
+  agentId: string,
+): Record<string, unknown> {
+  if (!raw) return {}
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      log('warn', 'agent.tool_permissions.invalid', { agent_id: agentId, reason: 'not_an_object' })
+      return {}
+    }
+    return parsed as Record<string, unknown>
+  } catch {
+    log('warn', 'agent.tool_permissions.invalid', { agent_id: agentId, reason: 'malformed_json' })
+    return {}
   }
-  return true
 }
 
 export async function processRun(runId: string, deps: ProcessRunDeps = {}): Promise<void> {
@@ -176,10 +201,7 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
           system_prompt: agentRaw.system_prompt,
           provider: agentRaw.provider,
           adapter_type: agentRaw.adapter_type,
-          tool_permissions: JSON.parse(agentRaw.tool_permissions || '{}') as Record<
-            string,
-            unknown
-          >,
+          tool_permissions: parseToolPermissions(agentRaw.tool_permissions, agentRaw.id),
           credential_id: agentRaw.credential_id,
           created_by_user_id: agentRaw.created_by_user_id,
         }
@@ -307,19 +329,28 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
           // feature. Keep it correct so wiring a producer is enough.
           //
           // The gate is SERVER-AUTHORITATIVE: `event.requires_approval` is deliberately
-          // never read. It arrives on the same agent-controlled channel as the tool call
-          // itself, so honouring it lets an agent excuse itself from the one check it is
-          // subject to. The requirement comes from the agent row instead, and defaults to
-          // "ask a human".
+          // never read, and neither is `event.tool_category`. Both arrive on the same
+          // agent-controlled channel as the tool call itself, so honouring either lets an
+          // agent excuse itself from the one check it is subject to. Only the agent row
+          // and the tool NAME decide, and the default is "ask a human".
           const requiresApproval = requiresHumanApproval(
             agentInfo.tool_permissions,
             event.tool_name,
-            event.tool_category,
           )
-          // Scan EVERY string leaf of the arguments. The tool names its own parameters, so
-          // keying off `arguments.command` scanned the empty string for any tool that
-          // called it `cmd`/`script`/`argv`, or nested it inside an object or array.
-          const deniedArg = findDeniedArgument(event.arguments)
+          // Scan the argument tree, not just `arguments.command` — the tool names its own
+          // parameters, so the old single-key read scanned '' for anything called
+          // `cmd`/`script`/`argv` or nested. The walk is BOUNDED (see denylist.ts): past a
+          // bound it stops and does NOT deny, so surface that rather than let a payload
+          // engineered to bury a command past the limit pass silently.
+          const scan = scanArgumentsForDenied(event.arguments)
+          if (scan.truncated) {
+            log('warn', 'tool.scan.truncated', {
+              run_id: runId,
+              tool_name: event.tool_name,
+              reason: 'argument_scan_bounds',
+            })
+          }
+          const deniedArg = scan.denied
 
           const tc = db
             .prepare(
@@ -331,6 +362,8 @@ export async function processRun(runId: string, deps: ProcessRunDeps = {}): Prom
               runRow.id,
               agentInfo.id,
               event.tool_name,
+              // Recorded for audit and the approve/deny UI. Agent-asserted, so it is
+              // displayed, never trusted — see requiresHumanApproval.
               event.tool_category ?? null,
               jsonText(event.arguments),
               deniedArg !== null ? 'denied' : requiresApproval ? 'waiting_approval' : 'queued',

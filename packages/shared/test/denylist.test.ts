@@ -1,19 +1,22 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { findDeniedArgument, isDeniedCommand } from '../src/denylist.js'
+import { isDeniedCommand, scanArgumentsForDenied } from '../src/denylist.js'
 
 /**
- * Two properties are under test, and each has a specific way of failing silently.
+ * Three properties are under test, each with its own way of failing silently.
  *
  * 1. FALSE POSITIVES. `/\bdrop\b/i` and `/\bformat\b/i` denied ordinary English —
- *    `git commit -m "drop legacy flag"`, "format the output as JSON". A denylist that
- *    blocks routine work is a denylist an operator turns off, so the false-positive
- *    cases are asserted alongside the true positives they must not cost.
- * 2. WHERE the scan looks. `findDeniedArgument` must reach every string leaf of an
- *    agent-supplied `arguments` object regardless of the key it sits under, because the
- *    tool — not the bridge — names its own parameters. Scanning `arguments.command`
- *    alone scanned the empty string for everything else.
+ *    `git commit -m "drop legacy flag"`, "format the output as JSON" — and the bare
+ *    `shutdown`/`reboot`/`halt`/`poweroff` substrings denied prose containing those
+ *    words, including inside longer words (`halting`). A denylist that blocks routine
+ *    work is a denylist an operator turns off, so the must-ALLOW cases are asserted
+ *    alongside the true positives they must not cost.
+ * 2. WHERE the scan looks. It must reach string leaves regardless of the key they sit
+ *    under, because the tool — not the bridge — names its own parameters.
+ * 3. WHAT the scan admits it missed. The walk is bounded, so it fails OPEN past a bound.
+ *    That is acceptable for a speed bump only if the truncation is reported, so the
+ *    `truncated` flag is asserted as load-bearing output, not incidental.
  */
 
 test('a bare destructive verb in prose is not a destructive command', () => {
@@ -28,6 +31,44 @@ test('a bare destructive verb in prose is not a destructive command', () => {
     'echo "we will drop support for node 20"',
   ]) {
     assert.equal(isDeniedCommand(benign), false, `should be allowed: ${benign}`)
+  }
+})
+
+test('power-control verbs in prose are not commands (denied only in command position)', () => {
+  // These became reachable the moment the scan widened past arguments.command: as bare
+  // substrings they denied any argument containing the word. `halt` was the worst — a
+  // 4-character substring that also fired inside `halting`.
+  for (const benign of [
+    'git commit -m "fix graceful shutdown"',
+    'git commit -m "handle reboot loop"',
+    'git commit -m "halt the rollout"',
+    'write a haiku about the halting problem',
+    'document the shutdown sequence',
+    'the reboot took four minutes',
+    'systemctl restart nginx',
+    'systemctl status poweroff.target',
+  ]) {
+    assert.equal(isDeniedCommand(benign), false, `should be allowed: ${benign}`)
+  }
+})
+
+test('power-control verbs IN command position are still denied', () => {
+  for (const denied of [
+    'shutdown -h now',
+    'shutdown /s /t 0',
+    'sudo reboot',
+    'poweroff',
+    '  halt',
+    'ls && shutdown -r now',
+    'echo hi; poweroff',
+    'cat x | halt',
+    'cd /tmp\nshutdown -h now',
+    'systemctl poweroff',
+    'systemctl reboot',
+    'init 0',
+    'telinit 6',
+  ]) {
+    assert.equal(isDeniedCommand(denied), true, `should be denied: ${denied}`)
   }
 })
 
@@ -60,50 +101,86 @@ test('the pre-existing patterns are unchanged', () => {
   assert.equal(isDeniedCommand('echo hello'), false)
 })
 
-test('findDeniedArgument reaches string leaves under ANY key name', () => {
+test('scanArgumentsForDenied reaches string leaves under ANY key name', () => {
   // The old code read arguments['command'] and nothing else, so every one of these was
   // scanned as the empty string and waved through.
-  assert.equal(findDeniedArgument({ cmd: 'rm -rf /' }), 'rm -rf /')
-  assert.equal(findDeniedArgument({ script: 'DROP TABLE users' }), 'DROP TABLE users')
-  assert.equal(findDeniedArgument({ args: 'mkfs /dev/sda' }), 'mkfs /dev/sda')
+  assert.deepEqual(scanArgumentsForDenied({ cmd: 'rm -rf /' }), {
+    denied: 'rm -rf /',
+    truncated: false,
+  })
+  assert.equal(scanArgumentsForDenied({ script: 'DROP TABLE users' }).denied, 'DROP TABLE users')
+  assert.equal(scanArgumentsForDenied({ args: 'mkfs /dev/sda' }).denied, 'mkfs /dev/sda')
 })
 
-test('findDeniedArgument descends into nested objects and arrays', () => {
-  assert.equal(findDeniedArgument({ shell: { exec: { run: 'rm -rf /' } } }), 'rm -rf /')
-  assert.equal(findDeniedArgument({ argv: ['bash', '-lc', 'rm -rf /'] }), 'rm -rf /')
+test('scanArgumentsForDenied descends into nested objects and arrays', () => {
+  assert.equal(scanArgumentsForDenied({ shell: { exec: { run: 'rm -rf /' } } }).denied, 'rm -rf /')
+  assert.equal(scanArgumentsForDenied({ argv: ['bash', '-lc', 'rm -rf /'] }).denied, 'rm -rf /')
   assert.equal(
-    findDeniedArgument({ steps: [{ name: 'cleanup', run: { command: 'DROP TABLE users' } }] }),
+    scanArgumentsForDenied({ steps: [{ name: 'cleanup', run: { command: 'DROP TABLE users' } }] })
+      .denied,
     'DROP TABLE users',
   )
-  assert.equal(findDeniedArgument([[['format C:']]]), 'format C:')
+  assert.equal(scanArgumentsForDenied([[['format C:']]]).denied, 'format C:')
 })
 
-test('findDeniedArgument returns null for clean and non-string payloads', () => {
-  assert.equal(findDeniedArgument({ command: 'ls -la' }), null)
-  assert.equal(findDeniedArgument({ nested: { n: 1, ok: true, nothing: null } }), null)
-  assert.equal(findDeniedArgument({}), null)
-  assert.equal(findDeniedArgument(undefined), null)
-  assert.equal(findDeniedArgument('ls -la'), null)
+test('scanArgumentsForDenied returns null for clean and non-string payloads', () => {
+  assert.deepEqual(scanArgumentsForDenied({ command: 'ls -la' }), {
+    denied: null,
+    truncated: false,
+  })
+  assert.equal(scanArgumentsForDenied({ nested: { n: 1, ok: true, nothing: null } }).denied, null)
+  assert.equal(scanArgumentsForDenied({}).denied, null)
+  assert.equal(scanArgumentsForDenied(undefined).denied, null)
+  assert.equal(scanArgumentsForDenied('ls -la').denied, null)
 })
 
-test('findDeniedArgument terminates on cyclic and pathological input', () => {
+test('the walk is breadth-first, so filler cannot bury a shallow command', () => {
+  // Depth-first popped the LAST key first, so 10 000 trailing filler keys exhausted the
+  // node budget before the payload at the front was ever visited. Breadth-first visits
+  // shallow leaves — where a command a tool would actually run sits — first.
+  const wideObject: Record<string, unknown> = { a_payload: 'rm -rf /' }
+  for (let i = 0; i < 10_000; i++) wideObject[`k${i}`] = 'ls -la'
+  assert.equal(scanArgumentsForDenied(wideObject).denied, 'rm -rf /')
+
+  const longArray = ['rm -rf /', ...Array.from({ length: 6000 }, () => 'ls -la')]
+  assert.equal(scanArgumentsForDenied({ argv: longArray }).denied, 'rm -rf /')
+
+  // A shallow leaf is still reached when a large subtree sits beside it.
+  let deepDecoy: Record<string, unknown> = { leaf: 'ls -la' }
+  for (let i = 0; i < 40; i++) deepDecoy = { next: deepDecoy }
+  assert.equal(scanArgumentsForDenied({ decoy: deepDecoy, cmd: 'rm -rf /' }).denied, 'rm -rf /')
+})
+
+test('exceeding a scan bound reports truncated:true and does NOT deny', () => {
+  // Fails open by design — but never silently. run-worker logs tool.scan.truncated on this.
+  let tooDeep: Record<string, unknown> = { leaf: 'rm -rf /' }
+  for (let i = 0; i < 40; i++) tooDeep = { next: tooDeep }
+  assert.deepEqual(scanArgumentsForDenied(tooDeep), { denied: null, truncated: true })
+
+  // A payload past the node cap is missed — and the flag says so, which is the contract.
+  const buried: Record<string, unknown> = {}
+  for (let i = 0; i < 20_000; i++) buried[`k${i}`] = 'ls -la'
+  buried['z_payload'] = 'rm -rf /'
+  const result = scanArgumentsForDenied(buried)
+  assert.equal(result.denied, null)
+  assert.equal(result.truncated, true, 'a missed leaf must be reported, never silent')
+})
+
+test('a payload within the bounds reports truncated:false', () => {
+  const modest: Record<string, unknown> = { cmd: 'ls -la' }
+  for (let i = 0; i < 100; i++) modest[`k${i}`] = 'echo hi'
+  assert.deepEqual(scanArgumentsForDenied(modest), { denied: null, truncated: false })
+})
+
+test('scanArgumentsForDenied terminates on cyclic input without reporting truncation', () => {
+  // A revisit is a cycle, not a bound: the value was already scanned, nothing was missed.
   const cyclic: Record<string, unknown> = { name: 'loop' }
   cyclic['self'] = cyclic
   cyclic['sibling'] = { back: cyclic }
-  assert.equal(findDeniedArgument(cyclic), null)
+  assert.deepEqual(scanArgumentsForDenied(cyclic), { denied: null, truncated: false })
 
-  // A cycle must not hide a denied leaf that is reachable within the depth bound.
+  // A cycle must not hide a denied leaf reachable within the bounds.
   const cyclicWithPayload: Record<string, unknown> = { cmd: 'rm -rf /' }
   cyclicWithPayload['self'] = cyclicWithPayload
-  assert.equal(findDeniedArgument(cyclicWithPayload), 'rm -rf /')
-
-  // Deeper than the depth bound: the walk stops instead of recursing without limit.
-  let deep: Record<string, unknown> = { leaf: 'ls -la' }
-  for (let i = 0; i < 5000; i++) deep = { next: deep }
-  assert.equal(findDeniedArgument(deep), null)
-
-  // Wide input is bounded by the node budget, not by the stack.
-  const wide: Record<string, unknown> = {}
-  for (let i = 0; i < 50_000; i++) wide[`k${i}`] = 'ls -la'
-  assert.equal(findDeniedArgument(wide), null)
+  assert.equal(scanArgumentsForDenied(cyclicWithPayload).denied, 'rm -rf /')
 })

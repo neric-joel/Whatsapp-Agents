@@ -51,8 +51,8 @@ Security fixes target the `main` branch and the latest tagged release (currently
   output is capped (10 MB → kill) and runs are bounded by a timeout
   with a force-kill of the process tree. (The tool-call path is dormant scaffolding
   today — no bundled adapter emits `tool_call_requested`; see #83. When it is wired,
-  approval is decided server-side from the agent's `tool_permissions`, never from the
-  agent-emitted flag. The destructive-command denylist on that path is a **UX speed
+  approval is decided server-side from the agent's `tool_permissions` and the tool name,
+  never from agent-emitted fields. The destructive-command denylist on that path is a **UX speed
   bump, not a security boundary** — it substring-matches a free-form shell string and
   anything determined gets past it; do not count it as a control.)
 - **Write-path boundary.** The browser never writes `agent_runs` or `messages`
