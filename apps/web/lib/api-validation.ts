@@ -120,6 +120,11 @@ export function isValidUploadFilename(filename: string): boolean {
   return true
 }
 
+// Not wired into any route — the signed-upload route validates the multipart
+// body inline (see the filename/mime_type/size checks in
+// app/api/rooms/[roomId]/files/signed-upload/route.ts), which is the live
+// validator. This schema is exercised only by its own test; keep it in sync by
+// hand if you change either one, since nothing enforces that automatically.
 export const signedUploadSchema = z.object({
   filename: z
     .string()

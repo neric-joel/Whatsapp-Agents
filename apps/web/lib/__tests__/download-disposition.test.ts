@@ -5,6 +5,7 @@ import {
   isSafeInlineMimeType,
   SAFE_INLINE_DOWNLOAD_MIME_TYPES,
 } from '../download-disposition'
+import { splitDispositionParams } from './disposition-params'
 
 describe('isSafeInlineMimeType', () => {
   it('allows only the script-free allowlist inline', () => {
@@ -35,31 +36,6 @@ describe('isSafeInlineMimeType', () => {
   })
 })
 
-/**
- * Splits a header value into its top-level `;`-separated parameters, the way a
- * spec-compliant client does (RFC 2616 quoted-string): a `;` inside a quoted
- * `filename="..."` value is part of that value, not a parameter separator. Used
- * below to prove there is exactly one real `filename*` parameter even when the
- * stored filename contains the literal text "filename*=" — that text is inert
- * once it's inside quotes, and a naive substring search would be fooled by it.
- */
-function splitDispositionParams(header: string): string[] {
-  const parts: string[] = []
-  let current = ''
-  let inQuotes = false
-  for (const ch of header) {
-    if (ch === '"') inQuotes = !inQuotes
-    if (ch === ';' && !inQuotes) {
-      parts.push(current.trim())
-      current = ''
-    } else {
-      current += ch
-    }
-  }
-  parts.push(current.trim())
-  return parts
-}
-
 describe('contentDispositionHeader', () => {
   it('emits both filename forms for an ordinary name', () => {
     expect(contentDispositionHeader('attachment', 'report.pdf')).toBe(
@@ -79,14 +55,33 @@ describe('contentDispositionHeader', () => {
     // Exactly one *real* filename* parameter — the literal text "filename*="
     // also appears inside the quoted `filename=` fallback, but that occurrence
     // is inert: it's part of the quoted string's value, not a parameter
-    // separator, because the quote characters that would have closed it early
-    // were replaced with `_`.
+    // separator, because the quote/`;`/`=` characters that would have made it
+    // look like one were replaced with `_`.
     const starParams = params.filter((p) => p.startsWith("filename*=UTF-8''"))
     expect(starParams).toHaveLength(1)
     // And that one real parameter is the fully percent-encoded original string —
-    // never the raw attacker payload a naive parser might extract.
-    expect(starParams[0]).toBe(`filename*=UTF-8''${encodeURIComponent(poisoned)}`)
+    // never the raw attacker payload a naive parser might extract. The `'` and
+    // `*` in the payload are RFC 5987 ext-value-significant, so the real
+    // encoder (encodeExtValue) escapes them too, on top of encodeURIComponent.
+    const expectedStar = encodeURIComponent(poisoned).replace(
+      /['()*!]/g,
+      (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase(),
+    )
+    expect(starParams[0]).toBe(`filename*=UTF-8''${expectedStar}`)
     expect(starParams[0]).not.toBe("filename*=UTF-8''quarterly-report.pdf.exe")
+  })
+
+  it("percent-encodes a single quote in filename* — bare encodeURIComponent leaves it raw, and ' is the RFC 8187 ext-value delimiter", () => {
+    // encodeURIComponent("o'brien.png") === "o'brien.png": the quote is left
+    // unescaped. But `ext-value = charset "'" [language] "'" value-chars` uses
+    // `'` as a structural delimiter, and `'` is not a valid `value-chars`
+    // character — an unescaped `'` here is a spec-invalid ext-value that a
+    // strict parser (the `content-disposition` npm package) rejects outright,
+    // and a lenient `split("'")` parser truncates.
+    const header = contentDispositionHeader('attachment', "o'brien.png")
+
+    expect(header).toContain("filename*=UTF-8''o%27brien.png")
+    expect(header).not.toContain("filename*=UTF-8''o'brien.png")
   })
 
   it('produces a header safe for new Response(...) even for a legacy filename containing raw CR/LF', () => {
@@ -99,12 +94,29 @@ describe('contentDispositionHeader', () => {
     expect(() => new Response(null, { headers: { 'Content-Disposition': header } })).not.toThrow()
   })
 
-  it('replaces non-ASCII, quotes, and backslashes in the fallback but preserves them (encoded) in filename*', () => {
-    const name = 'café "notes"\\v2.txt'
+  it('produces a header safe for new Response(...) even for a legacy filename containing a lone UTF-16 surrogate', () => {
+    // encodeURIComponent throws URIError on an unpaired surrogate — a different
+    // character class than CR/LF, but the same permanent-500 failure mode this
+    // function exists to prevent for already-stored data.
+    const loneSurrogateName = 'a\uD800b.png'
+    expect(() => encodeURIComponent(loneSurrogateName)).toThrow(URIError)
+
+    const header = contentDispositionHeader('attachment', loneSurrogateName)
+    expect(() => new Response(null, { headers: { 'Content-Disposition': header } })).not.toThrow()
+    expect(header).toBe(`attachment; filename="a_b.png"; filename*=UTF-8''a%EF%BF%BDb.png`)
+  })
+
+  it('replaces non-ASCII, quotes, backslashes, semicolons, and equals signs in the fallback but preserves the real name (encoded) in filename*', () => {
+    // `;` and `=` are legal printable ASCII and don't break the quoted string,
+    // but a naive `;`-splitting intermediary (a proxy, a log scrubber, an AV
+    // scanner) that isn't quoted-string aware could still be misled by them —
+    // so the fallback replaces them too. Costs nothing legitimate: the real
+    // name always lives in filename*.
+    const name = 'café "notes"\\;version=2.txt'
     const header = contentDispositionHeader('inline', name)
 
     expect(header).toBe(
-      `inline; filename="caf_ _notes__v2.txt"; filename*=UTF-8''${encodeURIComponent(name)}`,
+      `inline; filename="caf_ _notes___version_2.txt"; filename*=UTF-8''${encodeURIComponent(name)}`,
     )
   })
 })

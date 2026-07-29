@@ -38,34 +38,10 @@ vi.mock('@/lib/permissions', () => ({
   requireRoomMember: vi.fn(() => Promise.resolve()),
 }))
 
+import { splitDispositionParams } from '@/lib/__tests__/disposition-params'
 import { SAFE_INLINE_DOWNLOAD_MIME_TYPES } from '@/lib/download-disposition'
 
 import { GET } from './route'
-
-/**
- * Splits a header value into top-level `;`-separated parameters the way a
- * spec-compliant client does: a `;` inside a quoted `filename="..."` value is
- * part of that value, not a parameter separator. A stored filename can contain
- * the literal text "filename*=" and have it land — inertly — inside the quoted
- * fallback; only this parser (not a raw substring search) tells the real
- * `filename*` parameter apart from that inert text.
- */
-function splitDispositionParams(header: string): string[] {
-  const parts: string[] = []
-  let current = ''
-  let inQuotes = false
-  for (const ch of header) {
-    if (ch === '"') inQuotes = !inQuotes
-    if (ch === ';' && !inQuotes) {
-      parts.push(current.trim())
-      current = ''
-    } else {
-      current += ch
-    }
-  }
-  parts.push(current.trim())
-  return parts
-}
 
 const baseFileRow = {
   id: 'file-1',
@@ -163,8 +139,14 @@ describe('GET /api/files/[fileId]/signed-download', () => {
     // land in the header text, but only inertly, inside the quoted fallback.
     expect(starParams).toHaveLength(1)
     // And that one real parameter is the fully encoded original string, never
-    // the raw attacker-chosen filename the row tried to smuggle in.
-    expect(starParams[0]).toBe(`filename*=UTF-8''${encodeURIComponent(poisonedName)}`)
+    // the raw attacker-chosen filename the row tried to smuggle in. `'` and `*`
+    // in the payload are RFC 5987 ext-value-significant, so the real encoder
+    // escapes them too, on top of encodeURIComponent.
+    const expectedStar = encodeURIComponent(poisonedName).replace(
+      /['()*!]/g,
+      (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase(),
+    )
+    expect(starParams[0]).toBe(`filename*=UTF-8''${expectedStar}`)
     expect(starParams[0]).not.toBe("filename*=UTF-8''quarterly-report.pdf.exe")
   })
 })
