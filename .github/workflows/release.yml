@@ -56,10 +56,16 @@ jobs:
       # `pnpm audit` on PRs/pushes to main only — never on a tag push — so without these
       # two steps a release trusts merge-time state it never re-checks. Mirrors
       # security.yml's secret-scan job (GITHUB_WORKSPACE, not `${{ }}`, inside `run:`).
+      #
+      # The image is digest-pinned (v8.30.1), not `:latest`, for the same reason the
+      # actions above are: this step runs as root with the workspace mounted, before
+      # install/test/build in this job, so a moved tag could both report the secret scan
+      # green and alter what the rest of the gate then checks. Keep this digest in
+      # lockstep with security.yml's gitleaks step.
       - name: gitleaks (secret scan, full history)
         run: |
           docker run --rm -v "${GITHUB_WORKSPACE}:/repo" \
-            ghcr.io/gitleaks/gitleaks:latest \
+            ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
             detect --source=/repo --redact --no-banner -v
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -99,7 +105,17 @@ jobs:
             echo "::error::Could not fetch origin/main, so tag ${GITHUB_REF_NAME} cannot be proven to come from reviewed history. Refusing to release. Re-run this job once the fetch succeeds."
             exit 1
           fi
-          if ! git merge-base --is-ancestor "${GITHUB_SHA}" refs/remotes/origin/main; then
+          # `|| rc=$?`, not `; rc=$?`: the runner's default shell is `bash -e`, which would
+          # abort the step at the failing command before the assignment ran — failing closed
+          # but printing nothing. merge-base exits 1 for "not an ancestor" and >1 (128) for a
+          # real git error; conflating them sends an operator hunting the wrong problem.
+          rc=0
+          git merge-base --is-ancestor "${GITHUB_SHA}" refs/remotes/origin/main || rc=$?
+          if [ "$rc" -gt 1 ]; then
+            echo "::error::git merge-base failed (exit ${rc}) — ancestry of ${GITHUB_SHA} could not be determined, so it cannot be proven to come from reviewed history. This is a git/checkout problem (missing object or incomplete history), not a rejected tag. Refusing to release."
+            exit 1
+          fi
+          if [ "$rc" -ne 0 ]; then
             echo "::error::Tag ${GITHUB_REF_NAME} points at ${GITHUB_SHA}, which is not an ancestor of origin/main — it never reached main, so it was never reviewed. Do NOT move or delete this tag (the ruleset blocks both). Merge the change to main, then cut the next patch version from the merged commit."
             exit 1
           fi

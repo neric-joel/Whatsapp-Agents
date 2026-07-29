@@ -88,7 +88,8 @@ overrides from `package.json`).
   adapter prompt construction, run state machine, API validation/authz) ships with
   tests that assert **behavior**, not implementation.
 - Tests must be **deterministic** — use the mock adapter; no real network/LLM calls in
-  the default suite. Coverage floors are enforced in CI.
+  the default suite. Coverage floors fail the `test:coverage` run — which does gate a
+  release (it is in `release.yml`'s `verify` job), but not a merge, per the note above.
 
 ## Architecture & conventions
 

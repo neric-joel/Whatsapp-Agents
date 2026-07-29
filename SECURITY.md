@@ -100,5 +100,14 @@ Release and the npm publish both depend on that job, so a tagged commit that tri
 one does not ship. CodeQL is **not** re-run on a tag and therefore blocks nothing at
 release time. The `release` job additionally refuses to release a tag whose commit is not
 an ancestor of `origin/main` (a `v*` tag can be created on any commit — tag *creation* is
-not restricted server-side, only moves and deletions are), and every action in that
-workflow is pinned to a full commit SHA rather than a movable tag.
+not restricted server-side, only moves and deletions are), and everything that workflow
+executes — every action, and the gitleaks container image — is pinned by immutable digest
+rather than by a movable tag.
+
+**What that does not cover.** These release-time checks live in `release.yml` **at the
+tagged commit**, so they defend against a mistaken, stale, or unmerged tag — not against
+someone with `contents: write`, who can push a branch whose `release.yml` has the ancestry
+check, the audit and gitleaks steps and the pins deleted, then tag that commit. Closing
+that requires a `creation` rule on the `protect-release-tags` ruleset, restricted to the
+release identity: a repository setting, not a file, and not something these checks can
+substitute for.
