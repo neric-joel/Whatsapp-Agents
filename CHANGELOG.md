@@ -126,6 +126,16 @@ before upgrading.
   same inline-safe MIME allowlist the download route uses to choose `inline` vs
   `attachment`, so an SVG attachment takes the Download path and keeps the route's
   `default-src 'none'; sandbox` CSP instead of becoming a CSP-less same-origin `blob:` URL.
+- **Both of those Preview failures are now regression-tested at the DOM level.** They were
+  invisible to the suite for a structural reason: `apps/web` runs every test under
+  `environment: 'node'`, so nothing rendered, and a "the button does nothing" bug has no
+  logic-level symptom. `apps/web/components/__tests__/FileAttachmentCard.test.tsx` renders
+  the card under `React.StrictMode` in jsdom (opted into per-file with the
+  `// @vitest-environment jsdom` pragma — the suite default stays `node`), clicks the
+  button, and routes `fetch` to the real `signed-download` `GET` handler so the response is
+  the route's actual raw bytes rather than an assumed JSON envelope. Both shipped versions
+  of the bug fail it, and it also pins the object-URL lifecycle: revoked on unmount, and
+  revoked rather than leaked when it resolves after unmount.
 
 ## [1.6.0] - 2026-07-26
 
