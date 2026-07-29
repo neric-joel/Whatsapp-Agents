@@ -13,11 +13,13 @@ import { buildWindowsCmdCommandLine, needsWindowsCmdCommandLine } from '@agentro
  *      by cmd.exe / sh, so there is no command-injection surface.
  *   2. The binary is resolved to an absolute path from a trusted source (an
  *      explicit *_BIN env var, or a PATH lookup) — never from agent data.
- *   3. The child environment is allowlisted — secrets (anything matching
- *      SECRET_ENV_PATTERN below: *_SECRET / *_TOKEN / *_KEY / SERVICE_ROLE /
- *      SUPABASE / PRIVATE_KEY / bridge + credential config) are never forwarded to
- *      a child process. A legitimate provider key reaches exactly one child through
- *      the per-run `inject` seam instead (ADR-0010), never through the environment.
+ *   3. The child environment is allowlisted, and anything matching
+ *      SECRET_ENV_PATTERN is denied before the allowlist is consulted, so no secret
+ *      in the bridge's own environment reaches a child. That regex, defined below,
+ *      is the single source of truth for which names are secret — deliberately not
+ *      restated here, because every restatement is one more thing to drift. A
+ *      legitimate provider key reaches exactly one child through the per-run
+ *      `inject` seam instead (ADR-0010), never through the environment.
  */
 
 export class BinaryNotFoundError extends Error {

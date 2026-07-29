@@ -92,8 +92,10 @@ timeout/abort — but the model still has direct consequences:
 
 2. **Provider auth is the CLI's own job — AgentRoom never stores it.** The bridge passes
    through non-secret provider *config* (`ANTHROPIC_BASE_URL`, `AWS_REGION`, …) to the
-   child CLI, but denies credential-shaped names (`*_KEY`, `*APIKEY*`, `*_TOKEN`,
-   `*SECRET*`, `*CREDENTIAL*`, `*PASSWORD*`, `BRIDGE_*`) ahead of that allowlist — so a
+   child CLI, but denies credential-shaped names ahead of that allowlist — anything
+   containing `SECRET`, `PASSWORD`, `CREDENTIAL`, `APIKEY`, `PRIVATE_KEY`, `SUPABASE` or
+   `SERVICE_ROLE`, starting with `BRIDGE_`, ending with `_KEY` or `_TOKEN`, or named
+   exactly `TOKEN` — so a
    provider API key exported in your own shell is **not** inherited by the CLIs. They
    authenticate from the login they already stored on this machine. You are never asked to
    paste a provider API key into AgentRoom. (Two deliberate exceptions: a Connections

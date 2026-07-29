@@ -155,10 +155,14 @@ test('buildChildEnv denies credential names the anchored clauses missed', () => 
 // The deny is unanchored and broad, so guard the other direction: it must not eat a
 // variable the CLIs need in order to start.
 test('buildChildEnv still forwards every base OS variable', () => {
+  // Mirrors BASE_ENV_KEYS in subprocess-security.ts exactly, case-variant aliases
+  // included — those aliases are entries in their own right, so they need the guard too.
   const baseKeys = [
     'PATH',
+    'Path',
     'PATHEXT',
     'SystemRoot',
+    'SYSTEMROOT',
     'windir',
     'COMSPEC',
     'TEMP',
