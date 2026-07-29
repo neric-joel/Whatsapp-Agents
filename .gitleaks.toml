@@ -1,13 +1,26 @@
-# gitleaks config. Default rules stay on; allowlist only fixtures/examples that
-# legitimately contain FAKE secrets (e.g. redact.test.ts uses a fake JWT to verify
-# the redaction function). Real-secret detection in app/source code is unaffected.
+# gitleaks config. Default rules stay on. The allowlist below exempts ONLY the exact
+# literal fake values used as test fixtures (a fake JWT + a fake hex key) — never a
+# whole file or a whole directory. A real secret is still caught wherever it lands,
+# including inside a *.test.ts file or an .env.example: verified 2026-07-29 by (1)
+# scanning full history with useDefault=true and NO allowlist at all, which surfaced
+# exactly these same 5 fake-fixture matches and nothing else, and (2) confirming a
+# synthetic realistic secret dropped into a throwaway *.test.ts file IS caught under
+# this config (an equivalent whole-path exemption misses it — 0 bytes scanned).
+# pnpm-lock.yaml is intentionally left unallowlisted: a lockfile can carry resolution
+# URLs where a leaked `https://user:token@registry...` would surface, and scanning it
+# produces zero findings today. If a future lockfile change ever produces noise there,
+# allowlist the specific rule ID, not the whole file.
 [extend]
 useDefault = true
 
 [allowlist]
-description = "Fake/placeholder secrets in tests + example envs (not real)."
-paths = [
-  '''.*\.test\.ts$''',
-  '''.*\.env\.example$''',
-  '''pnpm-lock\.yaml$''',
+description = "Exact fake fixture values used by tests (verified 2026-07-29, not real secrets)."
+regexes = [
+  # packages/shared/test/redact.test.ts + apps/web/lib/__tests__/redact.test.ts: a fake
+  # JWT used to prove the redactor's jwt-pattern rule strips it.
+  '''eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiIxMjM0NTY3ODkwIn0\.dGVzdHNpZ25hdHVyZQ''',
+  # bridge/test/resolve-runtime-provider.test.ts + bridge/test/credential-crypto.test.ts:
+  # a fake 32-byte hex key (sequential 00..ff byte pairs, repeated) used as a
+  # CREDENTIAL_ENCRYPTION_KEY fixture — never a real key.
+  '''00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff''',
 ]

@@ -123,6 +123,21 @@ test('re-redacting stored text preserves the existing marker (digits in the guar
   assert.equal(redact('token: Bearer [REDACTED:base64]'), 'token: Bearer [REDACTED:base64]')
 })
 
+test('the SUPABASE_SERVICE_ROLE_KEY rule is idempotent, like its key=value neighbour', () => {
+  // Without the same `(?!\[REDACTED(?::[a-z0-9]+)?\])` guard the neighbouring label rule
+  // carries, `\S+` greedily eats an already-present `[REDACTED]` marker too, and — because
+  // this rule's match spans the key name itself — a second pass through redact() collapses
+  // "SUPABASE_SERVICE_ROLE_KEY=[REDACTED]" down to bare "[REDACTED]", destroying which env
+  // var was redacted. redact() runs at multiple independent layers on the same underlying
+  // text (e.g. run-worker.ts before persisting, then error-tracking.ts on the same error),
+  // so already-redacted text re-entering redact() is a real path, not a hypothetical.
+  const alreadyRedacted = 'SUPABASE_SERVICE_ROLE_KEY=[REDACTED]'
+  assert.equal(redact(alreadyRedacted), alreadyRedacted, 'marker was rewritten on re-redaction')
+
+  const once = redact('before SUPABASE_SERVICE_ROLE_KEY=abc.def-ghi after')
+  assert.equal(redact(once), once, 'redacting twice must be a no-op for this rule')
+})
+
 // --- Existing behaviour must still hold ----------------------------------------------------
 
 test('still redacts JWTs, long base64 blobs, AKIA ids and the Supabase service key', () => {

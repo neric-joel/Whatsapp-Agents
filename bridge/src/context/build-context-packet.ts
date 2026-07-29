@@ -154,11 +154,14 @@ export async function buildContextPacket({
   let files: ContextFilePreview[] = []
   if (fileIds.length > 0) {
     const uniqueFileIds = [...new Set(fileIds)].slice(0, 10)
+    // Room-scoped: file_ids comes from message metadata, which stripServerOwnedMetadata does
+    // not filter, so without this predicate a crafted metadata.file_ids could pull another
+    // room's filename/extracted_text into this room's agent prompt.
     const fileRows = db
       .prepare(
-        `SELECT id, filename, mime_type, size_bytes, storage_path, storage_bucket, extracted_text, metadata FROM files WHERE id IN (${uniqueFileIds.map(() => '?').join(',')})`,
+        `SELECT id, filename, mime_type, size_bytes, storage_path, storage_bucket, extracted_text, metadata FROM files WHERE id IN (${uniqueFileIds.map(() => '?').join(',')}) AND room_id = ?`,
       )
-      .all(...uniqueFileIds)
+      .all(...uniqueFileIds, run.room_id)
     files = await hydrateFilePreviews(
       fileRows.map((r) => rowToFile(r as Record<string, unknown>)) as unknown as FilePreviewRow[],
     )

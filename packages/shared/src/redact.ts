@@ -46,7 +46,10 @@ const REDACT_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
       /(?:password|passwd|secret|token|api[ _-]?key)\s*[:=]\s*(?!Bearer\s+\[REDACTED(?::[a-z0-9]+)?\])(?!\[REDACTED(?::[a-z0-9]+)?\])(?:Bearer\s+)?\S+/gi,
     replacement: '[REDACTED]',
   },
-  { pattern: /SUPABASE_SERVICE_ROLE_KEY\s*=\s*\S+/g, replacement: '[REDACTED]' },
+  {
+    pattern: /SUPABASE_SERVICE_ROLE_KEY\s*=\s*(?!\[REDACTED(?::[a-z0-9]+)?\])\S+/g,
+    replacement: '[REDACTED]',
+  },
   { pattern: /AKIA[0-9A-Z]{16}/g, replacement: '[REDACTED]' },
 ]
 

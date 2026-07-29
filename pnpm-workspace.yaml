@@ -12,3 +12,6 @@ overrides:
   postcss: 8.5.23
   sharp: 0.35.3
   vite: 8.1.5
+  # GHSA-g7r4-m6w7-qqqr: esbuild <0.28.1 dev-server arbitrary file read (Windows).
+  # Dev-only, transitive via vitest/vite; pinned to the patched release.
+  esbuild: 0.28.1
