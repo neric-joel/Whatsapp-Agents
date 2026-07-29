@@ -87,14 +87,47 @@ export const ALLOWED_UPLOAD_MIME_TYPES = [
   'application/zip',
 ] as const
 
+/**
+ * Characters an uploaded filename may never contain, on top of the `.`/`..`
+ * traversal rules below: `/` and `\` (path separators), `"` (lets an attacker
+ * close the quoted `filename=` parameter early and append a second,
+ * attacker-controlled `filename*` to the Content-Disposition header on download —
+ * see `lib/download-disposition.ts`), and any ASCII control character 0x00–0x1F
+ * or 0x7F (a raw CR/LF makes the download route's `new Response(...)` throw,
+ * permanently 500-ing that file). Checked with a charCode scan rather than a
+ * `\x00-\x1f` regex range so the intentional control-char check doesn't need to
+ * suppress eslint's `no-control-regex`. Shared by the signed-upload route's
+ * inline check and `signedUploadSchema` below so the two validators cannot drift
+ * apart — this repo has already shipped one duplicated-constant bug from exactly
+ * that.
+ */
+export function isValidUploadFilename(filename: string): boolean {
+  if (
+    filename.length === 0 ||
+    filename.length > 255 ||
+    filename === '.' ||
+    filename === '..' ||
+    filename.includes('/') ||
+    filename.includes('\\') ||
+    filename.includes('"')
+  ) {
+    return false
+  }
+  for (let i = 0; i < filename.length; i++) {
+    const code = filename.charCodeAt(i)
+    if (code <= 0x1f || code === 0x7f) return false
+  }
+  return true
+}
+
 export const signedUploadSchema = z.object({
   filename: z
     .string()
     .min(1)
     .max(255)
     .refine(
-      (s) => !s.includes('/') && !s.includes('\\') && !s.includes('\0') && s !== '.' && s !== '..',
-      'filename must not contain path separators or traversal sequences',
+      isValidUploadFilename,
+      'filename must not contain path separators, quotes, control characters, or traversal sequences',
     ),
   mime_type: z.enum(ALLOWED_UPLOAD_MIME_TYPES as unknown as [string, ...string[]]),
   size_bytes: z.number().int().positive().max(MAX_UPLOAD_BYTES),
