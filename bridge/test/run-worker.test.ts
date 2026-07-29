@@ -677,7 +677,9 @@ test('a tool literally NAMED "category:read" does not collide with a stale categ
   // With the name check as the only path, a `category:`-prefixed key is just an ordinary
   // (dead) map entry. This pins that a tool cannot rename itself into one.
   seedWorld({ agent: { tool_permissions: JSON.stringify({ 'category:read': true }) } })
-  const adapter = toolCallAdapter({ tool_name: 'category:read', arguments: {} }, false)
+  // The agent asks to be gated (`true`), so `requires_approval: 0` below can only come from
+  // the server honouring the exact-name grant — not from trusting the agent's flag.
+  const adapter = toolCallAdapter({ tool_name: 'category:read', arguments: {} }, true)
 
   await processRun('run-1', { getAdapter: () => adapter, approvalPollMs: 1 })
 

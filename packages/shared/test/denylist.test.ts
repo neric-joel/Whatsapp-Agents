@@ -68,6 +68,38 @@ test('power-control verbs in prose are not commands (position AND shape are both
     'systemctl restart nginx',
     'systemctl status poweroff.target',
     'systemctl 0',
+    // `now` only counts as an operand at the real end of a command
+    'halt now, then investigate',
+    'echo "shutdown now"',
+  ]) {
+    assert.equal(isDeniedCommand(benign), false, `should be allowed: ${benign}`)
+  }
+})
+
+test('a bare verb in a config VALUE position is not a command', () => {
+  // Treating a quote/bracket as a command separator makes every JSON, YAML and HTML
+  // attribute value with a `reboot`/`shutdown` key look like a command in command position.
+  // An agent writing a config file or emitting a structured payload is an everyday case, and
+  // a denial fails the entire run — so the separator does not count after JSON/attribute
+  // punctuation. Quoted PHRASES were always safe; this is specifically the bare quoted verb.
+  for (const benign of [
+    '{"action": "reboot"}',
+    '{"shutdown": true}',
+    "{'reboot': False}",
+    'policy="reboot"',
+    '["reboot", "status"]',
+    'action: "reboot"',
+    '- "reboot"',
+    '<option value="reboot">',
+    '{"mode":"poweroff"}',
+    "{'action': 'halt'}",
+    'onclick="poweroff"',
+    'key: "shutdown"',
+    '{"a": 1, "b": "reboot"}',
+    "value='shutdown'",
+    // the phrase forms, which must stay allowed
+    '"graceful shutdown"',
+    '"shutdown hooks"',
   ]) {
     assert.equal(isDeniedCommand(benign), false, `should be allowed: ${benign}`)
   }
@@ -127,6 +159,19 @@ test('power-control verbs IN command position are still denied', () => {
     'time reboot',
     'exec poweroff',
     'sudo nohup shutdown -h now',
+    // sudo/wrapper forms the `-\w{1,32}` flag alphabet could not reach: `\w` cannot match a
+    // GNU long flag (the second `-` is not a word char) and nothing consumed a flag's
+    // separate-word value, so all of these were allowed while the substrings had caught them
+    'sudo -u root reboot',
+    'sudo -n -E -u root reboot',
+    'sudo --preserve-env shutdown -h now',
+    'sudo --user=root reboot',
+    '/usr/bin/sudo reboot',
+    'su -c reboot',
+    'timeout 5 reboot',
+    'setsid reboot',
+    // separator forms that must survive the value-position lookbehind
+    'shutdown now; echo bye',
     // controller forms
     'systemctl poweroff',
     'systemctl reboot',

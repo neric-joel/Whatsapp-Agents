@@ -20,6 +20,19 @@
 // agent's `tool_permissions` does not name explicitly stops for a human; the agent-supplied
 // `requires_approval` and `tool_category` fields are both ignored), and the agent CLI's own
 // permission mode. Do not grant a capability on the strength of this list; grant it on those.
+//
+// KNOWN FALSE POSITIVES, kept deliberately. Each one denies a tool call and FAILS THE RUN,
+// so they are the cost side of the ledger and belong on the record next to the bypasses:
+//   • `reboot 2 servers`, `shutdown 5 nodes` — a digit operand at command position reads as
+//     a command. Kept so `shutdown 19:00` and `reboot 30` stay denied.
+//   • `(reboot) see appendix`, `See section "Shutdown"` — a bare verb inside a delimiter
+//     pair is indistinguishable from `sh -c 'poweroff'` without knowing the enclosing
+//     language.
+//   • `| shutdown | …` in a markdown table — a leading `|` is indistinguishable from a
+//     pipeline separator.
+// And the matching known MISS, from the same trade: `bash -c "shutdown now"` is allowed,
+// because `now` only counts as an operand before end-of-string or a shell separator. That
+// is what keeps `echo "shutdown now"` and `halt now, then investigate` from failing a run.
 
 const DENIED_SUBSTRINGS = [
   'rm -rf',
@@ -34,6 +47,43 @@ const DENIED_SUBSTRINGS = [
   'ufw disable',
 ]
 
+// ── Host power control ───────────────────────────────────────────────────────────────
+// Built from shared fragments rather than written twice: the two rules below previously
+// drifted apart (one accepted `-\S`, the other `-\w`, which cannot match a GNU long flag
+// because the second `-` is not a word character — so `sudo --preserve-env shutdown` and
+// `sudo -u root reboot` were both allowed). Sharing the prefix makes that class of drift
+// impossible rather than merely fixed.
+//
+// Two things must be true at once, because these words are also ordinary English and EVERY
+// LEAF IS SCANNED AS ITS OWN STRING — position 0 is the normal case for a prose leaf, not
+// an edge case, so an anchor alone is not enough:
+//   1. command POSITION — string start, or after a separator; and
+//   2. command SHAPE — followed by end-of-string, a separator, or a whitespace-separated
+//      operand (`-h`, `/s`, `+5`, `19:00`, `now`).
+// Shape is what allows `halt the rollout`, `shutdown runbook`, `reboot.sh`,
+// `poweroff/reboot procedures`, `shutdown-hooks.md` — a following bare word, or a `-`/`/`
+// with no space before it, is prose — while still denying bare `halt` and `shutdown now`.
+//
+// Every quantifier is bounded. The unbounded `\S*\/` path prefix this replaced rescanned to
+// end-of-string at every separator: quadratic, 362ms on a 32 KB leaf against 2.3ms now, and
+// up to MAX_SCAN_NODES leaves are scanned per call.
+const BACKTICK = '\x60'
+/** Command position: string start, a shell separator, or an opening quote/paren — but NOT
+ *  a quote that follows JSON/YAML/attribute punctuation, which is a VALUE, not a command.
+ *  Without the lookbehind, `{"action": "reboot"}` and `policy="reboot"` were denied. */
+const CMD_START = '(?:^|[\\n;&|]|(?<![-{[,:=][ \\t]*)[' + BACKTICK + '("\'])'
+const PATH_PREFIX = '(?:[^\\s;&|"\'' + BACKTICK + ']{0,64}\\/)?'
+const WRAPPER_CMD = '(?:sudo|doas|env|nohup|time|exec|command|su|timeout|setsid)'
+/** A flag (with an optional separate-word value), a VAR=VALUE assignment, or a small number. */
+const FLAG_OR_ARG = '(?:-\\S{1,32}(?:[ \\t]+[\\w.:@\\/-]{1,32})?|\\w{1,32}=[^\\s]{0,64}|\\d{1,4})'
+const CMD_PREFIX =
+  '[ \\t]*(?:(?:' + PATH_PREFIX + WRAPPER_CMD + '|' + FLAG_OR_ARG + ')[ \\t]+){0,6}' + PATH_PREFIX
+/** End of the command: end-of-string, a shell separator, or a closing quote/paren. */
+const CMD_END = '[ \\t]*(?:$|[\\n;&|' + BACKTICK + ')"\'])'
+/** `now` counts as an operand only at the real end of a command — otherwise
+ *  `halt now, then investigate` and `echo "shutdown now"` fail the run. */
+const CMD_SHAPE = '(?=[ \\t]+(?:[-/+]|\\d|now(?=[ \\t]*(?:$|[\\n;&|])))|' + CMD_END + ')'
+
 const DENIED_REGEXES = [
   /\brm\s*(-[rRfF]+\s*)+/i,
   // A real DDL object, not the bare verb: `git commit -m "drop legacy flag"` is not a
@@ -47,24 +97,20 @@ const DENIED_REGEXES = [
   // no false positives to save — while requiring it to name a device would let
   // `mkfs.ext4 $DEV` through.
   /\bmkfs(?:\.[a-z0-9]+)?\b/i,
-  // Host power control. Two things have to be true at once, because these words are also
-  // ordinary English and EVERY LEAF IS SCANNED AS ITS OWN STRING — position 0 is the normal
-  // case for a prose leaf, not an edge case, so an anchor alone is not enough:
-  //   1. command POSITION — string start, or after a separator (`;` `&` `|` newline, an
-  //      opening quote/paren, `$(`), optionally through wrapper commands (`sudo -i`,
-  //      `env X=1`, `nohup`, `time`) and an absolute path (`/sbin/shutdown`);
-  //   2. command SHAPE — followed by end-of-string, a separator, or a whitespace-separated
-  //      operand (`-h`, `/s`, `+5`, `19:00`, `now`).
-  // Requirement 2 is what allows `halt the rollout`, `shutdown runbook`, `reboot.sh`,
-  // `poweroff/reboot procedures` and `shutdown-hooks.md` — a following bare word, or `-`/`/`
-  // with no space, is prose — while still denying bare `halt` and `shutdown now`.
-  // Every quantifier here is bounded: the unbounded `\S*\/` this replaced rescanned to
-  // end-of-string at every separator, which was quadratic (362ms on a 32 KB leaf, 2.3ms now).
-  /(?:^|[\n;&|`("'])[ \t]*(?:(?:sudo|doas|env|nohup|time|exec|command)[ \t]+){0,3}(?:(?:-\w{1,32}|\w{1,32}=[^\s]{0,64})[ \t]+){0,4}(?:[^\s;&|"'`]{0,64}\/)?(?:shutdown|reboot|halt|poweroff)(?=[ \t]+(?:[-/+]|\d|now\b)|[ \t]*(?:$|[\n;&|`)"']))/i,
-  // The same verbs as the OPERAND of a controller in command position. Anchored like the
-  // rule above, and the runlevel must END the command: unanchored `\binit\s+\d` denied
-  // `git init 2>/dev/null`, `npm init 2` and `init 3 replicas`, each of which fails the run.
-  /(?:^|[\n;&|`("'])[ \t]*(?:(?:sudo|doas)[ \t]+){0,2}(?:[^\s;&|"'`]{0,64}\/)?(?:systemctl[ \t]+(?:-\S{1,32}[ \t]+){0,4}(?:poweroff|reboot|halt)\b|(?:tel)?init[ \t]+[0-6](?=[ \t]*(?:$|[\n;&|`)"'])))/i,
+  // Host power control in command position — see the fragment definitions above.
+  new RegExp(CMD_START + CMD_PREFIX + '(?:shutdown|reboot|halt|poweroff)' + CMD_SHAPE, 'i'),
+  // The same verbs as the OPERAND of a controller in command position. The runlevel must END
+  // the command: an unanchored `\binit\s+\d` denied `git init 2>/dev/null`, `npm init 2` and
+  // `init 3 replicas`, each of which fails the whole run.
+  new RegExp(
+    CMD_START +
+      CMD_PREFIX +
+      '(?:systemctl[ \\t]+(?:-\\S{1,32}[ \\t]+){0,4}(?:poweroff|reboot|halt)\\b' +
+      '|(?:tel)?init[ \\t]+[0-6](?=' +
+      CMD_END +
+      '))',
+    'i',
+  ),
   /\bTRUNCATE\s+TABLE\b/i,
   /\bDELETE\s+FROM\b(?![\s\S]*\bWHERE\b)/i,
 ]
