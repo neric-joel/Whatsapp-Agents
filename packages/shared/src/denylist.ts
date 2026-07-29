@@ -29,8 +29,14 @@
 //   • `scripts/reboot`, `./bin/halt`, `/etc/init.d/reboot` — a path ending in the verb is a
 //     real way to invoke it, so a repo path that happens to end the same way is denied. URLs
 //     are excluded (PATH_PREFIX rejects `:`), but relative paths cannot be.
-//   • `(reboot) see appendix`, `See section "Shutdown"` — a bare verb inside a delimiter pair
-//     is indistinguishable from `sh -c 'poweroff'` without knowing the enclosing language.
+//   • A bare verb inside a delimiter pair, whenever the opening quote/paren follows a WORD
+//     character. That is command position by design — it is how `bash -c "shutdown -h now"`
+//     and `sh -c 'poweroff'` are caught — and only the `[-{[,:=(]` punctuation classes are
+//     excluded, so this is a broad class, not a corner: markdown inline code
+//     (`` `reboot` is aliased to … ``), `case "reboot":`, `return "reboot"`, `throw "halt"`,
+//     and `TypeError: cannot read property "reboot" of undefined` all deny, as do
+//     `(reboot) see appendix` and `See section "Shutdown"`. Call syntax specifically —
+//     `print("reboot")`, `console.log("reboot")` — is excluded, because `(` is in the class.
 //   • `-x foo reboot` — indistinguishable from `sudo -u root reboot`.
 //   • `| shutdown | …` in a markdown table — a leading `|` is indistinguishable from a
 //     pipeline separator.
@@ -43,6 +49,25 @@
 //   • A quote preceded by `=` or `:` is never command position, which gives up
 //     `--command="shutdown -h now"`, `run: "shutdown -h now"` and `{"cmd": "shutdown -h now"}`.
 //     Accepted: the same rule is what stops every config value from failing a run.
+//   • Narrowing FLAG_OR_ARG, WRAPPER_CMD and PATH_PREFIX to kill false positives gave up 18
+//     spellings, all verified lost. Each narrowing is still the right trade — a false positive
+//     fails a run, a miss here costs nothing this list was ever able to guarantee — but the
+//     cost is real and belongs on the record:
+//       - the POSIX end-of-options token, because a flag's dashes must be followed by a word
+//         char (which is what stops `->`, `-->`, `--`, `--- reboot ---`): `sudo -- reboot`,
+//         `sudo -- shutdown -h now`, `sudo -- poweroff`, `env -- reboot`,
+//         `nohup -- shutdown -h now`, `doas -- reboot`, `setsid -- reboot`,
+//         `sudo -u root -- reboot`, `command -- halt`;
+//       - `timeout` with its own flags, because the duration binds tightly to the word (which
+//         is what stops a bare number opening command position): `timeout -s KILL 5 reboot`,
+//         `timeout -k 10 5 reboot`, `timeout --signal=KILL 5 reboot`,
+//         `timeout --foreground 5 poweroff`, `timeout -v 30 halt`,
+//         `sudo timeout -s TERM 5 reboot`;
+//       - the Windows drive-letter path, because PATH_PREFIX rejects `:` to let URLs through:
+//         `C:/Windows/System32/shutdown /s /t 0`, `C:/tools/reboot`, `file:///sbin/shutdown`.
+//         Worth naming: this list does target Windows (it denies `shutdown /s /t 0` and has a
+//         `format C:` rule), so this is a real gap rather than an irrelevant platform. Only the
+//         forward-slash spelling is affected; `C:\Windows\…` never matched PATH_PREFIX anyway.
 
 const DENIED_SUBSTRINGS = [
   'rm -rf',
@@ -78,8 +103,20 @@ const DENIED_SUBSTRINGS = [
 // tool call, so a per-leaf cost in seconds is a denial of service. Two quadratic defects have
 // already shipped in these rules — an unbounded `\S*\/` path prefix that rescanned to
 // end-of-string at every separator (362ms on a 32 KB leaf), and a misplaced lookbehind (see
-// CMD_START). Every quantifier below is bounded; keep it that way, and keep the shapes in the
-// `stays linear on adversarial leaves` test, which is what makes a regression visible.
+// CMD_START, 6947ms on a 64 KB leaf).
+//
+// The rule is NOT "bound every quantifier" — the `[ \t]*` / `[ \t]+` whitespace runs below are
+// deliberately unbounded (CMD_START's lookbehind, CMD_PREFIX, CMD_END, CMD_SHAPE, WRAPPER_CMD,
+// FLAG_OR_ARG) and are all linear. What actually caused both defects, and what to avoid:
+//   1. no unbounded quantifier over a class that can ALSO match the construct following it —
+//      `\S*` then `\/` rescans the whole token at every start position, whereas `[ \t]*` then
+//      a non-whitespace construct cannot;
+//   2. no variable-length lookbehind placed AHEAD of a character class — it makes the engine
+//      evaluate it at every input position instead of only where the class can match.
+// Neither is a property a reader can check by eye, so the enforcement is the
+// `stays linear on adversarial leaves` test. Keep every shape in it, and if you change these
+// rules, re-run a scaling probe (8/16/32/64 KB, growth must stay ~2x): the test's fixed budget
+// still admits a large slowdown, so a pass is necessary but not sufficient.
 const BACKTICK = '\x60'
 const POWER_VERB = '(?:shutdown|reboot|halt|poweroff)'
 /**
@@ -101,7 +138,7 @@ const PATH_PREFIX = '(?:[^\\s;&|"\'' + BACKTICK + ':]{0,64}\\/)?'
 /** Commands that run another command. `timeout` needs its duration and `su` needs a flag,
  *  or bare `timeout shutdown` / `su reboot` (prose) would count as command position. */
 const WRAPPER_CMD =
-  '(?:timeout[ \\t]+\\d{1,5}[smhd]?|sudo|doas|env|nohup|time|exec|command|setsid|su(?=[ \\t]+-))'
+  '(?:timeout[ \\t]+\\d{1,9}[smhd]?|sudo|doas|env|nohup|time|exec|command|setsid|su(?=[ \\t]+-))'
 /**
  * A flag (with an optional separate-word value) or a VAR=VALUE assignment. The dashes must be
  * followed by a WORD character: `-\S` let `->`, `-->`, `--` and `--- reboot ---` count as

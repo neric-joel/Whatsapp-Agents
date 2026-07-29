@@ -194,6 +194,11 @@ test('power-control verbs IN command position are still denied', () => {
     '/usr/bin/sudo reboot',
     'su -c reboot',
     'timeout 5 reboot',
+    // no arbitrary cliff on the duration: `timeout 99999 reboot` denied but
+    // `timeout 999999 reboot` allowed was the same kind of bound-shaped bug as `\d{1,4}`
+    'timeout 99999 reboot',
+    'timeout 999999 reboot',
+    'timeout 123456789 reboot',
     'setsid reboot',
     // `<verb> now` in an unambiguous command-execution context. Every one of these was
     // allowed when `now` was narrowed to protect `echo "shutdown now"` — the loss was a
@@ -222,7 +227,7 @@ test('power-control verbs IN command position are still denied', () => {
   }
 })
 
-test('isDeniedCommand stays linear on adversarial leaves (bounded quantifiers)', () => {
+test('isDeniedCommand stays linear on adversarial leaves', () => {
   // Two separate quadratic bugs have shipped here, and BOTH were invisible to a guard that
   // used the wrong filler character. Keep every shape below.
   //
