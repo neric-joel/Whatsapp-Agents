@@ -1,6 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+
+import { useToast } from '@/contexts/ToastContext'
+import {
+  confirmDownloadable,
+  resolvePreviewImageUrl,
+  signedDownloadUrl,
+} from '@/lib/file-attachment-open'
 
 interface FileAttachment {
   id: string
@@ -32,23 +39,31 @@ function mimeIcon(mime: string) {
   return 'FILE'
 }
 
-async function fetchSignedUrl(fileId: string) {
-  const res = await fetch(`/api/files/${fileId}/signed-download`)
-  const json = (await res.json()) as { ok: boolean; data?: { signed_url: string } }
-  if (!res.ok || !json.ok || !json.data) throw new Error('Failed to fetch signed URL')
-  return json.data.signed_url
-}
-
 export default function FileAttachmentCard({ file }: Props) {
   const [imgUrl, setImgUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const { showToast } = useToast()
+
+  // Revoke whenever imgUrl is replaced or the card unmounts — the object URL from
+  // resolvePreviewImageUrl is otherwise never reclaimed by the browser.
+  useEffect(() => {
+    return () => {
+      if (imgUrl) URL.revokeObjectURL(imgUrl)
+    }
+  }, [imgUrl])
 
   async function openFile() {
     setLoading(true)
     try {
-      const signedUrl = await fetchSignedUrl(file.id)
-      if (file.mime_type.startsWith('image/')) setImgUrl(signedUrl)
-      else window.open(signedUrl, '_blank', 'noopener,noreferrer')
+      if (file.mime_type.startsWith('image/')) {
+        setImgUrl(await resolvePreviewImageUrl(file.id))
+      } else {
+        await confirmDownloadable(file.id)
+        const opened = window.open(signedDownloadUrl(file.id), '_blank', 'noopener,noreferrer')
+        if (!opened) throw new Error('pop-up blocked')
+      }
+    } catch {
+      showToast(`Couldn't open ${file.filename}.`, 'error')
     } finally {
       setLoading(false)
     }
