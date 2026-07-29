@@ -13,7 +13,10 @@ export default defineConfig({
   // dies in vite:import-analysis with "content contains invalid JS syntax ... make sure
   // to not set jsx to preserve" — i.e. no component was importable by any test at all.
   // Transform-only; it does not touch the Next build, and `environment` below stays
-  // 'node' for the whole suite.
+  // 'node' for the whole suite. Because it restates a decision that otherwise lives only
+  // in tsconfig.json and Next's own transform, `runtime`/`importSource` have to be kept
+  // in sync with those — if Next's importSource ever changes, tests would silently
+  // compile JSX differently from the shipped build.
   oxc: {
     jsx: { runtime: 'automatic', importSource: 'react' },
   },

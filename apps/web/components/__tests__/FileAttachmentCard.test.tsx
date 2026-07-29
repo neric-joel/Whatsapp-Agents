@@ -124,6 +124,11 @@ let strictModeEffectMounts = 0
 /** Set while a test wants the in-flight fetch held open (unmount-during-fetch). */
 let fetchGate: Promise<void> | null = null
 
+// React's `act` reads this off the global. Saved and restored rather than left set, so
+// this file cannot change how a later file in the same worker behaves.
+const actEnvironmentHost = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+let priorActEnvironment: boolean | undefined
+
 /**
  * Routes the component's `fetch` to the REAL signed-download `GET` handler, so the
  * `Response` it sees is the route's actual output: raw bytes, real `Content-Type`,
@@ -188,6 +193,14 @@ interface Harness {
   unmount: () => Promise<void>
 }
 
+/**
+ * Every root rendered by the current test, so `afterEach` can tear down the ones a
+ * FAILING test never reached the end of. Without this, one failure leaks a live
+ * ToastProvider (and its pending dismiss timers) into every later test in the file,
+ * turning a single red test into a cascade that hides its own cause.
+ */
+const liveRoots: Array<() => Promise<void>> = []
+
 async function renderCard(file: FileProp): Promise<Harness> {
   const container = document.createElement('div')
   document.body.appendChild(container)
@@ -202,15 +215,17 @@ async function renderCard(file: FileProp): Promise<Harness> {
       </StrictMode>,
     )
   })
-  return {
-    container,
-    unmount: async () => {
-      await act(async () => {
-        root.unmount()
-      })
-      container.remove()
-    },
+  let torndown = false
+  const unmount = async () => {
+    if (torndown) return
+    torndown = true
+    await act(async () => {
+      root.unmount()
+    })
+    container.remove()
   }
+  liveRoots.push(unmount)
+  return { container, unmount }
 }
 
 /** The card's own Preview/Download button (the toast viewport has buttons too). */
@@ -224,8 +239,28 @@ function actionButton(container: HTMLElement): HTMLButtonElement {
 
 async function click(el: HTMLElement) {
   await act(async () => {
-    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    clickSync(el)
   })
+}
+
+/**
+ * Dispatches the click WITHOUT wrapping it in `act`, so the statement after the call
+ * observes only what the handler did synchronously, inside the click's own task.
+ *
+ * That distinction is the whole point for Download: `window.open` keeps the click's
+ * transient activation only if it runs before the handler yields, and an earlier
+ * version of this component put a pre-flight `fetch` in front of it, which made Safari
+ * and Firefox treat every download as a blocked pop-up. Asserting after `await
+ * act(...)` cannot see that — by then any number of microtasks have drained, so an
+ * `await` inserted ahead of `window.open` would still pass.
+ *
+ * Only safe where the synchronous part of the handler performs no state update (React
+ * would warn "not wrapped in act", which afterEach turns into a failure). That is true
+ * of the Download success path and nowhere else here — the pop-up-blocked branch calls
+ * showToast synchronously, so it keeps the act-wrapped `click` above.
+ */
+function clickSync(el: HTMLElement) {
+  el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
 }
 
 /**
@@ -257,7 +292,8 @@ async function writeStoredFile(relativePath: string, contents: string) {
 describe('FileAttachmentCard (DOM, StrictMode, real signed-download route)', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
-    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    priorActEnvironment = actEnvironmentHost.IS_REACT_ACT_ENVIRONMENT
+    actEnvironmentHost.IS_REACT_ACT_ENVIRONMENT = true
     db.filesRoot = await mkdtemp(join(tmpdir(), 'agentroom-file-attachment-card-'))
     objectUrlSeq = 0
     revokedUrls = []
@@ -279,12 +315,21 @@ describe('FileAttachmentCard (DOM, StrictMode, real signed-download route)', () 
   })
 
   afterEach(async () => {
+    // Before the stubs come down: a failing test can leave a root mounted, and its
+    // unmount still needs the object-URL fakes and a working act environment.
+    for (const unmount of liveRoots.splice(0)) await unmount()
+
     const actWarnings = consoleErrorArgs.filter((args) =>
       String(args[0] ?? '').includes('not wrapped in act'),
     )
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
     restoreObjectUrls()
+    if (priorActEnvironment === undefined) {
+      Reflect.deleteProperty(actEnvironmentHost, 'IS_REACT_ACT_ENVIRONMENT')
+    } else {
+      actEnvironmentHost.IS_REACT_ACT_ENVIRONMENT = priorActEnvironment
+    }
     document.body.innerHTML = ''
     await rm(db.filesRoot, { recursive: true, force: true })
     expect(actWarnings, 'React act() warnings must be fixed, not tolerated').toEqual([])
@@ -295,11 +340,9 @@ describe('FileAttachmentCard (DOM, StrictMode, real signed-download route)', () 
     // mount → cleanup → mount stops happening and every StrictMode assertion below
     // becomes vacuously true. Fail loudly instead.
     db.fileGet.mockReturnValue(pngRow)
-    const view = await renderCard(PNG)
+    await renderCard(PNG)
 
     expect(strictModeEffectMounts).toBe(2)
-
-    await view.unmount()
   })
 
   it('Preview renders the image from the real route’s raw bytes — after a StrictMode remount', async () => {
@@ -334,11 +377,19 @@ describe('FileAttachmentCard (DOM, StrictMode, real signed-download route)', () 
     expect(img).not.toBeNull()
     expect(img?.getAttribute('src')).toBe('blob:agentroom-test/1')
     expect(img?.getAttribute('alt')).toBe('photo.png')
+
+    // The ARGUMENT, not just the call count. `URL.createObjectURL(res)` instead of
+    // `URL.createObjectURL(await res.blob())` still mints exactly one URL and still
+    // renders an <img>, so a count-only assertion passes against it. The 14 bytes are
+    // the stored file's, which is also what PNG.size_bytes claims — so this pins that
+    // the blob really carries the route's body rather than a wrapper around it.
     expect(createObjectURLMock).toHaveBeenCalledTimes(1)
+    const blobArg = createObjectURLMock.mock.calls[0]?.[0]
+    expect(blobArg).toBeInstanceOf(Blob)
+    expect((blobArg as Blob).size).toBe(PNG.size_bytes)
+
     expect(button.disabled).toBe(false)
     expect(consoleErrorArgs).toEqual([])
-
-    await view.unmount()
   })
 
   it('revokes the preview object URL when the card unmounts', async () => {
@@ -377,7 +428,11 @@ describe('FileAttachmentCard (DOM, StrictMode, real signed-download route)', () 
     await waitFor(() => revokedUrls.length > 0, 'the late object URL to be revoked')
     expect(createObjectURLMock).toHaveBeenCalledTimes(1)
     expect(revokedUrls).toEqual(['blob:agentroom-test/1'])
-    expect(document.querySelector('img')).toBeNull()
+    // Deliberately NOT `expect(querySelector('img')).toBeNull()` — unmount() detaches
+    // the container, so that passes no matter what the component did. The real claim
+    // is that the late resolve is silent: revoked once, no second revoke, no error.
+    expect(revokeObjectURLMock).toHaveBeenCalledTimes(1)
+    expect(consoleErrorArgs).toEqual([])
   })
 
   it('Download hands the signed-download URL straight to window.open and never fetches it', async () => {
@@ -387,23 +442,26 @@ describe('FileAttachmentCard (DOM, StrictMode, real signed-download route)', () 
     const button = actionButton(view.container)
     expect(button.textContent).toBe('Download')
 
-    await click(button)
-
-    // Synchronous, first thing in the handler, and with the exact same argument list —
-    // an `await` before this call loses the click's transient activation and Safari and
-    // Firefox treat the result as a blocked pop-up.
+    // NOT `await click(...)`. These two assertions run in the same task as the dispatch,
+    // with nothing awaited in between, which is the only way to enforce "window.open
+    // runs before the handler yields". Wrapped in `act`, an `await Promise.resolve()`
+    // inserted ahead of window.open would still pass.
+    clickSync(button)
     expect(openMock).toHaveBeenCalledTimes(1)
     expect(openMock).toHaveBeenCalledWith(
       '/api/files/file-pdf/signed-download',
       '_blank',
       'noopener,noreferrer',
     )
+
+    // Now let anything the handler queued settle, and confirm it queued nothing: the
+    // historical fault was a pre-flight fetch sitting between the click and this call.
+    await act(async () => {})
     expect(fetchMock).not.toHaveBeenCalled()
     expect(createObjectURLMock).not.toHaveBeenCalled()
     expect(view.container.querySelector('img')).toBeNull()
     expect(view.container.querySelector('[role="alert"]')).toBeNull()
-
-    await view.unmount()
+    expect(consoleErrorArgs).toEqual([])
   })
 
   it('reports a blocked pop-up through the real ToastProvider instead of failing silently', async () => {
@@ -421,8 +479,6 @@ describe('FileAttachmentCard (DOM, StrictMode, real signed-download route)', () 
       "Couldn't open report.pdf.",
     )
     expect(consoleErrorArgs[0]?.[0]).toBe('openFile failed')
-
-    await view.unmount()
   })
 
   it('reports a failed Preview through the real ToastProvider when the route answers 404', async () => {
@@ -445,7 +501,5 @@ describe('FileAttachmentCard (DOM, StrictMode, real signed-download route)', () 
     expect(createObjectURLMock).not.toHaveBeenCalled()
     expect(consoleErrorArgs[0]?.[0]).toBe('openFile failed')
     expect(button.disabled).toBe(false)
-
-    await view.unmount()
   })
 })
