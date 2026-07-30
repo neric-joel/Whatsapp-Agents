@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.7.0] - 2026-07-29
+
 A security-hardening sweep: ten tasks across redaction, credential handling, the child
 process environment, download headers, the tool-approval gate, file permissions, and the
 release pipeline. Two of them are breaking for an existing install, and both break
@@ -35,9 +39,12 @@ before upgrading.
   provider-config pass-through handed every one of those keys to **every** child CLI,
   including one you connected yourself pointing at any binary on disk. **If a CLI was
   authenticating off a key exported in your shell, its agent runs will now fail auth.**
-  **Action:** run that CLI's own login, bind a stored credential to the agent (ADR-0010),
-  or put the key in that Connections profile's own `env` in `config.json` — all three scope
-  it to the one CLI that needs it instead of broadcasting it.
+  **Action:** run that CLI's own login, or put the key in that Connections profile's own
+  `env` in `config.json` — both scope it to the one CLI that needs it instead of
+  broadcasting it. Binding a stored credential (ADR-0010) is **not** a remedy for a CLI
+  connected through the Connections panel: those run as `adapter_type: 'cli'`, for which no
+  injection target is defined, so the credential is ignored. It works for the `claude-code`
+  and `codex-cli` adapter types, which the New-agent form does not currently offer.
 
 ### Security
 
@@ -69,10 +76,16 @@ before upgrading.
   ignored and the classification is derived server-side, and the destructive-command scan
   walks the entire argument tree instead of looking only at a top-level `command` key
   (which any nesting, or a differently named argument, walked straight past). Scan
-  truncation is now a loud `warn` rather than a silent pass. The path remains **dormant** —
-  no bundled adapter emits `tool_call_requested`, so the gate still never fires in the
-  shipped product (as `docs/ARCHITECTURE.md` has said since 1.4.1); this hardens the
-  scaffolding ahead of a producer.
+  truncation is now a loud `warn` rather than a silent pass. The walk is bounded three ways
+  — depth, node count, and a **cumulative** character budget — because the first two bound
+  the argument tree's shape and say nothing about its size: ten 10 MiB strings is eleven
+  nodes at depth two, inside both, and measured 12.4 seconds with no truncation reported. A
+  per-leaf cap does not fix that (a 512 KB one admits 4998 leaves of 511 KB at 261 seconds);
+  only the running total does. All three fail open, because a denial fails the whole run and
+  an exhausted budget must not invent one. The path remains **dormant** — no bundled adapter
+  emits `tool_call_requested`, so the gate still never fires in the shipped product (as
+  `docs/ARCHITECTURE.md` has said since 1.4.1); this hardens the scaffolding ahead of a
+  producer.
 - **App-data files are created owner-only.** The app-data directory and its `files/` folder
   are created `0700`, and `config.json`, `agentroom.db` and its `-wal`/`-shm` sidecars
   `0600`. The database holds
@@ -115,6 +128,22 @@ before upgrading.
 
 ### Fixed
 
+- **Creating a room could open a different room.** `/` sent you to the most recently active
+  room from a client effect keyed on the room list, which made it a standing rule rather
+  than a one-time landing: it re-fired whenever that list changed — including the refresh
+  that room creation performs — and could land *after* the navigation creation had already
+  started. You then ended up in whichever room sorts first, never the one you just made,
+  because a brand-new room has no messages and the ordering puts rooms with messages first.
+  `/` now redirects on the server, before any client code exists to compete with it. Two
+  components asserting control over one route cannot be fixed by ordering them, so the
+  contender was removed: measured across full-suite runs, 1/5 green → 3/6 with the redirect
+  guarded → 5/6 with the navigation reordered → **10/10** once it moved server-side.
+- **Two concurrent `npx agentroom` runs meant one of them failed.** The cache sweep deleted
+  every `*.part` file it found, including the in-flight download of another live process,
+  which then died on a raw `ENOENT`. `.part` names carry the pid that owns them precisely so
+  a live download can be told from a leftover; the sweep now spares an owner that is still
+  running. (The old code's comment claimed concurrent runs "can't interleave writes into one
+  file" — true, and beside the point: the later run deleted the earlier one's file.)
 - **File attachment Preview and Download were completely broken; both work now.** The card
   called `res.json()` on `signed-download`, which answers a success with the file's raw
   bytes and only ever returns JSON on an *error* — so every click threw a parse error and
@@ -141,11 +170,20 @@ before upgrading.
 - **The browser's error channels are now a gate, not just the rendered output.** No e2e
   spec asserted on `console.error` or uncaught page errors, so a route could satisfy every
   existing assertion while throwing on each load. `e2e/zz-console-hygiene.spec.ts` walks the
-  room list and the connections/settings routes and fails on any `console.error`, uncaught
-  page error, or 4xx/5xx response. Aborted requests are
+  room list, room creation, and the connections/settings routes, and fails on any
+  `console.error`, uncaught page error, or 4xx/5xx response. Aborted requests are
   classified separately by their failure reason: Next's App Router cancels in-flight RSC
   prefetches (`?_rsc=`) on navigation, and counting those as failures would make the spec
   permanently red for correct behaviour.
+- **The published `npx` bin is tested for the first time.** `scripts/npx-bootstrap.mjs` is
+  the artifact every user runs and the only file the npm tarball ships, yet nothing
+  exercised it: `prepublishOnly` is `node --check` (syntax only), no workspace owns
+  `scripts/`, and the e2e suite drives the web app rather than the installer. A defect there
+  reached every user with no gate in between — the concurrent-download bug above is one that
+  did. `scripts/test/npx-bootstrap.test.mjs` runs the bin as a real subprocess against a
+  throwaway cache with no network, and is wired into both `test` and `test:coverage` (the
+  latter matters: CI and the release workflow run only `test:coverage`, and `pnpm -r` skips
+  the workspace root).
 - **CI builds before it typechecks.** `apps/web/tsconfig.json` includes
   `.next/types/**/*.ts`, which `next build` generates — the per-route validators that
   reject a route file exporting anything beyond the handler names Next recognizes. Without
@@ -662,7 +700,8 @@ returned **GO** (0 Critical, 0 confirmed High). Highlights by phase:
   server/service-role path is unaffected. Verified against a live DB (pgTAP +
   role-level SQL + real PostgREST HTTP); migration `20260531000004_agents_column_privs.sql`.
 
-[Unreleased]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/neric-joel/Whatsapp-Agents/compare/v1.4.0...v1.4.1
