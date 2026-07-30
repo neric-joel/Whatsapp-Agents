@@ -310,15 +310,40 @@ async function extract(tarball, appDir) {
   }
 }
 
+/** True when `pid` names a process that still exists — signal 0 checks for existence
+ *  without delivering anything. EPERM means it exists but belongs to another user. */
+function pidAlive(pid) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (err) {
+    return err?.code === 'EPERM'
+  }
+}
+
 /** Best-effort sweep of leftovers from hard-killed runs (`.extract-*` scratch dirs
  *  and `*.part` partial downloads use random/pid names, so the OS never reclaims
- *  them and a later run never reuses them). */
+ *  them and a later run never reuses them).
+ *
+ *  A `*.part` is only an orphan once the process that named it is gone. This used to
+ *  delete every one of them, so a second `npx agentroom` started while the first was
+ *  still downloading removed the first's in-flight file — and the victim then died on
+ *  `readFileSync(part)` with a raw ENOENT. `.part` names carry their owner's pid
+ *  precisely so this can be told apart; the old comment claimed concurrent runs "can't
+ *  interleave writes into one file", which was true and beside the point. */
 function sweepOrphans(cacheRoot) {
   try {
     for (const name of readdirSync(cacheRoot)) {
-      if (name.startsWith('.extract-') || name.endsWith('.part')) {
+      if (name.startsWith('.extract-')) {
         rmSync(join(cacheRoot, name), { recursive: true, force: true })
+        continue
       }
+      if (!name.endsWith('.part')) continue
+      // `<file>.<pid>.part` — keep it if that pid is still running. An unparseable name
+      // predates this scheme, so it cannot belong to a live download: sweep it.
+      const owner = Number(name.split('.').at(-2))
+      if (Number.isInteger(owner) && owner > 0 && pidAlive(owner)) continue
+      rmSync(join(cacheRoot, name), { recursive: true, force: true })
     }
   } catch {
     /* cache root may not exist yet — nothing to sweep */

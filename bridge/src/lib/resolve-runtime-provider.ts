@@ -40,7 +40,22 @@ export async function resolveRuntimeProvider({
   env = process.env,
 }: ResolveRuntimeProviderArgs): Promise<RuntimeCredential | null> {
   const map = adapterType ? ADAPTER_CREDENTIAL_ENV[adapterType] : undefined
-  if (!map) return null // adapter takes no injected key (e.g. mock)
+  if (!map) {
+    // Every CLI connected through the Connections panel runs as adapter_type 'cli'
+    // (adapters/registry.ts → CliProfileAdapter), and 'cli' is deliberately absent above:
+    // which env var to inject depends on the PROFILE's `kind`, not on adapter_type, so a
+    // blanket entry here would hand an Anthropic key to a Gemini CLI. Until `kind` is
+    // threaded through, a credential bound to such an agent cannot be injected — say so
+    // instead of discarding it silently, which is how this looked like "binding works".
+    if (credentialId) {
+      log('warn', 'credential.not_injectable', {
+        adapter_type: adapterType ?? null,
+        detail:
+          "this agent has a bound credential, but its adapter takes no injected key — the credential is being ignored. Put the key in the CLI profile env instead, or use the CLI's own login.",
+      })
+    }
+    return null
+  }
   if (!credentialId || !ownerUserId) return null // no bound credential → host login
 
   // Past this line the agent HAS a bound credential, so every `return null` below is a
