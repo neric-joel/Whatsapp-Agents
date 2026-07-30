@@ -76,15 +76,36 @@ test('the room list loads with a clean console', async ({ page }) => {
   expectClean(w)
 })
 
-// A room-creation flow belongs here — a mutation is exactly where a React error is most
-// likely — but it is deliberately NOT in this file. Adding one destabilized
-// `rooms.spec.ts:42` ("a room can be renamed from its menu"): its line 53 passed (the
-// sidebar showed the new name) while line 54 timed out at 10s waiting for the composer
-// placeholder to follow. Measured over six full-suite runs: 2/2 green without the extra
-// rooms, 1/4 green with them, and reordering this file last did not fix it. The extra rooms
-// only widen a race that is already there — after a rename, the active room's name reaches
-// the sidebar before it reaches the composer — so covering creation here would trade a real
-// gate for a flaky suite. Cover it once that staleness is fixed, not before.
+test('creating a room and landing in it keeps the console clean', async ({ page }) => {
+  // A mutation is where a React error is most likely, so this flow belongs here. It was
+  // withheld for a while because adding it destabilized `rooms.spec.ts:42` — attributed at
+  // the time to the room's new name reaching the sidebar before the composer. That was
+  // wrong: the browser was on a *different room altogether*, because `/` redirected to
+  // rooms[0] from a client effect that could land after creation's own navigation. That
+  // redirect is server-side now (app/page.tsx) and cannot compete, so the flow is safe to
+  // assert — and being the last spec file, it still cannot perturb anything downstream.
+  const w = watch(page)
+  await page.goto('/')
+
+  await page.getByRole('button', { name: '+ New Room' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('New room')).toBeVisible()
+
+  const name = `Console Hygiene ${Date.now().toString().slice(-5)}`
+  await page.getByLabel('Room name').fill(name)
+
+  // Require THE created room, not merely some room — see rooms.spec.ts for why a generic
+  // /rooms/<uuid> match is vacuous here.
+  const created = page.waitForResponse(
+    (r) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/api/rooms',
+  )
+  await dialog.getByRole('button', { name: 'Create' }).click()
+  const { data } = (await (await created).json()) as { data: { id: string } }
+  await expect(page).toHaveURL(new RegExp(`/rooms/${data.id}$`), { timeout: 15_000 })
+  await expect(page.getByPlaceholder(`Message #${name}...`)).toBeVisible({ timeout: 10_000 })
+
+  expectClean(w)
+})
 
 test('the connections and settings routes load with a clean console', async ({ page }) => {
   const w = watch(page)
