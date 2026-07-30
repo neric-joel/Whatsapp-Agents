@@ -115,7 +115,8 @@ executes — every action, and the gitleaks container image — is pinned by imm
 rather than by a movable tag.
 
 **A release that cannot publish now fails.** The npm job used to downgrade a missing
-`NPM_TOKEN` to a notice and skip, so tags v1.0.0–v1.6.0 each produced a green run and a
+`NPM_TOKEN` to a notice and skip, so v1.5.0 and v1.6.0 — the only tags cut since the
+publish job was added — each produced a green run and a
 GitHub Release while publishing nothing to the registry the README sends users to. A
 `publish-preflight` job now requires the secret **before** the GitHub Release is created,
 and every step of the publish job is unconditional: an incomplete release is red, not

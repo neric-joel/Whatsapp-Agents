@@ -202,8 +202,11 @@ PATCH cannot set it, and seeds ship `{}` — so the only way to create one is di
 
 Before that, the call's `arguments` are walked and each string leaf is run through
 `isDeniedCommand`, under any key and inside objects and arrays alike. **The walk is bounded
-and not exhaustive:** breadth-first, capped at 5 000 nodes and 12 levels
-(`packages/shared/src/denylist.ts`). Anything past a bound is skipped and **not** denied —
+and not exhaustive:** breadth-first, capped at 5 000 nodes, 12 levels, and 1 MiB of
+characters summed across all leaves (`packages/shared/src/denylist.ts`). The character
+budget is the one that bounds cost — the other two bound the tree's shape and say nothing
+about its size, so eleven nodes at depth two held ten 10 MiB strings and took 12.4 seconds
+before it existed. Anything past a bound is skipped and **not** denied —
 the scan fails open — but it is never silent: the scan returns `truncated: true` and the
 run worker logs `tool.scan.truncated`. Breadth-first ordering means shallower leaves are
 reached before deeper ones — but **ordering within a level still decides**: a denied command
