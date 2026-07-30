@@ -113,8 +113,9 @@ fail closed with an integrity error pointing at the git quickstart, and the fix 
 new patch release. We take that over trusting a mutable name.
 
 **A release that could not publish reported success.** `publish-npm` downgraded a
-missing `NPM_TOKEN` to a `::notice` and skipped, so tags v1.0.0…v1.6.0 each produced
-a green run and a GitHub Release while publishing nothing to npm — six versions,
+missing `NPM_TOKEN` to a `::notice` and skipped, so v1.5.0 and v1.6.0 — the only two
+tags cut since this ADR's job was added; earlier tags had no npm publish step at all —
+each produced a green run and a GitHub Release while publishing nothing to npm,
 unnoticed, with the README pointing every reader at `npx agentroom`. The skip branch
 is gone. A `publish-preflight` job now requires the secret **before** `release`
 creates anything, so the ordinary failure (no token) stops the run while nothing
