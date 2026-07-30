@@ -231,7 +231,8 @@ export interface ArgumentScanResult {
   /** A string leaf the denylist rejected, or `null` if none was found. */
   denied: string | null
   /**
-   * TRUE when the walk stopped early — depth or node budget exhausted — so part of the
+   * TRUE when the walk stopped early — depth, node, or cumulative-character budget
+   * exhausted — so part of the
    * payload was never looked at. The scan FAILS OPEN here (`denied` stays `null` and the
    * call is not blocked), which is the correct trade for a speed bump but must never be
    * silent: the caller is expected to log it. A payload engineered to bury a command past
@@ -249,9 +250,11 @@ export interface ArgumentScanResult {
  * `options.exec.command`; checking a single well-known key scans nothing at all for
  * every tool that picked a different one.
  *
- * NOT exhaustive, by construction. The walk is breadth-first and bounded to
- * MAX_SCAN_NODES nodes and MAX_SCAN_DEPTH levels; anything past a bound is skipped, NOT
- * denied, and reported via `truncated`.
+ * NOT exhaustive, by construction. The walk is breadth-first and bounded three ways —
+ * MAX_SCAN_NODES nodes, MAX_SCAN_DEPTH levels, and MAX_SCAN_CHARS characters summed across
+ * all leaves; anything past a bound is skipped, NOT denied, and reported via `truncated`.
+ * The character budget is the one that matters for cost: the other two bound the tree's
+ * shape and say nothing about its size.
  *
  * Breadth-first is a better bet, not a guarantee. It means a shallow leaf is reached before
  * a deeper one — which is where a command a tool would plausibly execute sits, and which

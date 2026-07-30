@@ -11,8 +11,9 @@ name: Release
 # A release that cannot publish FAILS. `publish-preflight` requires the `NPM_TOKEN`
 # secret and runs BEFORE `release`, so a missing secret stops the run while nothing
 # user-visible exists yet. This used to be a `::notice` that skipped the publish and
-# let the GitHub Release through: every tag v1.0.0…v1.6.0 therefore produced a green
-# run and a Release page while publishing nothing to npm, unnoticed for six versions.
+# let the GitHub Release through, so v1.5.0 and v1.6.0 — the only two tags cut since
+# this job was added (ADR-0014; earlier tags had no npm publish step at all) — each
+# produced a green run and a Release page while publishing nothing to npm.
 #
 # To cut a release (human):
 #   git tag v1.5.0 && git push origin v1.5.0
@@ -83,12 +84,18 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm audit --audit-level high
+      # Build BEFORE typecheck, for the reason ci.yml states: apps/web/tsconfig.json
+      # includes `.next/types/**/*.ts`, which only `next build` generates, and TypeScript
+      # does not error on an include that matches nothing. `next build` cannot cover for it
+      # either — next.config.mjs sets `typescript.ignoreBuildErrors: true`. This job is the
+      # one that GATES a release (PR checks are reporting-only, per SECURITY.md), so the
+      # order mattered more here than in ci.yml and was wrong here first.
+      - run: pnpm --filter web build
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm exec knip
       - run: pnpm test:coverage
-      - run: pnpm --filter web build
 
   # Fails the run BEFORE `release` creates anything, when the release could not publish
   # to npm anyway. Ordering is the point: `publish-npm` failing after `release` leaves a
@@ -109,7 +116,7 @@ jobs:
           HAS_NPM_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
         run: |
           if [ "$HAS_NPM_TOKEN" != "true" ]; then
-            echo "::error title=NPM_TOKEN is not configured::A release publishes the agentroom bootstrapper to npm, and the README sends every user to 'npx agentroom'. Without the NPM_TOKEN repo secret this tag would create a GitHub Release and publish nothing — which is how v1.0.0 through v1.6.0 shipped to no one. Add the NPM_TOKEN secret (or switch to npm Trusted Publishing and delete this job), then re-run this workflow on the tag."
+            echo "::error title=NPM_TOKEN is not configured::A release publishes the agentroom bootstrapper to npm, and the README sends every user to 'npx agentroom'. Without the NPM_TOKEN repo secret this tag would create a GitHub Release and publish nothing — which is how v1.5.0 and v1.6.0 shipped to no one. Add the NPM_TOKEN secret (or switch to npm Trusted Publishing and delete this job), then re-run this workflow on the tag."
             exit 1
           fi
 

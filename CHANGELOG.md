@@ -27,9 +27,13 @@ before upgrading.
   working: the web API answers `503` on `POST /api/credentials`, and the bridge falls back
   to host login, so agent runs continue with whatever the CLI's own login provides.
   **Action:** generate a real key (`openssl rand -hex 32`), set it in **both** `apps/web`
-  and `bridge` (the two values must match), and **re-enter every stored BYO credential** in
-  Settings → Providers — ciphertexts written under the old key cannot be decrypted under
-  the new one.
+  and `bridge` (the two values must match). Ciphertexts written under the old key cannot be
+  decrypted under the new one, so every stored BYO credential must be replaced — but be aware
+  that **the UI cannot currently complete this**: Settings → Providers offers only Add and
+  Delete (no edit), so adding a replacement mints a new row with a new id while the agent
+  still points at the old one, and deleting the old row nulls the binding outright. Nothing in
+  any screen re-binds `credential_id`. Until that gap is closed, re-binding needs a direct
+  `PATCH /api/agents/[agentId]`.
 - **Credential-shaped env vars are no longer forwarded to spawned agent CLIs.**
   `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`,
   `GOOGLE_APPLICATION_CREDENTIALS`, any name containing `APIKEY` or `CREDENTIAL`, and any
@@ -43,8 +47,10 @@ before upgrading.
   `env` in `config.json` — both scope it to the one CLI that needs it instead of
   broadcasting it. Binding a stored credential (ADR-0010) is **not** a remedy for a CLI
   connected through the Connections panel: those run as `adapter_type: 'cli'`, for which no
-  injection target is defined, so the credential is ignored. It works for the `claude-code`
-  and `codex-cli` adapter types, which the New-agent form does not currently offer.
+  injection target is defined, so the credential is ignored (the bridge logs
+  `credential.not_injectable`). Injection does work for the `claude-code`, `subprocess` and
+  `codex-cli` adapter types, which the New-agent form *does* offer — but that form has no
+  `credential_id` field, so binding is not reachable from any screen for any adapter type.
 
 ### Security
 
@@ -86,21 +92,32 @@ before upgrading.
   emits `tool_call_requested`, so the gate still never fires in the shipped product (as
   `docs/ARCHITECTURE.md` has said since 1.4.1); this hardens the scaffolding ahead of a
   producer.
-- **App-data files are created owner-only.** The app-data directory and its `files/` folder
-  are created `0700`, and `config.json`, `agentroom.db` and its `-wal`/`-shm` sidecars
+- **App-data files are owner-only.** The app-data directory, its `files/` folder and
+  `config.json` are *created* that way (`0700`/`0600`); `agentroom.db` and its `-wal`/`-shm`
+  sidecars are chmodded immediately after open, because better-sqlite3 exposes no mode hook.
+  Net effect is the same — `0700` for the directories, `0600` for
   `0600`. The database holds
   encrypted credentials and every message; the WAL sidecars hold the same pages before
   checkpoint, so tightening only the main database file left the recent writes readable.
   Existing files are tightened in place on next boot, so an upgrade fixes a permissive
   install without any action. These are POSIX mode bits — on Windows they are a no-op, and
   the per-user ACLs on `%APPDATA%` already scope the app-data directory.
-- **The release and PR workflows are pinned and re-verified.** Every GitHub Action and the
-  gitleaks container are pinned by immutable digest rather than a movable tag; the secret
+- **The release workflow is pinned and re-verified.** Every GitHub Action and the gitleaks
+  container *in `release.yml`* are pinned by immutable digest rather than a movable tag — the
+  PR workflows (`ci.yml`, `e2e.yml`, `security.yml`) still use tags, deliberately: they hold
+  no secrets and gate nothing, so a moved tag there cannot launder a release. The secret
   scan and the dependency audit re-run **on the tagged commit** (they previously only
   proved the branch that was merged, not the thing being released); and a tag that is not
   an ancestor of `origin/main` is refused outright. `npx agentroom` now verifies a SHA-256
   digest of the source archive it builds, pinned to a **commit** rather than a movable tag
   — see the entry below for the full change.
+- **A crafted message could pull another room's file contents into this room's agent prompt.**
+  The bridge loaded attachment previews by `file_ids` alone, with no room predicate, and
+  `file_ids` arrives in client-supplied message metadata that the server-owned-field stripper
+  does not filter. So a `POST /api/rooms/{A}/messages` naming a file in room B put room B's
+  filename and extracted text into room A's context packet. The query is now scoped by
+  `room_id`. AgentRoom is single-user with no accounts, so this crossed no privilege boundary —
+  but rooms are a user-facing separation and it did not hold.
 - **The gitleaks allowlist no longer exempts the entire test tree.** It carried a path rule
   covering every test file, which is where a real leaked secret is most likely to be
   committed by accident. It now allowlists two exact fixture values by anchored literal
@@ -119,9 +136,10 @@ before upgrading.
   override rejected `http://`, and nothing looked at where a redirect actually landed.
   Both opt-outs now warn on stderr rather than passing quietly. (ADR-0014, amended)
 - **A release that cannot publish to npm now fails instead of reporting success.** The
-  publish job downgraded a missing `NPM_TOKEN` to a `::notice` and skipped, so every tag
-  from v1.0.0 to v1.6.0 produced a green run and a GitHub Release while publishing nothing
-  — six versions, unnoticed, with the README pointing every reader at `npx agentroom`. The
+  publish job downgraded a missing `NPM_TOKEN` to a `::notice` and skipped, so v1.5.0 and
+  v1.6.0 — the only two tags cut since that job was added (ADR-0014; earlier tags had no npm
+  publish step at all) — each produced a green run and a GitHub Release while publishing
+  nothing, with the README pointing every reader at `npx agentroom`. The
   skip branch is gone, and a new `publish-preflight` job requires the secret **before** the
   GitHub Release is created, so the ordinary failure stops the run while nothing
   user-visible exists.
@@ -132,12 +150,23 @@ before upgrading.
   room from a client effect keyed on the room list, which made it a standing rule rather
   than a one-time landing: it re-fired whenever that list changed — including the refresh
   that room creation performs — and could land *after* the navigation creation had already
-  started. You then ended up in whichever room sorts first, never the one you just made,
-  because a brand-new room has no messages and the ordering puts rooms with messages first.
+  started. You then ended up in whichever room sorts first rather than the one you just
+  made, because the ordering puts rooms with messages ahead of message-less ones. (On a fresh
+  install where no room has messages yet, the `created_at DESC` tiebreak happens to put the
+  new room first, which is why this never showed up on an empty database.)
   `/` now redirects on the server, before any client code exists to compete with it. Two
   components asserting control over one route cannot be fixed by ordering them, so the
   contender was removed: measured across full-suite runs, 1/5 green → 3/6 with the redirect
   guarded → 5/6 with the navigation reordered → **10/10** once it moved server-side.
+- **Windows argv quoting was wrong for backslash runs, which could corrupt a spawned CLI's
+  arguments.** The MSVCRT escaper used a lookahead-with-backreference form, and ECMAScript
+  lookaheads are atomic — so the capture never grew past one backslash and a run of n emitted
+  the wrong count: `a\\"b` produced four where the rules require five (an even count leaves the
+  quote a live delimiter), and a trailing `x\` produced three instead of four, escaping the
+  closing quote so the argument never terminated. It only bit a Windows CLI profile whose `bin`
+  or `args` carry backslashes next to quotes — a path with a trailing separator does it. Fixed,
+  de-duplicated into one module (it existed in two copies with the same bug), and made linear:
+  the replacement was also quadratic, 1441 ms on a 32767-character run versus 0.16 ms now.
 - **Two concurrent `npx agentroom` runs meant one of them failed.** The cache sweep deleted
   every `*.part` file it found, including the in-flight download of another live process,
   which then died on a raw `ENOENT`. `.part` names carry the pid that owns them precisely so
@@ -147,8 +176,9 @@ before upgrading.
 - **File attachment Preview and Download were completely broken; both work now.** The card
   called `res.json()` on `signed-download`, which answers a success with the file's raw
   bytes and only ever returns JSON on an *error* — so every click threw a parse error and
-  nothing opened. Three further faults surfaced while fixing it, each of which would have
-  kept the button dead on its own: Download did a pre-flight `fetch` before `window.open`,
+  nothing opened. Three further faults surfaced while fixing it — the first would have kept
+  the button dead on its own; the other two were introduced by the in-progress fix itself and
+  never shipped: Download did a pre-flight `fetch` before `window.open`,
   which spends the click's transient activation and made Safari and Firefox treat every
   download as a blocked pop-up; the mounted-ref guard was never reset to `true` on mount,
   so React StrictMode's dev-mode double-invoke left it permanently `false` after the first
@@ -164,8 +194,8 @@ before upgrading.
   the card under `React.StrictMode` in jsdom (opted into per-file with the
   `// @vitest-environment jsdom` pragma — the suite default stays `node`), clicks the
   button, and routes `fetch` to the real `signed-download` `GET` handler so the response is
-  the route's actual raw bytes rather than an assumed JSON envelope. Both shipped versions
-  of the bug fail it, and it also pins the object-URL lifecycle: revoked on unmount, and
+  the route's actual raw bytes rather than an assumed JSON envelope. Every version of the bug
+  fails it — the one that shipped and both introduced while fixing it — and it also pins the object-URL lifecycle: revoked on unmount, and
   revoked rather than leaked when it resolves after unmount.
 - **The browser's error channels are now a gate, not just the rendered output.** No e2e
   spec asserted on `console.error` or uncaught page errors, so a route could satisfy every
@@ -184,6 +214,11 @@ before upgrading.
   throwaway cache with no network, and is wired into both `test` and `test:coverage` (the
   latter matters: CI and the release workflow run only `test:coverage`, and `pnpm -r` skips
   the workspace root).
+- **The unused `.githooks/pre-push` hook was deleted rather than left claiming a guarantee.**
+  It asserted it blocked direct pushes to `main` "even under `--dangerously-skip-permissions`",
+  but nothing installed it — `core.hooksPath` appears in no setup path — so it protected
+  nothing, and `--no-verify` defeats a pre-push hook anyway. Server-side branch protection
+  already blocks direct pushes to `main`, for admins included.
 - **CI builds before it typechecks.** `apps/web/tsconfig.json` includes
   `.next/types/**/*.ts`, which `next build` generates — the per-route validators that
   reject a route file exporting anything beyond the handler names Next recognizes. Without

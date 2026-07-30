@@ -9,8 +9,9 @@ import { redirect } from 'next/navigation'
  * (`useRooms()` + `router.replace`) with `rooms` in its dependency array, which made it a
  * standing rule that re-fired on every room-list change — including the `refreshRooms()`
  * that room creation performs. It could then land *after* creation's own `router.push` and
- * silently drop the user in `rooms[0]` instead of the room they just made (a brand-new room
- * has no messages, so the ordering below never puts it first). Two components asserting
+ * silently drop the user in `rooms[0]` instead of the room they just made — the ordering below
+ * puts rooms with messages ahead of message-less ones, so a brand-new room only sorts first
+ * when no room has messages at all (a fresh install, which is why an empty database hid this). Two components asserting
  * control over the route with no coordination is a race that cannot be closed by ordering
  * them; removing one of the two contenders closes it. By the time any client code runs, the
  * redirect has already happened, so there is nothing left to race.

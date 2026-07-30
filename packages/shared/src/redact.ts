@@ -65,8 +65,10 @@ const SENSITIVE_KEY_NAME =
 // stays in the registry, which widens the heap-snapshot / core-dump surface. That is
 // accepted because it is the only redaction measure that survives a provider changing its
 // key format. The Set is module-private — never exported, logged, serialized or persisted
-// — is bounded, and can be emptied with clearRegisteredSecrets() on credential rotation or
-// deletion, or at worker teardown.
+// — and is bounded. Be precise about the lifetime: nothing in production clears it, so a
+// registered secret is retained for the daemon's uptime. clearRegisteredSecrets() exists
+// for tests. Clearing per-run would be wrong (it would strip the backstop from concurrent
+// runs) and clearing at shutdown is pointless (the heap goes with the process).
 const MIN_REGISTERED_SECRET_LENGTH = 8
 const MAX_REGISTERED_SECRETS = 64
 const knownSecrets = new Set<string>()

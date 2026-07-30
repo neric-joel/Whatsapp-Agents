@@ -20,7 +20,9 @@ That means:
   only because you exported a provider API key into your shell, it will **not** — the
   bridge denies credential-shaped variables when it builds the child environment (see
   [Where per-CLI env lives](#where-per-cli-env-lives--the-policy) below). Use the CLI's
-  own login, this profile's `env`, or a stored credential bound to the agent.
+  own login or this profile's `env`. Binding a stored credential does NOT work for a CLI
+  connected here: these all run as `adapter_type: 'cli'`, which has no injection target, so
+  the bridge logs `credential.not_injectable` and ignores the credential.
 - If a CLI isn't logged in, its reply fails with the CLI's own auth error (the run is
   marked **failed** with that message — never silently hung), and you fix it the normal
   way: run `claude login` / `codex login` in your terminal.
@@ -142,7 +144,8 @@ environment is therefore **not** handed to your CLI.
 What a child gets is the base OS variables, the non-secret provider *config* variables a
 CLI reads itself (`ANTHROPIC_BASE_URL`, `AWS_REGION`, …), and the variables you put in
 this profile's `env`. If your CLI needs an API key from AgentRoom, put it in this
-profile's `env` or bind a stored credential to the agent.
+profile's `env` — not a bound credential, which this adapter type cannot inject (see
+above).
 
 ## 4. Verify + health states
 
