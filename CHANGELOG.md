@@ -225,6 +225,26 @@ before upgrading.
   a build that glob matches nothing, and TypeScript does not error on an empty include, so
   typechecking first cannot catch that class of error at all. It was not masking a failure
   on this tree, but it was a hole in the gate rather than a matter of taste.
+- **Agent reply bubbles could have gone near-black-on-near-black in the four dark themes.**
+  `MessageBubble` put literal colour utilities on the same element as the theme-aware
+  classes, so a mock bubble read `agent-provider-bubble agent-provider-mock
+  border-[#cbd5e1]/80 text-[#0f172a]`. In light themes those literals duplicated the token
+  values byte for byte; in the dark themes they lost only on a specificity margin
+  (`:root[data-agentroom-theme='dracula'] .agent-provider-bubble` is (0,2,0), a lone utility
+  class is (0,1,0)) — and this is Tailwind v3, so no cascade layer was protecting it. An
+  `!important` or a moved theme rule would have flipped it. The bubble now takes `bubble`
+  alone with `globals.css` as the single source of truth; `text` is gone and `border` folded
+  into `avatar`. All 21 theme × provider combinations measured above WCAG AA in a browser
+  (worst 7.22:1); the audited avatar contrast ratios are untouched.
+
+### Repo
+
+- **`apps/web/next-env.d.ts` is no longer tracked.** Next rewrites it on every `dev` and
+  every `build`, and the two disagree (`.next/dev/types` vs `.next/types`), so its correct
+  content depended on which command ran last. The committed value was also unverifiable —
+  planting the dev variant and running build-then-typecheck passes, because build rewrites
+  the file before `tsc` reads it. Its only observable effect was dirtying the tree of anyone
+  who ran the dev server.
 
 ## [1.6.0] - 2026-07-26
 
