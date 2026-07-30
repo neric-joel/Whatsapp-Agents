@@ -257,10 +257,13 @@ export default function LeftSidebar() {
 
       setIsCreateOpen(false)
       setRoomName('')
-      // Navigate BEFORE refreshing, not after. refreshRooms() mutates the shared rooms
-      // snapshot, which re-renders `/` and re-fires its redirect-to-rooms[0] effect; doing
-      // it first meant that effect could land after this push and silently drop the user in
-      // a different room (a new room has no messages, so it is never rooms[0]).
+      // Navigate first, then refresh the list. Historically this mattered for correctness:
+      // `/` redirected to rooms[0] from a client effect keyed on `rooms`, so refreshing
+      // first could re-fire that effect *after* this push and drop the user in a different
+      // room. `/` now redirects server-side (app/page.tsx) and no longer competes, so this
+      // ordering is no longer load-bearing — it is kept because the room page has nothing
+      // to wait for, and refreshing afterwards keeps the sidebar in step without delaying
+      // the navigation the user asked for.
       router.push(`/rooms/${roomId}`)
       await refreshRooms()
     } catch (err) {
