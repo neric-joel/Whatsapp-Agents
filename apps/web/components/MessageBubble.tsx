@@ -244,7 +244,7 @@ export default function MessageBubble({
     return (
       <div className="group flex animate-message-in flex-row items-start gap-3 px-5 py-2">
         <div
-          className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border ${providerStyle.avatar} ${providerStyle.border}`}
+          className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border ${providerStyle.avatar}`}
         >
           <span className="text-[11px] font-semibold text-white">
             {agents ? initials(agents.name) : 'AG'}
@@ -263,7 +263,7 @@ export default function MessageBubble({
             {canaryStatus && <CanaryBadge status={canaryStatus} />}
           </div>
           <div
-            className={`rounded-2xl border px-4 py-3 text-sm leading-6 shadow-sm ${providerStyle.bubble} ${providerStyle.border} ${providerStyle.text} ${isHallucinationRejected ? 'line-through decoration-yellow-500 decoration-2' : ''}`}
+            className={`rounded-2xl border px-4 py-3 text-sm leading-6 shadow-sm ${providerStyle.bubble} ${isHallucinationRejected ? 'line-through decoration-yellow-500 decoration-2' : ''}`}
           >
             {isDeleted ? (
               <span className="italic text-zinc-500">{DELETED_MESSAGE_CONTENT}</span>
