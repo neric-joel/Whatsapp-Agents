@@ -368,3 +368,41 @@ test('scanArgumentsForDenied terminates on cyclic input without reporting trunca
   cyclicWithPayload['self'] = cyclicWithPayload
   assert.equal(scanArgumentsForDenied(cyclicWithPayload).denied, 'rm -rf /')
 })
+
+test('scanArgumentsForDenied bounds total characters, not just node count and depth', () => {
+  // The node and depth caps bound the tree's SHAPE and say nothing about its size. Ten
+  // 10 MiB leaves is 11 nodes at depth 2 — inside both caps — and measured 12.4 seconds
+  // with truncated:false before this budget existed: no cap tripped, so nothing reported it.
+  const fewHuge = { argv: Array.from({ length: 10 }, () => 'a '.repeat(5 * 1024 * 1024)) }
+  const started = Date.now()
+  const result = scanArgumentsForDenied(fewHuge)
+  const elapsedMs = Date.now() - started
+  assert.equal(result.denied, null)
+  assert.equal(result.truncated, true, 'a few enormous leaves must report truncation')
+  assert.ok(
+    elapsedMs < 2_000,
+    `few-huge-leaf scan took ${elapsedMs}ms — the budget is not bounding it`,
+  )
+})
+
+test('the character budget is CUMULATIVE, not per-leaf', () => {
+  // The assertion that actually pins the design. Every leaf here fits the budget alone, so
+  // a per-leaf cap of any size lets all of them through — and a 512 KB per-leaf cap admits
+  // 4998 leaves of 511 KB at 261 seconds, an order of magnitude worse than the case the
+  // budget exists to bound. Only a running total truncates this input.
+  const fitsAlone = 'a '.repeat(64 * 1024) // 128 KB each, comfortably under the budget
+  const spread = scanArgumentsForDenied({ argv: Array.from({ length: 16 }, () => fitsAlone) })
+  assert.equal(spread.truncated, true, 'a per-leaf cap is not a cumulative cap')
+})
+
+test('the character budget still scans realistic tool payloads in full', () => {
+  // Guards against over-tightening: a file write and a patch of plausible size must not
+  // truncate, or the denylist stops seeing the arguments it exists to inspect.
+  const write = scanArgumentsForDenied({ path: 'src/app.ts', content: 'x'.repeat(200 * 1024) })
+  assert.deepEqual(write, { denied: null, truncated: false })
+  const patch = scanArgumentsForDenied({ diff: 'y'.repeat(800 * 1024) })
+  assert.deepEqual(patch, { denied: null, truncated: false })
+  // And a denial inside a realistic payload is still found.
+  const withPayload = scanArgumentsForDenied({ content: 'z'.repeat(100 * 1024), cmd: 'rm -rf /' })
+  assert.equal(withPayload.denied, 'rm -rf /')
+})

@@ -212,6 +212,20 @@ export function isDeniedCommand(command: string): boolean {
  *  be cyclic, arbitrarily deep, or enormous. */
 const MAX_SCAN_DEPTH = 12
 const MAX_SCAN_NODES = 5000
+/**
+ * CUMULATIVE character budget across every leaf, not a per-leaf one. The node and depth
+ * caps bound the SHAPE of the tree and say nothing about its size, so a payload of 11
+ * nodes at depth 2 — ten 10 MiB strings — passed both of them and measured 12.4 seconds
+ * with `truncated: false`: no cap tripped, so nothing reported it. A per-leaf cap does not
+ * fix that; a 512 KB per-leaf cap lets 4998 leaves of 511 KB through at 261 seconds, worse
+ * than the case it was meant to bound. Only the running total is safe.
+ *
+ * 1 MiB is chosen from measurement, not taste: the scan runs at a flat ~103-133 us/KB, so
+ * 1 MiB is ~105-175 ms — inside the 500 ms ceiling the perf guard already treats as
+ * acceptable and well under the bridge's 1 s cancel poll. It also still scans a 200 KB
+ * file write and an 800 KB patch in full, which 512 KB would truncate.
+ */
+const MAX_SCAN_CHARS = 1024 * 1024
 
 export interface ArgumentScanResult {
   /** A string leaf the denylist rejected, or `null` if none was found. */
@@ -255,10 +269,23 @@ export function scanArgumentsForDenied(args: unknown): ArgumentScanResult {
   // dequeue instead would let one wide level push millions of entries before any check.
   let enqueued = 1
   let truncated = false
+  // Running total of characters actually handed to isDeniedCommand. Counted on the RAW
+  // string: NFKC normalization inside isDeniedCommand can expand a char up to 18x, but it
+  // costs more wire bytes than it gains chars, so raw length is the safe meter and summing
+  // it is free (~0.005 ms over 5000 leaves).
+  let scannedChars = 0
 
   while (head < queue.length) {
     const { value, depth } = queue[head++] as { value: unknown; depth: number }
     if (typeof value === 'string') {
+      if (scannedChars + value.length > MAX_SCAN_CHARS) {
+        // Fails OPEN, like the depth and node caps: stop scanning, do NOT deny. A denial
+        // fails the whole run, so inventing one from an exhausted budget would turn a big
+        // payload into an outage. The caller sees `truncated` and logs it.
+        truncated = true
+        continue
+      }
+      scannedChars += value.length
       if (isDeniedCommand(value)) return { denied: value, truncated }
       continue
     }

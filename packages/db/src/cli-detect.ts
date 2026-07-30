@@ -43,7 +43,7 @@ export const KNOWN_CLIS: KnownCli[] = [
     defaultArgs: ['--print', '--output-format', 'json'],
     kind: 'claude-code',
     authHint:
-      'Uses the login Claude Code already stored on this machine. A provider API key exported in your shell is NOT passed through — run `claude login` in your terminal, or bind a stored credential to the agent.',
+      'Uses the login Claude Code already stored on this machine. A provider API key exported in your shell is NOT passed through — run `claude login` in your terminal, or put the key in this CLI profile env instead.',
   },
   {
     key: 'codex',
@@ -53,7 +53,7 @@ export const KNOWN_CLIS: KnownCli[] = [
     defaultArgs: ['exec', '--json', '-'],
     kind: 'codex-cli',
     authHint:
-      'Uses the login Codex already stored on this machine. A provider API key exported in your shell is NOT passed through — run `codex login` in your terminal, or bind a stored credential to the agent.',
+      'Uses the login Codex already stored on this machine. A provider API key exported in your shell is NOT passed through — run `codex login` in your terminal, or put the key in this CLI profile env instead.',
   },
   {
     key: 'gemini',

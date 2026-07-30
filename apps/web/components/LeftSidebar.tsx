@@ -257,8 +257,12 @@ export default function LeftSidebar() {
 
       setIsCreateOpen(false)
       setRoomName('')
-      await refreshRooms()
+      // Navigate BEFORE refreshing, not after. refreshRooms() mutates the shared rooms
+      // snapshot, which re-renders `/` and re-fires its redirect-to-rooms[0] effect; doing
+      // it first meant that effect could land after this push and silently drop the user in
+      // a different room (a new room has no messages, so it is never rooms[0]).
       router.push(`/rooms/${roomId}`)
+      await refreshRooms()
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : 'Failed to create room')
     } finally {
